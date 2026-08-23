@@ -241,13 +241,13 @@ struct OverlayViewModeTests {
     /// assertion.
     @Test("The spiral draws the same card in both view modes")
     func spiralIsDeliberatelyModeInvariant() {
-        let window = OverlayLayoutStyle.spiral.cardMetrics(for: .window)
-        let icon = OverlayLayoutStyle.spiral.cardMetrics(for: .icon)
+        let window = OverlayLayoutStyle.circular.cardMetrics(for: .window)
+        let icon = OverlayLayoutStyle.circular.cardMetrics(for: .icon)
         #expect(window == icon)
 
         // A wedge cannot show a screenshot, so it always draws an icon and never has a
         // thumbnail well to invert around.
-        #expect(!OverlayLayoutStyle.spiral.canShowThumbnails)
+        #expect(!OverlayLayoutStyle.circular.canShowThumbnails)
         #expect(window.artworkIconSize > 0)
         #expect(window.contentLayout == .artworkThenMetadata)
         // One line, naming the application. The hub carries the window title instead.
@@ -264,8 +264,8 @@ struct OverlayViewModeTests {
     /// sized by geometry rather than by a hand-picked constant.
     @Test("The spiral's icon fits its content box")
     func spiralIconFitsItsBox() {
-        let metrics = OverlayLayoutStyle.spiral.cardMetrics(for: .window)
-        #expect(metrics.size == SpiralLayout.contentSize)
+        let metrics = OverlayLayoutStyle.circular.cardMetrics(for: .window)
+        #expect(metrics.size == RadialLayout.baseContentSize)
         #expect(metrics.artworkIconSize <= metrics.artworkHeight)
         #expect(metrics.artworkHeight < metrics.size.height)
         // Room left for the name under it.

@@ -251,6 +251,87 @@ struct OverlayRenderingTests {
         #expect(OverlayState().isRevealed)
     }
 
+    // MARK: - Incognito
+
+    /// The badge is drawn in a different place by every arrangement, and in the round ones it
+    /// competes for a label line that is already tight, so each has to be exercised.
+    @Test("Incognito badges render in every arrangement", arguments: OverlayLayoutStyle.allCases)
+    func incognitoBadgesRender(style: OverlayLayoutStyle) {
+        let subject = state(style: style, count: 8, selected: 0)
+        // Every other window, so both the badged and unbadged paths are drawn, and the selected
+        // one is badged so the on-accent colours are exercised too.
+        subject.incognitoWindowIDs = Set(
+            subject.entries.enumerated()
+                .filter { $0.offset.isMultiple(of: 2) }
+                .map { $0.element.windowID }
+        )
+        _ = render(subject, hovered: 1)
+
+        #expect(subject.isIncognito(subject.entries[0]))
+        #expect(!subject.isIncognito(subject.entries[1]))
+    }
+
+    /// Badges arrive after the overlay does, so the panel must not resize when they land.
+    @Test("A badge arriving does not resize the panel", arguments: OverlayLayoutStyle.allCases)
+    func incognitoBadgeDoesNotResize(style: OverlayLayoutStyle) {
+        let subject = state(style: style, count: 8)
+        let before = subject.layout.panelSize
+        let cards = subject.layout.positionedCards()
+
+        subject.incognitoWindowIDs = Set(subject.entries.map(\.windowID))
+        _ = render(subject)
+
+        #expect(subject.layout.panelSize == before)
+        #expect(subject.layout.positionedCards() == cards)
+    }
+
+    /// A tab has no window of its own, so it can never be a private *window*.
+    @Test("Tab entries are never treated as incognito")
+    func tabsAreNeverIncognito() {
+        let subject = state(style: .grid, count: 3)
+        let tab = BrowserTab(
+            browser: .chrome,
+            windowIdentifier: 1,
+            tabIndex: 1,
+            title: "Tab",
+            url: "https://example.com"
+        )
+        let entry = WindowEntry.tabEntry(tab, application: nil)
+        subject.incognitoWindowIDs = [entry.windowID]
+
+        #expect(!subject.isIncognito(entry))
+    }
+
+    // MARK: - A search that matched nothing
+
+    /// The dead end became an offer, so the offer has to draw — including the two wordings, since
+    /// a query that looks like an address goes straight there instead of to a search engine.
+    @Test("The no-matches state renders its offer", arguments: OverlayLayoutStyle.allCases)
+    func searchMissRenders(style: OverlayLayoutStyle) {
+        for query in ["nothing matches this", "grok.com", "a very long query that has to be truncated before it stretches the panel"] {
+            let subject = state(style: style, count: 5)
+            subject.appendToSearch(query)
+
+            #expect(subject.entries.isEmpty, "\(query) should match nothing")
+            #expect(subject.hasNoSearchMatches)
+            #expect(WebSearch.destination(for: query) != nil)
+
+            let hosting = render(subject)
+            // Still the shared empty-state box: the offer must fit what is already there rather
+            // than growing the panel to suit itself.
+            #expect(hosting.frame.width == StripLayout.emptyStateWidth)
+        }
+    }
+
+    /// With no query there is nothing to offer, and the message stays the plain one.
+    @Test("An empty window list is not a search miss")
+    func emptyListIsNotASearchMiss() {
+        let subject = state(style: .strip, count: 0, selected: nil)
+        #expect(!subject.hasNoSearchMatches)
+        #expect(!subject.isSearching)
+        _ = render(subject)
+    }
+
     // MARK: - Icon View
 
     /// Icon View composes with every arrangement rather than being one of them, so it has to

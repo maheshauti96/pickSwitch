@@ -18,7 +18,7 @@ struct OverlayLayoutTests {
     private static let cramped = CGSize(width: 700, height: 480)
 
     /// Styles that page by whole items, as opposed to the strip's pixel scrolling.
-    private static let positionedStyles: [OverlayLayoutStyle] = [.grid, .list, .spiral]
+    private static let positionedStyles: [OverlayLayoutStyle] = [.grid, .list, .circular]
 
     private func layout(
         _ style: OverlayLayoutStyle,
@@ -302,7 +302,7 @@ struct OverlayLayoutTests {
         )
     }
 
-    @Test("The preview area confirms the selection", arguments: [OverlayLayoutStyle.list, .spiral])
+    @Test("The preview area confirms the selection", arguments: [OverlayLayoutStyle.list, .circular])
     func previewAreaConfirms(style: OverlayLayoutStyle) {
         let subject = layout(style, count: 9, selected: 4)
         guard let region = subject.confirmRegion else {
@@ -548,134 +548,59 @@ struct OverlayLayoutTests {
         }
     }
 
-    // MARK: - Spiral
+    // MARK: - Circular and spiral
 
-    /// Twelve seats to a turn, two turns, and then it pages like every other style.
-    @Test("The spiral seats up to two full turns")
-    func spiralSeatsTwoTurns() {
-        #expect(layout(.spiral, count: 25, available: Self.roomy).spiral.seats == SpiralLayout.maxSeats)
-        #expect(layout(.spiral, count: 3).spiral.seats == 3)
-        #expect(layout(.spiral, count: 1).spiral.seats == 1)
-        // Comfortably more than the eight-seat ring this replaced.
-        #expect(SpiralLayout.maxSeats == SpiralLayout.seatsPerTurn * 2)
+    /// Both round arrangements, since almost everything about them is shared.
+    private static let radialStyles: [OverlayLayoutStyle] = [.circular, .spiral]
+
+    /// The round geometry on its own, built directly so a test can name a winding without
+    /// going through a style.
+    private func radial(
+        _ winding: RadialLayout.Winding,
+        count: Int,
+        selected: Int? = 0,
+        available: CGSize = OverlayLayoutTests.roomy
+    ) -> RadialLayout {
+        RadialLayout(
+            winding: winding,
+            cardCount: count,
+            selectedIndex: selected,
+            availableContentWidth: available.width,
+            availableContentHeight: available.height
+        )
     }
 
-    /// The arc grows with the window count instead of the seats spreading apart.
-    ///
-    /// This is the difference between a spiral and the ring it replaces, and it is what makes
-    /// three windows read as three wedges at the top rather than as three lonely cards at
-    /// 120° to each other.
-    @Test("Adding windows lengthens the arc and leaves each seat where it was")
-    func spiralArcGrowsWithCount() {
-        let three = layout(.spiral, count: 3).spiral
-        let eight = layout(.spiral, count: 8).spiral
-
-        #expect(isClose(three.seat(at: 0).startAngle, eight.seat(at: 0).startAngle))
-        #expect(isClose(three.seat(at: 2).startAngle, eight.seat(at: 2).startAngle))
-
-        // Each seat spans the same angle whatever the count.
-        for seat in eight.visibleSeats {
-            #expect(isClose(seat.endAngle - seat.startAngle, SpiralLayout.sweep - SpiralLayout.wedgeGap))
-        }
+    @Test("Both round styles have a winding, and no other style does")
+    func onlyRoundStylesWind() {
+        #expect(OverlayLayoutStyle.circular.radialWinding == .circular)
+        #expect(OverlayLayoutStyle.spiral.radialWinding == .spiral)
+        #expect(OverlayLayoutStyle.strip.radialWinding == nil)
+        #expect(OverlayLayoutStyle.grid.radialWinding == nil)
+        #expect(OverlayLayoutStyle.list.radialWinding == nil)
+        // The one thing that follows from being round: a wedge cannot hold a screenshot.
+        #expect(!OverlayLayoutStyle.circular.canShowThumbnails)
+        #expect(!OverlayLayoutStyle.spiral.canShowThumbnails)
     }
 
-    /// The first seat is at the top, and the run proceeds clockwise from there.
-    @Test("The first seat is at twelve o'clock and the arc turns clockwise")
-    func spiralStartsAtTheTop() {
-        let subject = layout(.spiral, count: 6).spiral
-        let first = subject.seat(at: 0)
-        let second = subject.seat(at: 1)
-
-        // Straight up, allowing for the half-gap inset on the leading edge.
-        #expect(first.midAngle < SpiralLayout.startAngle + SpiralLayout.sweep)
-        #expect(first.midAngle > SpiralLayout.startAngle)
-        #expect(second.midAngle > first.midAngle)
-
-        // y grows downward here, so clockwise means the second seat sits right of the first
-        // and lower than it.
-        #expect(second.contentFrame.midX > first.contentFrame.midX)
-        #expect(second.contentFrame.midY > first.contentFrame.midY)
+    /// The persisted value that has always meant "the arrangement with wedges" keeps meaning the
+    /// behaviour it shipped with, which is the concentric one. If this flips, everyone using it
+    /// silently gets a different arrangement on upgrade.
+    @Test("Raw value 3 is the circular winding")
+    func rawValueThreeIsCircular() {
+        #expect(OverlayLayoutStyle(rawValue: 3) == .circular)
+        #expect(OverlayLayoutStyle(rawValue: 4) == .spiral)
     }
 
-    /// Each seat sits a little further out than the one before, and a full turn later the
-    /// spiral has moved out by exactly one ring thickness plus its gap — which is what stops
-    /// the second turn from landing on top of the first.
-    @Test("Turns nest without overlapping")
-    func spiralTurnsDoNotOverlap() {
-        let subject = layout(.spiral, count: SpiralLayout.maxSeats, available: Self.roomy).spiral
+    // MARK: - Seating every window
 
-        for offset in 1..<subject.seats {
-            #expect(subject.seat(at: offset).innerRadius > subject.seat(at: offset - 1).innerRadius)
-        }
-
-        for offset in 0..<(subject.seats - SpiralLayout.seatsPerTurn) {
-            let inner = subject.seat(at: offset)
-            let outer = subject.seat(at: offset + SpiralLayout.seatsPerTurn)
-            // Same slot, so they share an angular span and only the radius keeps them apart.
-            #expect(isClose(inner.startAngle, outer.startAngle))
-            #expect(outer.innerRadius >= inner.outerRadius)
-            #expect(isClose(outer.innerRadius - inner.outerRadius, SpiralLayout.turnGap))
-        }
-    }
-
-    @Test("A cramped display winds fewer turns rather than overflowing")
-    func spiralShrinksToFit() {
-        let roomy = layout(.spiral, count: 25, available: Self.roomy)
-        let cramped = layout(.spiral, count: 25, available: Self.cramped)
-
-        #expect(roomy.spiral.seats == SpiralLayout.maxSeats)
-        #expect(cramped.spiral.seats < roomy.spiral.seats)
-        #expect(cramped.spiral.seats >= SpiralLayout.minimumSeats)
-        #expect(cramped.panelSize.width < roomy.panelSize.width)
-        // The windows that lost a seat are still reachable, and still counted.
-        #expect(cramped.hiddenCount == 25 - cramped.spiral.seats)
-    }
-
-    @Test("Wedge contents stay inside the panel", arguments: [1, 4, 12, 25])
-    func spiralContentStaysInsidePanel(count: Int) {
-        for available in [Self.roomy, Self.cramped, CGSize(width: 1100, height: 620)] {
-            let subject = layout(.spiral, count: count, available: available)
-            for card in subject.positionedCards() {
-                #expect(card.frame.minX >= -0.001)
-                #expect(card.frame.minY >= -0.001)
-                #expect(card.frame.maxX <= subject.panelSize.width + 0.001)
-                #expect(card.frame.maxY <= subject.panelSize.height + 0.001)
-            }
-        }
-    }
-
-    /// The content box has to sit inside the wedge that draws it, or a label overhangs a
-    /// neighbour and the icon drifts out of the shape it is supposed to be in.
-    @Test("Each content box sits within its own wedge")
-    func spiralContentSitsInsideItsWedge() {
-        let subject = layout(.spiral, count: SpiralLayout.maxSeats, available: Self.roomy).spiral
-
-        for seat in subject.visibleSeats {
-            // Every corner of the box must be in the wedge's annulus and angular span.
-            for corner in [
-                CGPoint(x: seat.contentFrame.minX, y: seat.contentFrame.minY),
-                CGPoint(x: seat.contentFrame.maxX, y: seat.contentFrame.minY),
-                CGPoint(x: seat.contentFrame.minX, y: seat.contentFrame.maxY),
-                CGPoint(x: seat.contentFrame.maxX, y: seat.contentFrame.maxY),
-            ] {
-                #expect(
-                    subject.seatOffset(atContentPoint: corner) == seat.offset,
-                    "a corner of seat \(seat.offset)'s content box fell outside it"
-                )
-            }
-        }
-    }
-
-    /// The spiral is the only arrangement whose panel is driven by how many seats it winds, so
-    /// it is the only one that can grow itself off the screen. Checked against the content box
-    /// a real display actually offers, after `StripLayout`'s width and height fractions.
-    @Test("The spiral panel fits the display it is drawn on")
-    func spiralPanelFitsRealDisplays() {
+    /// The point of the round arrangements: no paging. Every window gets a seat, and the
+    /// arrangement shrinks to make room.
+    @Test("Every window is seated at any realistic count", arguments: radialStyles)
+    func everyWindowIsSeated(style: OverlayLayoutStyle) {
         let displays = [
-            CGSize(width: 1512, height: 982),   // 14" built-in
+            CGSize(width: 1512, height: 982),
             CGSize(width: 1920, height: 1080),
             CGSize(width: 1440, height: 900),
-            CGSize(width: 3440, height: 1440),
             CGSize(width: 1280, height: 800),
         ]
 
@@ -684,75 +609,309 @@ struct OverlayLayoutTests {
                 width: display.width * StripLayout.maxWidthFraction,
                 height: display.height * StripLayout.maxHeightFraction
             )
-            for count in [1, 4, 9, 16, 25, 40] {
-                let subject = layout(.spiral, count: count, available: available)
-                let panel = subject.panelSize
-
+            // Up to the largest list the settings will produce.
+            for count in [1, 5, 8, 9, 16, 17, SettingsStore.historyDepthRange.upperBound] {
+                let subject = layout(style, count: count, available: available)
                 #expect(
-                    panel.width <= available.width + 0.001,
-                    "\(count) windows on \(display) needed \(panel.width)pt of \(available.width)"
+                    subject.visibleRange.count == count,
+                    "\(style) paged \(count) windows on \(display)"
                 )
-                #expect(
-                    panel.height <= available.height + 0.001,
-                    "\(count) windows on \(display) needed \(panel.height)pt of \(available.height)"
-                )
-                // And it still seats a useful number rather than collapsing to the floor.
-                #expect(subject.spiral.seats >= min(count, SpiralLayout.minimumSeats))
+                #expect(subject.hiddenCount == 0)
+                #expect(subject.positionedCards().count == count)
             }
         }
     }
 
-    /// Wedges are the biggest targets of any arrangement, which is the trade for showing one
-    /// line of text. Worth pinning, since it is the reason 45° seats were chosen over 30°.
-    @Test("A wedge is a large target")
-    func spiralWedgesAreLargeTargets() {
-        let subject = layout(.spiral, count: 16, available: Self.roomy).spiral
+    /// Shrinking is what buys that, so it has to actually happen — and stay within bounds.
+    @Test("The arrangement shrinks as the count grows", arguments: RadialLayout.Winding.allCases)
+    func scaleShrinksWithCount(winding: RadialLayout.Winding) {
+        let cramped = CGSize(width: 1300, height: 805)
+        let few = radial(winding, count: 4, available: cramped)
+        let many = radial(winding, count: 25, available: cramped)
 
-        for seat in subject.visibleSeats {
-            let arc = seat.midRadius * CGFloat(seat.endAngle - seat.startAngle)
-            // Comfortably larger than a strip card's 208 × 152 in the dimension that matters
-            // for aiming: depth along the flick.
-            #expect(seat.outerRadius - seat.innerRadius == SpiralLayout.ringThickness)
-            #expect(arc >= 100, "seat \(seat.offset) was only \(arc)pt of arc")
+        // A handful of windows gets the arrangement at its intended size, never a blown-up one.
+        #expect(few.scale == 1)
+        #expect(many.scale < few.scale)
+        #expect(many.scale >= RadialLayout.minimumScale)
+
+        // Monotonic: adding a window never makes the arrangement bigger.
+        var previous: CGFloat = 1.001
+        for count in 1...25 {
+            let scale = radial(winding, count: count, available: cramped).scale
+            #expect(scale <= previous + 0.0001, "\(count) windows scaled up")
+            previous = scale
         }
     }
 
-    // MARK: - Spiral hit testing
+    @Test("The panel always fits the display", arguments: radialStyles)
+    func radialPanelFitsTheDisplay(style: OverlayLayoutStyle) {
+        for display in [
+            CGSize(width: 1512, height: 982),
+            CGSize(width: 1920, height: 1080),
+            CGSize(width: 1280, height: 800),
+        ] {
+            let available = CGSize(
+                width: display.width * StripLayout.maxWidthFraction,
+                height: display.height * StripLayout.maxHeightFraction
+            )
+            for count in [1, 8, 16, 25] {
+                let panel = layout(style, count: count, available: available).panelSize
+                #expect(panel.width <= available.width + 0.001, "\(style)/\(count) on \(display)")
+                #expect(panel.height <= available.height + 0.001, "\(style)/\(count) on \(display)")
+            }
+        }
+    }
 
-    /// The whole wedge is live, not just the box its contents sit in. This is the point of
-    /// aiming at a ring: a flick in roughly the right direction has to land.
-    @Test("Every part of a wedge selects it")
-    func spiralWedgeIsLiveThroughout() {
-        let subject = layout(.spiral, count: SpiralLayout.maxSeats, available: Self.roomy)
-        let spiral = subject.spiral
+    /// Paging is the floor, not the plan: it only appears once shrinking has bottomed out, which
+    /// takes a count far beyond any window list.
+    @Test("Paging returns only past the shrink floor", arguments: RadialLayout.Winding.allCases)
+    func pagingIsTheLastResort(winding: RadialLayout.Winding) {
+        let tiny = CGSize(width: 520, height: 400)
+        let subject = radial(winding, count: 200, available: tiny)
 
-        for seat in spiral.visibleSeats {
-            // Sample across the wedge rather than only at its middle: near both angular
-            // edges, and near both the inner and outer arc.
+        // Seats were given up, but only after shrinking had run out of room.
+        #expect(subject.seats < 200)
+        #expect(subject.scale >= RadialLayout.minimumScale)
+        // Still a whole turn at minimum, so it never degenerates into a fragment of an arc.
+        #expect(subject.seats >= RadialLayout.seatsPerTurn)
+
+        // And it seats as many as the floor allows: one more would have to shrink past it.
+        let oneMore = radial(winding, count: subject.seats + 1, available: tiny)
+        #expect(oneMore.seats == subject.seats)
+    }
+
+    // MARK: - Shared shape
+
+    /// Seats have a fixed angular width in both windings, which is what makes the arc lengthen
+    /// as windows are added rather than the seats spreading apart.
+    @Test("Seat sweep is fixed and the run starts at the top", arguments: RadialLayout.Winding.allCases)
+    func seatsAreFixedWidthFromTheTop(winding: RadialLayout.Winding) {
+        for count in [3, 8, 16] {
+            let subject = radial(winding, count: count)
+            for seat in subject.visibleSeats {
+                #expect(isClose(
+                    seat.endAngle - seat.startAngle,
+                    RadialLayout.sweep - RadialLayout.wedgeGap
+                ))
+            }
+
+            let first = subject.seat(at: 0)
+            #expect(first.midAngle > RadialLayout.startAngle)
+            #expect(first.midAngle < RadialLayout.startAngle + RadialLayout.sweep)
+
+            guard count > 1 else { continue }
+            // y grows downward here, so clockwise puts the second seat right of and below the
+            // first.
+            let second = subject.seat(at: 1)
+            #expect(second.midAngle > first.midAngle)
+            #expect(second.contentFrame.midX > first.contentFrame.midX)
+            #expect(second.contentFrame.midY > first.contentFrame.midY)
+        }
+    }
+
+    /// Adding windows does not move the seats already placed — the arc grows at its open end.
+    /// Only true while the scale holds, which is why this uses a count that does not shrink.
+    @Test("Adding a window leaves the existing seats' angles alone", arguments: RadialLayout.Winding.allCases)
+    func addingAWindowKeepsAngles(winding: RadialLayout.Winding) {
+        let three = radial(winding, count: 3)
+        let six = radial(winding, count: 6)
+        for offset in 0..<3 {
+            #expect(isClose(three.seat(at: offset).startAngle, six.seat(at: offset).startAngle))
+        }
+    }
+
+    /// The content box has to sit inside the wedge that draws it, or a label overhangs a
+    /// neighbour and the icon drifts out of the shape it belongs to. Checked at both windings and
+    /// across the scale range, since the box is derived from the scaled geometry.
+    @Test("Each content box sits within its own wedge", arguments: RadialLayout.Winding.allCases)
+    func contentSitsInsideItsWedge(winding: RadialLayout.Winding) {
+        for available in [Self.roomy, CGSize(width: 1300, height: 805), CGSize(width: 900, height: 620)] {
+            for count in [1, 8, 16, 25] {
+                let subject = radial(winding, count: count, available: available)
+                for seat in subject.visibleSeats {
+                    for corner in [
+                        CGPoint(x: seat.contentFrame.minX, y: seat.contentFrame.minY),
+                        CGPoint(x: seat.contentFrame.maxX, y: seat.contentFrame.minY),
+                        CGPoint(x: seat.contentFrame.minX, y: seat.contentFrame.maxY),
+                        CGPoint(x: seat.contentFrame.maxX, y: seat.contentFrame.maxY),
+                    ] {
+                        #expect(
+                            subject.seatOffset(atContentPoint: corner) == seat.offset,
+                            "\(winding): corner of seat \(seat.offset) outside it, \(count) windows at \(available)"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test("Wedge contents stay inside the panel", arguments: radialStyles)
+    func radialContentStaysInsidePanel(style: OverlayLayoutStyle) {
+        for available in [Self.roomy, Self.cramped, CGSize(width: 1100, height: 620)] {
+            for count in [1, 4, 12, 25] {
+                let subject = layout(style, count: count, available: available)
+                for card in subject.positionedCards() {
+                    #expect(card.frame.minX >= -0.001)
+                    #expect(card.frame.minY >= -0.001)
+                    #expect(card.frame.maxX <= subject.panelSize.width + 0.001)
+                    #expect(card.frame.maxY <= subject.panelSize.height + 0.001)
+                }
+            }
+        }
+    }
+
+    // MARK: - Circular winding
+
+    /// A turn is a true annulus: every seat in it shares both arcs.
+    ///
+    /// This is what makes the circular winding read as organised. The spiral deliberately does
+    /// not do it, which is the whole distinction between the two.
+    @Test("Circular: every seat in a turn shares the same arcs")
+    func circularTurnsAreConcentric() {
+        let subject = radial(.circular, count: RadialLayout.seatsPerTurn * 2)
+
+        let byTurn = Dictionary(grouping: subject.visibleSeats) {
+            RadialLayout.turn(ofSeat: $0.offset)
+        }
+        #expect(byTurn.count == 2)
+
+        for (turn, seats) in byTurn {
+            #expect(seats.count == RadialLayout.seatsPerTurn, "turn \(turn) was not full")
+            let inner = seats[0].innerRadius
+            let outer = seats[0].outerRadius
+            for seat in seats {
+                #expect(seat.innerRadius == inner, "seat \(seat.offset) broke its turn's inner arc")
+                #expect(seat.outerRadius == outer, "seat \(seat.offset) broke its turn's outer arc")
+            }
+        }
+    }
+
+    /// Turns step outward by exactly one thickness plus one gap, so they nest without touching
+    /// and without leaving a stripe of dead space between them.
+    @Test("Circular: turns nest with a uniform gap")
+    func circularTurnsNestUniformly() {
+        let subject = radial(.circular, count: RadialLayout.seatsPerTurn * 2)
+
+        for offset in 0..<(subject.seats - RadialLayout.seatsPerTurn) {
+            let inner = subject.seat(at: offset)
+            let outer = subject.seat(at: offset + RadialLayout.seatsPerTurn)
+            // Same slot, so only the radius separates them — which means they line up radially
+            // too, and the arrangement has columns rather than a scatter.
+            #expect(isClose(inner.startAngle, outer.startAngle))
+            #expect(isClose(inner.endAngle, outer.endAngle))
+            #expect(outer.innerRadius >= inner.outerRadius)
+            #expect(isClose(outer.innerRadius - inner.outerRadius, subject.turnGap))
+        }
+    }
+
+    /// Every icon in a turn is the same distance from the middle, so they fall on one circle.
+    @Test("Circular: contents of a turn sit on a common circle")
+    func circularContentsShareARadius() {
+        let subject = radial(.circular, count: RadialLayout.seatsPerTurn * 2)
+        let centre = subject.centre
+
+        for (turn, seats) in Dictionary(grouping: subject.visibleSeats, by: {
+            RadialLayout.turn(ofSeat: $0.offset)
+        }) {
+            let distances = seats.map { seat in
+                hypot(seat.contentFrame.midX - centre.x, seat.contentFrame.midY - centre.y)
+            }
+            guard let first = distances.first else { continue }
+            for distance in distances {
+                #expect(isClose(distance, first, tolerance: 0.01), "turn \(turn) icons drifted")
+            }
+        }
+    }
+
+    /// Angular gaps are identical all the way round, so no join looks tighter than another.
+    @Test("Circular: the gap between neighbouring wedges is uniform")
+    func circularGapsAreUniform() {
+        let subject = radial(.circular, count: RadialLayout.seatsPerTurn * 2)
+
+        for turn in 0..<2 {
+            let base = turn * RadialLayout.seatsPerTurn
+            for slot in 1..<RadialLayout.seatsPerTurn {
+                let previous = subject.seat(at: base + slot - 1)
+                let next = subject.seat(at: base + slot)
+                #expect(isClose(next.startAngle - previous.endAngle, RadialLayout.wedgeGap))
+            }
+        }
+    }
+
+    // MARK: - Spiral winding
+
+    /// Every seat sits a little further out than the last. That is the definition of the winding,
+    /// and it is exactly what the circular one refuses to do.
+    @Test("Spiral: the radius advances with every seat")
+    func spiralAdvancesPerSeat() {
+        let subject = radial(.spiral, count: RadialLayout.seatsPerTurn * 2)
+
+        for offset in 1..<subject.seats {
+            #expect(subject.seat(at: offset).innerRadius > subject.seat(at: offset - 1).innerRadius)
+        }
+
+        // One full turn out is one thickness plus one gap, which is what keeps the turns from
+        // overlapping despite there being no snapping.
+        for offset in 0..<(subject.seats - RadialLayout.seatsPerTurn) {
+            let inner = subject.seat(at: offset)
+            let outer = subject.seat(at: offset + RadialLayout.seatsPerTurn)
+            #expect(isClose(inner.startAngle, outer.startAngle))
+            #expect(outer.innerRadius >= inner.outerRadius)
+            #expect(isClose(outer.innerRadius - inner.outerRadius, subject.turnGap))
+        }
+    }
+
+    /// The two windings agree on the first seat and diverge immediately after. Pins that they are
+    /// genuinely two arrangements rather than one with a cosmetic difference.
+    @Test("The windings share a first seat and differ from the second")
+    func windingsDivergeAfterTheFirstSeat() {
+        let circular = radial(.circular, count: 8)
+        let spiral = radial(.spiral, count: 8)
+
+        #expect(isClose(circular.seat(at: 0).innerRadius, spiral.seat(at: 0).innerRadius))
+        for offset in 1..<8 {
+            #expect(circular.seat(at: offset).innerRadius < spiral.seat(at: offset).innerRadius)
+        }
+    }
+
+    // MARK: - Radial hit testing
+
+    /// The whole wedge is live, not just the box its contents sit in. This is the point of aiming
+    /// at a ring: a flick in roughly the right direction has to land.
+    @Test("Every part of a wedge selects it", arguments: radialStyles)
+    func wedgeIsLiveThroughout(style: OverlayLayoutStyle) {
+        let subject = layout(style, count: 16, available: Self.roomy)
+        guard let geometry = subject.radial else {
+            Issue.record("\(style) should have radial geometry")
+            return
+        }
+
+        for seat in geometry.visibleSeats {
+            // Sample across the wedge, near both angular edges and both arcs.
             for angleFraction in [0.06, 0.3, 0.5, 0.7, 0.94] {
                 for radiusFraction in [0.06, 0.5, 0.94] {
                     let angle = seat.startAngle + (seat.endAngle - seat.startAngle) * angleFraction
                     let radius = seat.innerRadius
                         + (seat.outerRadius - seat.innerRadius) * CGFloat(radiusFraction)
                     let point = CGPoint(
-                        x: spiral.centre.x + radius * CGFloat(cos(angle)),
-                        y: spiral.centre.y + radius * CGFloat(sin(angle))
+                        x: geometry.centre.x + radius * CGFloat(cos(angle)),
+                        y: geometry.centre.y + radius * CGFloat(sin(angle))
                     )
                     #expect(
                         hit(subject, atTopLeft: point) == seat.offset,
-                        "seat \(seat.offset) missed at angle \(angleFraction), radius \(radiusFraction)"
+                        "\(style) seat \(seat.offset) missed at angle \(angleFraction), radius \(radiusFraction)"
                     )
                 }
             }
         }
     }
 
-    /// The hollow middle is not a card. It confirms the selection instead, because it is
-    /// where the selected window is named.
-    @Test("The hub selects no card and confirms instead")
-    func spiralHubIsNotACard() {
-        let subject = layout(.spiral, count: 9, selected: 4)
-        let centre = CGPoint(x: subject.spiralCentre.x, y: subject.spiralCentre.y)
+    /// The hollow middle is not a card. It confirms the selection instead, because it is where the
+    /// selected window is named.
+    @Test("The hub selects no card and confirms instead", arguments: radialStyles)
+    func hubIsNotACard(style: OverlayLayoutStyle) {
+        let subject = layout(style, count: 9, selected: 4)
+        let centre = subject.radialCentre
 
         #expect(hit(subject, atTopLeft: centre) == nil)
         #expect(subject.commitsSelection(atPanelPoint: appKitPoint(centre, in: subject)))
@@ -760,51 +919,28 @@ struct OverlayLayoutTests {
             subject.target(
                 atPanelPoint: appKitPoint(centre, in: subject),
                 scrollOffset: 0,
-                selectedScale: OverlayLayoutStyle.spiral.selectedScale
+                selectedScale: style.selectedScale
             ) == .confirmSelection
         )
     }
 
     /// Beyond the outermost turn there is nothing, so a click there dismisses.
-    @Test("Points outside the outermost turn hit nothing")
-    func spiralOutsideTheArcHitsNothing() {
-        let subject = layout(.spiral, count: 12, available: Self.roomy)
-        let spiral = subject.spiral
-        let beyond = spiral.outerRadius + 6
+    @Test("Points outside the outermost turn hit nothing", arguments: radialStyles)
+    func outsideTheArcHitsNothing(style: OverlayLayoutStyle) {
+        let subject = layout(style, count: 12, available: Self.roomy)
+        guard let geometry = subject.radial else {
+            Issue.record("\(style) should have radial geometry")
+            return
+        }
+        let beyond = geometry.outerRadius + 6
 
         for step in 0..<12 {
             let angle = Double(step) * .pi / 6
             let point = CGPoint(
-                x: spiral.centre.x + beyond * CGFloat(cos(angle)),
-                y: spiral.centre.y + beyond * CGFloat(sin(angle))
+                x: geometry.centre.x + beyond * CGFloat(cos(angle)),
+                y: geometry.centre.y + beyond * CGFloat(sin(angle))
             )
             #expect(hit(subject, atTopLeft: point) == nil)
-        }
-    }
-
-    /// A paged spiral maps seat positions onto the entries actually on screen, not onto
-    /// entry zero — otherwise hovering the top wedge would select a window that is not there.
-    @Test("A paged spiral hit-tests to the visible entries")
-    func spiralHitTestingFollowsThePage() {
-        let subject = layout(
-            .spiral,
-            count: 40,
-            selected: 30,
-            available: Self.roomy,
-            visibleStart: 16
-        )
-        let range = subject.visibleRange
-        #expect(!range.contains(0))
-
-        let spiral = subject.spiral
-        for seat in spiral.visibleSeats {
-            let point = CGPoint(
-                x: spiral.centre.x + seat.midRadius * CGFloat(cos(seat.midAngle)),
-                y: spiral.centre.y + seat.midRadius * CGFloat(sin(seat.midAngle))
-            )
-            let index = hit(subject, atTopLeft: point)
-            #expect(index == range.lowerBound + seat.offset)
-            #expect(index.map { range.contains($0) } == true)
         }
     }
 
@@ -814,18 +950,32 @@ struct OverlayLayoutTests {
         let start = 1.5 * Double.pi
         let end = start + Double.pi / 6
 
-        #expect(SpiralLayout.angle(start + 0.05, isWithin: start, and: end))
+        #expect(RadialLayout.angle(start + 0.05, isWithin: start, and: end))
         // The same direction expressed a full turn away.
-        #expect(SpiralLayout.angle(start + 0.05 - 2 * .pi, isWithin: start, and: end))
-        #expect(!SpiralLayout.angle(start - 0.05, isWithin: start, and: end))
-        #expect(!SpiralLayout.angle(end + 0.05, isWithin: start, and: end))
+        #expect(RadialLayout.angle(start + 0.05 - 2 * .pi, isWithin: start, and: end))
+        #expect(!RadialLayout.angle(start - 0.05, isWithin: start, and: end))
+        #expect(!RadialLayout.angle(end + 0.05, isWithin: start, and: end))
     }
+
+    /// Wedges are the biggest targets of any arrangement, which is the trade for showing one line
+    /// of text.
+    @Test("A wedge is a large target", arguments: RadialLayout.Winding.allCases)
+    func wedgesAreLargeTargets(winding: RadialLayout.Winding) {
+        let subject = radial(winding, count: 8)
+
+        for seat in subject.visibleSeats {
+            let arc = seat.midRadius * CGFloat(seat.endAngle - seat.startAngle)
+            #expect(isClose(seat.outerRadius - seat.innerRadius, subject.ringThickness))
+            #expect(arc >= 100, "seat \(seat.offset) was only \(arc)pt of arc")
+        }
+    }
+
 
     // MARK: - Confirm region
 
     @Test("Clicking the preview switches, in the styles that have one")
     func previewRegionCommitsSelection() {
-        for style in [OverlayLayoutStyle.list, .spiral] {
+        for style in [OverlayLayoutStyle.list, .circular] {
             let subject = layout(style, count: 9, selected: 4)
             guard let region = subject.confirmRegion else {
                 Issue.record("\(style) should offer a confirm region")
@@ -857,8 +1007,9 @@ struct OverlayLayoutTests {
         #expect(OverlayLayoutStyle.strip.rawValue == 0)
         #expect(OverlayLayoutStyle.grid.rawValue == 1)
         #expect(OverlayLayoutStyle.list.rawValue == 2)
-        #expect(OverlayLayoutStyle.spiral.rawValue == 3)
-        #expect(OverlayLayoutStyle.allCases.count == 4)
+        #expect(OverlayLayoutStyle.circular.rawValue == 3)
+        #expect(OverlayLayoutStyle.spiral.rawValue == 4)
+        #expect(OverlayLayoutStyle.allCases.count == 5)
     }
 
     @Test("Every style is presentable and distinct")
@@ -891,14 +1042,14 @@ struct OverlayLayoutTests {
     func onlyListDrawsABackdrop() {
         #expect(!OverlayLayoutStyle.strip.drawsBackdrop)
         #expect(!OverlayLayoutStyle.grid.drawsBackdrop)
-        #expect(!OverlayLayoutStyle.spiral.drawsBackdrop)
+        #expect(!OverlayLayoutStyle.circular.drawsBackdrop)
         #expect(OverlayLayoutStyle.list.drawsBackdrop)
     }
 
     @Test("Large panels are centred on the display, aimed ones follow the cursor")
     func placementAnchorsMatchTheStyle() {
         #expect(OverlayLayoutStyle.strip.placementAnchor == .cursor)
-        #expect(OverlayLayoutStyle.spiral.placementAnchor == .cursor)
+        #expect(OverlayLayoutStyle.circular.placementAnchor == .cursor)
         #expect(OverlayLayoutStyle.grid.placementAnchor == .displayCentre)
         #expect(OverlayLayoutStyle.list.placementAnchor == .displayCentre)
     }

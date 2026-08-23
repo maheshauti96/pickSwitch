@@ -74,5 +74,12 @@ struct BrowserTab: Equatable, Hashable, Sendable {
 
         /// Safari has no `active tab index`; the tab is selected by setting `current tab`.
         var usesCurrentTab: Bool { self == .safari }
+
+        /// Whether a window will say if it is a private one.
+        ///
+        /// Chromium exposes `mode` per window, reading "normal" or "incognito". Safari's
+        /// dictionary has no equivalent, so a Safari private window cannot be told apart from an
+        /// ordinary one and is left unbadged rather than guessed at.
+        var reportsWindowMode: Bool { self != .safari }
     }
 }

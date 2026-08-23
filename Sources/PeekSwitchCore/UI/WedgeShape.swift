@@ -125,7 +125,7 @@ struct WedgeShape: Shape {
 extension WedgeShape {
 
     /// Builds the shape for a seat, so callers do not restate its five fields.
-    init(seat: SpiralLayout.Seat, centre: CGPoint, cornerRadius: CGFloat = 9) {
+    init(seat: RadialLayout.Seat, centre: CGPoint, cornerRadius: CGFloat = 9) {
         self.init(
             centre: centre,
             startAngle: seat.startAngle,

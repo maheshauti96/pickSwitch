@@ -17,6 +17,8 @@ struct WindowCardView: View {
     var metrics: OverlayCardMetrics = .strip
     /// Which screen this window is on, when there is more than one to tell apart.
     var display: DisplayInfo?
+    /// Whether this is a private browsing window.
+    var isIncognito: Bool = false
 
     @Environment(\.overlayPalette) private var palette
 
@@ -205,6 +207,10 @@ struct WindowCardView: View {
                 TabBadge()
             }
 
+            if isIncognito {
+                IncognitoBadge()
+            }
+
             if let display {
                 DisplayBadge(display: display)
             }
@@ -240,6 +246,7 @@ struct WindowCardView: View {
     private var accessibilityLabel: String {
         var parts = [entry.applicationName, entry.displayTitle]
         if let tab = entry.tab { parts.append("tab, \(tab.host)") }
+        if isIncognito { parts.append("incognito") }
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }
         if let badgeCount { parts.append("\(badgeCount) windows") }

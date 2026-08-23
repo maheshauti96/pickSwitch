@@ -43,6 +43,18 @@ public final class SwitcherController {
     private let thumbnails: ThumbnailService
     private let activation: ActivationService
     private let browserTabs = BrowserTabService()
+
+    /// Private browsing windows identified at any point this session.
+    ///
+    /// A window's browsing mode never changes, so this only grows, and it is what lets the badge
+    /// show up with the overlay rather than a moment after it on every presentation but the
+    /// first. Ids of closed windows linger harmlessly: the set is always intersected with the
+    /// windows actually on screen before it is used.
+    private var knownIncognitoWindowIDs: Set<CGWindowID> = []
+
+    /// Windows whose mode has been settled either way, so a browser is not re-interrogated every
+    /// time the overlay closes just because none of its windows turned out to be private.
+    private var incognitoResolvedWindowIDs: Set<CGWindowID> = []
     private let triggerMonitor: TriggerMonitor
     private let hotKeyMonitor: HotKeyMonitor
 
@@ -431,6 +443,8 @@ public final class SwitcherController {
             self.state.isRevealed = true
         }
 
+        applyKnownIncognitoWindows(to: ordered)
+
         guard !ordered.isEmpty else { return }
         startCaptures(for: ordered, backingScale: backingScale)
 
@@ -438,6 +452,70 @@ public final class SwitcherController {
         if activateAsSoonAsReady {
             activateAsSoonAsReady = false
             commitSelection()
+        }
+    }
+
+    /// Badge the private browsing windows already known, without asking anyone.
+    ///
+    /// Purely a cache read, so it costs nothing and can sit on the presentation path. Restricted
+    /// to the windows on screen, so a stale id from a closed window cannot badge a reused one.
+    private func applyKnownIncognitoWindows(to entries: [WindowEntry]) {
+        let onScreen = Set(entries.map(\.windowID))
+        let resolved = knownIncognitoWindowIDs.intersection(onScreen)
+        guard resolved != state.incognitoWindowIDs else { return }
+        state.incognitoWindowIDs = resolved
+    }
+
+    /// Ask the running browsers which of their windows are private, and remember the answer.
+    ///
+    /// ## Why this runs on dismissal rather than on presentation
+    ///
+    /// Asking costs an Apple Event, and the first one aimed at a given application makes macOS put
+    /// up an Automation consent dialog. That dialog takes focus — which would tear down the
+    /// overlay mid-presentation, the first time a user ever triggered it, for a badge. Running
+    /// after the overlay has gone means the prompt arrives with nothing to interrupt.
+    ///
+    /// It costs nothing to defer, because a window's browsing mode is fixed for its lifetime: an
+    /// incognito window is never anything else. So the answer stays true indefinitely, and
+    /// `applyKnownIncognitoWindows(to:)` can badge from the cache the instant the overlay opens.
+    /// The only presentation without badges is the first one after launch that has a browser
+    /// window in it.
+    private func learnIncognitoWindows(for entries: [WindowEntry]) {
+        // Nothing to ask if no candidate browser window was listed.
+        let browsers = Set(
+            BrowserTab.Browser.allCases.filter(\.reportsWindowMode).map(\.bundleIdentifier)
+        )
+        let candidates = entries.filter { entry in
+            !entry.isTab && entry.bundleIdentifier.map(browsers.contains) == true
+        }
+        guard !candidates.isEmpty else { return }
+
+        // Skip the round trip when every candidate is already accounted for. Common: one browser
+        // whose windows have all been seen before.
+        guard !candidates.allSatisfy({ knownIncognitoWindowIDs.contains($0.windowID) }),
+              candidates.contains(where: { !incognitoResolvedWindowIDs.contains($0.windowID) })
+        else { return }
+
+        Task { [weak self, browserTabs] in
+            let scripted = await browserTabs.windows()
+            guard !scripted.isEmpty else { return }
+
+            await MainActor.run {
+                guard let self else { return }
+                let incognito = IncognitoMatcher.incognitoWindowIDs(
+                    entries: candidates,
+                    scripted: scripted
+                )
+
+                // The cache only ever learns. A window that failed to match this time round must
+                // not lose a badge it was correctly given earlier.
+                self.knownIncognitoWindowIDs.formUnion(incognito)
+                self.incognitoResolvedWindowIDs.formUnion(candidates.map(\.windowID))
+                Log.registry.info("""
+                    inspected \(scripted.count) browser windows, \
+                    \(incognito.count) incognito
+                    """)
+            }
         }
     }
 
@@ -526,6 +604,12 @@ public final class SwitcherController {
         // Requirement 8.5, 8.6.
         Task { [thumbnails] in
             await thumbnails.teardown()
+        }
+
+        // Before the entries are released: asked now, with the overlay gone, so the Automation
+        // consent dialog cannot take focus away from a presentation. See the method comment.
+        if wasVisible {
+            learnIncognitoWindows(for: state.entries)
         }
         state.releaseThumbnails()
 
@@ -1141,7 +1225,32 @@ extension SwitcherController: TriggerMonitorDelegate {
     func confirmPressed() {
         // Requirement 6.4.
         guard state.isVisible else { return }
+
+        // A query that matched nothing is not a failure to act on, it is a different request:
+        // the window does not exist yet, so make one. Only when there is genuinely nothing to
+        // select — with any match at all, Return means "switch to it", as it always has.
+        if state.hasNoSearchMatches,
+           let destination = WebSearch.destination(for: state.searchQuery) {
+            openInDefaultBrowser(destination)
+            return
+        }
+
         commitSelection()
+    }
+
+    /// Hand a destination to whichever browser the user has set as their default.
+    private func openInDefaultBrowser(_ destination: WebSearch.Destination) {
+        switch destination {
+        case .address:
+            Log.overlay.info("no window matched; opening the query as an address")
+        case .search:
+            Log.overlay.info("no window matched; searching the web for the query")
+        }
+
+        // Dismissed first, so the overlay is gone before the browser comes forward rather than
+        // hanging over it while the page loads.
+        dismiss(activating: nil)
+        NSWorkspace.shared.open(destination.url)
     }
 
     func eventTapBecameUnstable(_ unstable: Bool) {

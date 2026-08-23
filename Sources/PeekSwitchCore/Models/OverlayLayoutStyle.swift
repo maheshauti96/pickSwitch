@@ -3,8 +3,7 @@ import Foundation
 
 /// How the switcher arranges its windows on screen.
 ///
-/// The four styles come from the design playground and each answers a different
-/// question the user is asking when they press the trigger:
+/// Each style answers a different question the user is asking when they press the trigger:
 ///
 /// - `strip`: "which window did I just come from?" — a horizontal row ordered by
 ///   recency, cheapest to read at a glance and the default.
@@ -13,24 +12,29 @@ import Foundation
 /// - `list`: "I need the titles, not the pictures" — a compact row list beside one
 ///   large live preview, which is the only style that stays legible with a dozen
 ///   near-identical windows.
-/// - `spiral`: "let me aim" — windows as wedges winding outward around a hollow hub
-///   under the pointer, so selecting is a flick of the wrist rather than a horizontal
-///   hunt.
+/// - `circular`: "let me aim" — windows as wedges in concentric rings around a hollow hub
+///   under the pointer, so selecting is a flick of the wrist rather than a horizontal hunt.
+/// - `spiral`: the same, wound as one continuous outward curve rather than as rings.
 ///
-/// The raw values are persisted, so they must stay stable.
+/// The raw values are persisted, so they must stay stable. Value 3 is `circular` because that
+/// is the behaviour it has always shipped: the arrangement first added under the name "spiral"
+/// snapped its radius per turn, which is what `circular` does. The per-seat winding that the
+/// name implied is the new case, and it gets the new value.
 enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
 
     case strip = 0
     case grid = 1
     case list = 2
-    case spiral = 3
+    case circular = 3
+    case spiral = 4
 
     var displayName: String {
         switch self {
         case .strip: return "Strip (horizontal row)"
         case .grid: return "Grid (all windows)"
         case .list: return "List with preview"
-        case .spiral: return "Spiral (wedges around the pointer)"
+        case .circular: return "Circular (rings around the pointer)"
+        case .spiral: return "Spiral (one winding curve)"
         }
     }
 
@@ -39,6 +43,7 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
         case .strip: return "Strip"
         case .grid: return "Grid"
         case .list: return "List"
+        case .circular: return "Circular"
         case .spiral: return "Spiral"
         }
     }
@@ -51,8 +56,10 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
             return "Every window at once in a grid, centred on the display. Best when you want to see everything rather than step through it."
         case .list:
             return "A compact list of windows beside one large live preview of the selected window. The most readable option when titles matter more than thumbnails."
+        case .circular:
+            return "Windows as wedges in concentric rings around the pointer, named in the hollow middle as you sweep over them. Every window is shown at once, shrinking to fit rather than paging. The tidier of the two round arrangements: a ring's wedges line up with each other."
         case .spiral:
-            return "Windows as wedges winding outward around the pointer, named in the hollow middle as you sweep over them. Aim with the mouse instead of scrolling, and holds more windows at once than any other arrangement."
+            return "The same wedges, wound as one continuous curve so each sits slightly further out than the last. Less aligned than concentric rings by nature, and more of a sense of movement."
         }
     }
 
@@ -64,7 +71,7 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
     /// they sit in the middle of the active display.
     var placementAnchor: OverlayPlacement.Anchor {
         switch self {
-        case .strip, .spiral: return .cursor
+        case .strip, .circular, .spiral: return .cursor
         case .grid, .list: return .displayCentre
         }
     }
@@ -82,7 +89,7 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
     /// and the preview pane only read as one surface if there is a surface.
     var drawsBackdrop: Bool {
         switch self {
-        case .strip, .grid, .spiral: return false
+        case .strip, .grid, .circular, .spiral: return false
         case .list: return true
         }
     }
@@ -99,13 +106,13 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
             switch self {
             case .strip, .list: return .strip
             case .grid: return .grid
-            case .spiral: return .spiral
+            case .circular, .spiral: return .spiral
             }
         case .icon:
             switch self {
             case .strip, .list: return .iconStrip
             case .grid: return .iconGrid
-            case .spiral: return .iconSpiral
+            case .circular, .spiral: return .iconSpiral
             }
         }
     }
@@ -121,7 +128,7 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
         switch self {
         case .strip: return StripLayout.selectedScale
         case .grid: return 1.04
-        case .list, .spiral: return 1.0
+        case .list, .circular, .spiral: return 1.0
         }
     }
 
@@ -131,7 +138,20 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
     /// to a wedge is unreadable. It draws application icons in either view mode, so
     /// capturing for it would be work whose result is thrown away.
     var canShowThumbnails: Bool {
-        self != .spiral
+        radialWinding == nil
+    }
+
+    /// How this style winds its seats, or `nil` if it is not a round arrangement.
+    ///
+    /// One accessor rather than `self == .circular || self == .spiral` scattered about: every
+    /// place that cares needs the winding as well as the fact, and this way adding a third
+    /// winding later touches this switch and nothing else.
+    var radialWinding: RadialLayout.Winding? {
+        switch self {
+        case .strip, .grid, .list: return nil
+        case .circular: return .circular
+        case .spiral: return .spiral
+        }
     }
 }
 
@@ -170,6 +190,30 @@ struct OverlayCardMetrics: Equatable, Sendable {
 
     /// The text block: whatever the artwork does not occupy.
     var metadataHeight: CGFloat { size.height - artworkHeight }
+
+    /// The same card at `factor` of its size.
+    ///
+    /// Only the round arrangements use this, and only because they are the ones that shrink to
+    /// fit: every other style has a fixed card and pages instead. Lengths scale outright.
+    ///
+    /// Font sizes scale but stop at 9pt. Type does not stay legible the way a rectangle does,
+    /// and a wedge whose label has gone illegible is worse than one with no label — which is
+    /// why the wedge view drops the label entirely once its block is too short to hold one.
+    func scaled(by factor: CGFloat) -> OverlayCardMetrics {
+        guard factor < 1 else { return self }
+        return OverlayCardMetrics(
+            size: CGSize(width: size.width * factor, height: size.height * factor),
+            artworkHeight: artworkHeight * factor,
+            cornerRadius: cornerRadius * factor,
+            iconSize: iconSize * factor,
+            titleFontSize: max(9, titleFontSize * factor),
+            subtitleFontSize: max(9, subtitleFontSize * factor),
+            showsSubtitle: showsSubtitle,
+            usesApplicationNameAsPrimary: usesApplicationNameAsPrimary,
+            contentLayout: contentLayout,
+            artworkIconSize: artworkIconSize * factor
+        )
+    }
 
     /// Requirement 3.2's card, unchanged: this is the shipped strip geometry.
     static let strip = OverlayCardMetrics(
@@ -253,17 +297,21 @@ struct OverlayCardMetrics: Equatable, Sendable {
     // positioned and shaped by `SpiralLayout`, which owns the angles and radii; these
     // metrics only describe what is drawn inside it.
 
-    /// The content box of a wedge: a 46pt icon over one line naming the application.
+    /// The content box of a wedge: a 52pt icon over one line naming the application.
     ///
-    /// One line, because a wedge holds a 75pt-wide box and a window title in that space is
+    /// One line, because a wedge holds an 80pt-wide box and a window title in that space is
     /// four words of ellipsis. The hollow middle carries the full title of whichever window is
     /// under the pointer instead, which is why the middle is not empty.
     ///
-    /// `size` is taken from `SpiralLayout` rather than restated, so the two cannot drift.
+    /// `size` is taken from `RadialLayout` rather than restated, so the two cannot drift. It
+    /// is the box at scale 1; the view scales these metrics to match however far the
+    /// arrangement has had to shrink.
     static let spiral = OverlayCardMetrics(
-        size: SpiralLayout.contentSize,
-        artworkHeight: 46,
-        cornerRadius: 9,
+        size: RadialLayout.baseContentSize,
+        artworkHeight: 52,
+        // Generous, to match a wedge 120pt deep. At 9 the corners read as square against
+        // arcs that long.
+        cornerRadius: 13,
         // No small icon beside the label: the large one is directly above it.
         iconSize: 0,
         // This *is* the application name size — it is the only line a wedge shows.
@@ -272,20 +320,20 @@ struct OverlayCardMetrics: Equatable, Sendable {
         showsSubtitle: false,
         usesApplicationNameAsPrimary: true,
         contentLayout: .artworkThenMetadata,
-        artworkIconSize: 46
+        artworkIconSize: 52
     )
 
     /// Identical to `spiral` by design. See the note above.
     static let iconSpiral = OverlayCardMetrics(
-        size: SpiralLayout.contentSize,
-        artworkHeight: 46,
-        cornerRadius: 9,
+        size: RadialLayout.baseContentSize,
+        artworkHeight: 52,
+        cornerRadius: 13,
         iconSize: 0,
         titleFontSize: 11,
         subtitleFontSize: 10,
         showsSubtitle: false,
         usesApplicationNameAsPrimary: true,
         contentLayout: .artworkThenMetadata,
-        artworkIconSize: 46
+        artworkIconSize: 52
     )
 }

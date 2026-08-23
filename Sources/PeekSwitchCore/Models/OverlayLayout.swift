@@ -170,8 +170,8 @@ struct OverlayLayout: Equatable {
             return gridPanelSize
         case .list:
             return listPanelSize
-        case .spiral:
-            return spiral.panelSize
+        case .circular, .spiral:
+            return radial?.panelSize ?? strip.panelSize
         }
     }
 
@@ -247,17 +247,25 @@ struct OverlayLayout: Equatable {
         )
     }
 
-    // MARK: - Spiral geometry
+    // MARK: - Radial geometry
 
-    /// The spiral's own layout, which owns every angle and radius in the arrangement.
-    var spiral: SpiralLayout {
-        SpiralLayout(
+    /// The round arrangements' own layout, which owns every angle and radius in them.
+    ///
+    /// Non-nil only for `circular` and `spiral`. Both share this geometry and differ only in
+    /// the winding it is given.
+    var radial: RadialLayout? {
+        guard let winding = style.radialWinding else { return nil }
+        return RadialLayout(
+            winding: winding,
             cardCount: cardCount,
             selectedIndex: selectedIndex,
             availableContentWidth: availableContentWidth,
             availableContentHeight: availableContentHeight
         )
     }
+
+    /// How far the round arrangement has shrunk to seat every window. 1 for every other style.
+    var radialScale: CGFloat { radial?.scale ?? 1 }
 
     /// A wedge paired with the entry it shows, in panel coordinates.
     ///
@@ -267,25 +275,26 @@ struct OverlayLayout: Equatable {
     /// without recomputing geometry that would then be free to disagree.
     struct PositionedSeat: Equatable {
         let index: Int
-        let seat: SpiralLayout.Seat
+        let seat: RadialLayout.Seat
     }
 
-    /// Centre of the spiral, in panel coordinates.
-    var spiralCentre: CGPoint {
-        let centre = spiral.centre
+    /// Centre of the arrangement, in panel coordinates.
+    var radialCentre: CGPoint {
+        guard let radial else { return CGPoint(x: panelSize.width / 2, y: panelSize.height / 2) }
+        let centre = radial.centre
         return CGPoint(x: centre.x, y: centre.y + searchChrome)
     }
 
     /// Every visible wedge, in panel coordinates.
-    var spiralSeats: [PositionedSeat] {
-        guard style == .spiral, cardCount > 0 else { return [] }
+    var radialSeats: [PositionedSeat] {
+        guard let radial, cardCount > 0 else { return [] }
         let range = visibleRange
         return range.enumerated().map { offset, index in
-            let seat = spiral.seat(at: offset)
+            let seat = radial.seat(at: offset)
             guard searchChrome != 0 else { return PositionedSeat(index: index, seat: seat) }
             return PositionedSeat(
                 index: index,
-                seat: SpiralLayout.Seat(
+                seat: RadialLayout.Seat(
                     offset: seat.offset,
                     startAngle: seat.startAngle,
                     endAngle: seat.endAngle,
@@ -302,8 +311,9 @@ struct OverlayLayout: Equatable {
     /// Not dead space: it captions whichever window is under the pointer. Wedges are too
     /// narrow for a window title, so without this three windows of one application are
     /// three identical icons.
-    var spiralHubFrame: CGRect {
-        spiral.hubFrame.offsetBy(dx: 0, dy: searchChrome)
+    var radialHubFrame: CGRect {
+        guard let radial else { return .zero }
+        return radial.hubFrame.offsetBy(dx: 0, dy: searchChrome)
     }
 
     // MARK: - Visible window
@@ -315,7 +325,7 @@ struct OverlayLayout: Equatable {
         case .strip: return nil
         case .grid: return gridColumns * gridVisibleRows
         case .list: return listVisibleRows
-        case .spiral: return spiral.seats
+        case .circular, .spiral: return radial?.seats ?? cardCount
         }
     }
 
@@ -459,12 +469,12 @@ struct OverlayLayout: Equatable {
                 )
             }
 
-        case .spiral:
+        case .circular, .spiral:
             // The upright content box of each wedge. The wedge shape itself lives in
-            // `spiralSeats`, and clicks are resolved by angle rather than against these
+            // `radialSeats`, and clicks are resolved by angle rather than against these
             // rectangles — adjacent wedges have heavily overlapping bounding boxes, so a
             // rectangle test would hand points to the wrong neighbour.
-            let layout = spiral
+            guard let layout = radial else { return [] }
             return range.enumerated().map { offset, index in
                 PositionedCard(index: index, frame: layout.seat(at: offset).contentFrame)
             }
@@ -490,7 +500,7 @@ struct OverlayLayout: Equatable {
                 width: size,
                 height: size
             )
-        case .strip, .grid, .spiral:
+        case .strip, .grid, .circular, .spiral:
             return CGRect(
                 x: drawn.maxX - CloseButton.inset - size,
                 y: drawn.minY + CloseButton.inset,
@@ -525,7 +535,7 @@ struct OverlayLayout: Equatable {
         switch style {
         case .strip, .grid: return nil
         case .list: return listDetailFrame
-        case .spiral: return spiralHubFrame
+        case .circular, .spiral: return radialHubFrame
         }
     }
 
@@ -609,10 +619,10 @@ struct OverlayLayout: Equatable {
         // wedge is live right into its corners. This is the point of aiming at a ring: a
         // flick in roughly the right direction has to land, and the content box covers about
         // half of the wedge it sits in.
-        if style == .spiral {
+        if let radial {
             let point = topLeftPoint(pointInPanel)
             let inContent = CGPoint(x: point.x, y: point.y - searchChrome)
-            guard let offset = spiral.seatOffset(atContentPoint: inContent) else { return nil }
+            guard let offset = radial.seatOffset(atContentPoint: inContent) else { return nil }
             let range = visibleRange
             let index = range.lowerBound + offset
             return range.contains(index) ? index : nil

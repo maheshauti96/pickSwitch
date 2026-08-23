@@ -102,14 +102,14 @@ final class SettingsStoreTests {
     /// shared a key, this is the test that would notice.
     @Test("The view mode and the layout style persist independently")
     func viewModeAndLayoutStyleAreIndependent() {
-        store.overlayLayoutStyle = .spiral
+        store.overlayLayoutStyle = .circular
         store.overlayViewMode = .icon
         let reloaded = SettingsStore(defaults: defaults)
-        #expect(reloaded.overlayLayoutStyle == .spiral)
+        #expect(reloaded.overlayLayoutStyle == .circular)
         #expect(reloaded.overlayViewMode == .icon)
 
         store.overlayViewMode = .window
-        #expect(SettingsStore(defaults: defaults).overlayLayoutStyle == .spiral)
+        #expect(SettingsStore(defaults: defaults).overlayLayoutStyle == .circular)
     }
 
     // MARK: - Persistence

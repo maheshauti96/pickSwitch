@@ -23,6 +23,8 @@ struct WindowPreviewView: View {
     var showsIconInsteadOfThumbnail: Bool = false
     /// Which screen the previewed window is on, when there is more than one.
     var display: DisplayInfo?
+    /// Whether this is a private browsing window.
+    var isIncognito: Bool = false
 
     @Environment(\.overlayPalette) private var palette
 
@@ -180,6 +182,9 @@ struct WindowPreviewView: View {
             return [entry.applicationName, "Tab", tab.host].joined(separator: "  ·  ")
         }
         var parts = [entry.applicationName]
+        if isIncognito {
+            parts.append("Incognito")
+        }
         if let display {
             parts.append(display.name.isEmpty ? display.label : "\(display.label) · \(display.name)")
         }
@@ -194,6 +199,7 @@ struct WindowPreviewView: View {
     private var accessibilityLabel: String {
         guard let entry else { return "No window selected" }
         var label = "Preview of \(entry.applicationName), \(entry.displayTitle)"
+        if isIncognito { label += ", incognito" }
         if let display { label += ", \(display.label)" }
         return label
     }

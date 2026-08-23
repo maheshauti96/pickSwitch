@@ -63,7 +63,7 @@ struct OverlayView: View {
         case .strip: strip
         case .grid: grid
         case .list: list
-        case .spiral: spiral
+        case .circular, .spiral: radial
         }
     }
 
@@ -142,7 +142,8 @@ struct OverlayView: View {
             badgeCount: state.badgeCount(for: entry),
             reduceMotion: state.reduceMotion,
             metrics: state.cardMetrics,
-            display: state.display(for: entry)
+            display: state.display(for: entry),
+            isIncognito: state.isIncognito(entry)
         )
         .scaleEffect(isSelected ? state.selectedScale : 1.0)
         .shadow(
@@ -168,7 +169,8 @@ struct OverlayView: View {
             isSelected: isSelected,
             isHovered: card.index == hoveredIndex && !isSelected,
             badgeCount: state.badgeCount(for: entry),
-            display: state.display(for: entry)
+            display: state.display(for: entry),
+            isIncognito: state.isIncognito(entry)
         )
         .frame(width: card.frame.width, height: card.frame.height)
         .opacity(state.isRevealed ? 1 : 0)
@@ -256,7 +258,8 @@ struct OverlayView: View {
                 overlaysCaption: false,
                 showsLiveBadge: state.viewMode.usesThumbnails,
                 showsIconInsteadOfThumbnail: !state.viewMode.usesThumbnails,
-                display: selectedDisplay
+                display: selectedDisplay,
+                isIncognito: state.selectedEntry.map(state.isIncognito) ?? false
             )
             .frame(width: layout.listDetailFrame.width, height: layout.listDetailFrame.height)
             .position(x: layout.listDetailFrame.midX, y: layout.listDetailFrame.midY)
@@ -264,11 +267,11 @@ struct OverlayView: View {
         .frame(width: layout.panelSize.width, height: layout.panelSize.height)
     }
 
-    // MARK: - Spiral
+    // MARK: - Circular and spiral
 
-    private var spiral: some View {
+    private var radial: some View {
         ZStack(alignment: .topLeading) {
-            ForEach(layout.spiralSeats, id: \.index) { positioned in
+            ForEach(layout.radialSeats, id: \.index) { positioned in
                 wedge(positioned)
             }
 
@@ -289,14 +292,15 @@ struct OverlayView: View {
         return WindowWedgeView(
             entry: entry,
             seat: positioned.seat,
-            centre: layout.spiralCentre,
+            centre: layout.radialCentre,
             panelSize: layout.panelSize,
             isSelected: isSelected,
             isHovered: positioned.index == hoveredIndex && !isSelected,
             badgeCount: state.badgeCount(for: entry),
             reduceMotion: state.reduceMotion,
-            metrics: state.cardMetrics,
+            metrics: state.cardMetrics.scaled(by: layout.radialScale),
             display: state.display(for: entry),
+            isIncognito: state.isIncognito(entry),
             shadowRadius: cardShadowRadius,
             shadowOpacity: cardShadowOpacity
         )
@@ -326,23 +330,33 @@ struct OverlayView: View {
     @ViewBuilder
     private var hubCaption: some View {
         if let entry = state.selectedEntry {
-            let frame = layout.spiralHubFrame
+            let frame = layout.radialHubFrame
 
-            VStack(spacing: 4) {
+            // Scaled with the arrangement, since the hub shrinks along with everything else.
+            // Floored at 9pt, and the title gives up lines rather than shrinking past that:
+            // three lines of illegible type says less than one line of readable type.
+            let scale = layout.radialScale
+            let titleSize = max(9, 13 * scale)
+            let titleLines = scale > 0.8 ? 3 : 2
+
+            VStack(spacing: 4 * scale) {
                 Text(entry.applicationName)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: max(9, 10 * scale), weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(palette.secondaryText)
 
                 Text(entry.displayTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(3)
+                    .font(.system(size: titleSize, weight: .semibold))
+                    .lineLimit(titleLines)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(palette.text)
 
-                if selectedDisplay != nil || entry.isMinimized {
+                if selectedDisplay != nil || entry.isMinimized || state.isIncognito(entry) {
                     HStack(spacing: 4) {
+                        if state.isIncognito(entry) {
+                            IncognitoBadge(size: max(9, 10 * scale))
+                        }
                         if let selectedDisplay {
                             DisplayBadge(display: selectedDisplay)
                         }
@@ -354,7 +368,7 @@ struct OverlayView: View {
                     }
                 }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 18 * scale)
             .frame(width: frame.width, height: frame.height)
             // A disc rather than nothing: the caption sits over whatever desktop happens to
             // be behind the panel, and text alone there is unreadable half the time.
@@ -420,7 +434,7 @@ struct OverlayView: View {
     private var revealAnchor: UnitPoint {
         let panel = layout.panelSize
         guard panel.width > 0, panel.height > 0 else { return .center }
-        let centre = layout.spiralCentre
+        let centre = layout.radialCentre
         return UnitPoint(x: centre.x / panel.width, y: centre.y / panel.height)
     }
 
@@ -433,21 +447,79 @@ struct OverlayView: View {
     /// true reads as a bug.
     private var emptyState: some View {
         VStack(spacing: 6) {
-            Image(systemName: state.isSearching ? "magnifyingglass" : "macwindow.badge.plus")
-                .font(.system(size: 26, weight: .light))
-                .foregroundStyle(palette.secondaryText)
-            Text(state.isSearching ? "No windows match" : "No switchable windows are open")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(palette.text)
             if state.isSearching {
-                Text("Esc to clear")
-                    .font(.system(size: 10))
+                searchMissView
+            } else {
+                Image(systemName: "macwindow.badge.plus")
+                    .font(.system(size: 26, weight: .light))
                     .foregroundStyle(palette.secondaryText)
+                Text("No switchable windows are open")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(palette.text)
             }
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 22)
         // Clear of the search field when one is showing.
         .padding(.top, layout.searchChrome)
+    }
+
+    /// What a query that matched nothing says.
+    ///
+    /// An offer rather than a dead end. The keystrokes meant "get me to this thing", and the
+    /// window not existing yet is a weak reason to refuse — so Return opens it instead, and the
+    /// wording says which of the two things it will do, since a query that looks like an address
+    /// goes straight there rather than through a search engine.
+    @ViewBuilder
+    private var searchMissView: some View {
+        let destination = WebSearch.destination(for: state.searchQuery)
+
+        Image(systemName: destination == nil ? "magnifyingglass" : "arrow.up.forward.app")
+            .font(.system(size: 26, weight: .light))
+            .foregroundStyle(palette.secondaryText)
+
+        Text("No windows match")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(palette.text)
+
+        if let destination {
+            // Stacked rather than one line, and wrapping: the empty-state panel is 320pt wide
+            // and a query plus its preamble does not fit beside the key chip.
+            VStack(spacing: 4) {
+                Text("Return")
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(palette.accentFill)
+                    )
+                    .foregroundStyle(palette.onAccentText)
+
+                Text(promptText(for: destination))
+                    .font(.system(size: 10))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(palette.secondaryText)
+            }
+            .padding(.top, 2)
+        }
+
+        Text("Esc to clear")
+            .font(.system(size: 10))
+            .foregroundStyle(palette.secondaryText)
+    }
+
+    private func promptText(for destination: WebSearch.Destination) -> String {
+        // Truncated here rather than by the layout: the panel is sized for a short message, and
+        // a pasted paragraph would otherwise stretch it off the screen.
+        let query = state.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = query.count > 28 ? query.prefix(28) + "…" : query[...]
+
+        switch destination {
+        case .address: return "to open \(shown)"
+        case .search: return "to search the web for \(shown)"
+        }
     }
 }

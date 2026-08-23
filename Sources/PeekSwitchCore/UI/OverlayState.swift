@@ -66,6 +66,19 @@ final class OverlayState: ObservableObject {
     /// Whether items are drawn as window previews or as large application icons.
     @Published var viewMode: OverlayViewMode = .window
 
+    /// Windows that are private browsing windows.
+    ///
+    /// Arrives shortly after the overlay appears rather than with it — the browser has to be
+    /// asked over Apple Events, which costs more than the whole budget for presenting. Held as a
+    /// set of ids rather than a flag on `WindowEntry` because the entries come from the window
+    /// server, which knows nothing about browsing modes.
+    @Published var incognitoWindowIDs: Set<CGWindowID> = []
+
+    /// Whether this entry is a private browsing window.
+    func isIncognito(_ entry: WindowEntry) -> Bool {
+        !entry.isTab && incognitoWindowIDs.contains(entry.windowID)
+    }
+
     /// Whether the cards have been let in yet.
     ///
     /// Defaults to `true`, and that direction matters: any path that forgets to run the

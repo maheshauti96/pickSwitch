@@ -64,6 +64,43 @@ actor BrowserTabService {
         return all
     }
 
+    /// Every window of every running Chromium browser, with whether it is a private one.
+    ///
+    /// Much cheaper than `tabs()`: one Apple Event per browser rather than one per window, and no
+    /// per-tab lists to marshal — around 60 ms for a session with three Chrome windows against
+    /// roughly 300 ms to enumerate their tabs. Still an inter-process round trip, so still too
+    /// slow for the 150 ms budget to put the overlay on screen (Requirement 14.1); the caller
+    /// runs it just after presenting and badges the cards when it lands, the way thumbnails
+    /// already arrive.
+    ///
+    /// Safari is excluded. Its scripting dictionary has no equivalent of `mode`, so a Safari
+    /// private window is indistinguishable from an ordinary one from out here.
+    func windows() async -> [ScriptedBrowserWindow] {
+        let running = await MainActor.run { Self.runningBrowsers() }
+        let scriptable = running.filter { $0.reportsWindowMode && !deniedBrowsers.contains($0) }
+        guard !scriptable.isEmpty else { return [] }
+
+        var all: [ScriptedBrowserWindow] = []
+        for browser in scriptable {
+            switch Self.enumerateWindows(browser) {
+            case .success(let windows):
+                all.append(contentsOf: windows)
+            case .denied:
+                deniedBrowsers.insert(browser)
+                Log.registry.info("""
+                    Automation permission for \(browser.scriptingName, privacy: .public) \
+                    was refused; its windows will not be inspected
+                    """)
+            case .failed(let message):
+                Log.registry.debug("""
+                    could not list \(browser.scriptingName, privacy: .public) windows: \
+                    \(message, privacy: .public)
+                    """)
+            }
+        }
+        return all
+    }
+
     /// Bring a tab to the front: select it within its window, raise that window, and
     /// activate the browser.
     func activate(_ tab: BrowserTab) -> Bool {
@@ -137,6 +174,80 @@ actor BrowserTabService {
         case .failed(let message):
             return .failed(message)
         }
+    }
+
+    private enum WindowsOutcome {
+        case success([ScriptedBrowserWindow])
+        case denied
+        case failed(String)
+    }
+
+    /// One event for the whole browser: id, mode, title and rectangle for each of its windows.
+    private static func enumerateWindows(_ browser: BrowserTab.Browser) -> WindowsOutcome {
+        let source = """
+        set collected to {}
+        tell application "\(browser.scriptingName)"
+            repeat with w in windows
+                set edges to bounds of w
+                set end of collected to ((id of w as text) & "\(fieldDelimiter)" ¬
+                    & (mode of w as text) & "\(fieldDelimiter)" ¬
+                    & (name of w as text) & "\(fieldDelimiter)" ¬
+                    & (item 1 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 2 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 3 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 4 of edges as text))
+            end repeat
+        end tell
+        set AppleScript's text item delimiters to "\(recordDelimiter)"
+        return collected as text
+        """
+
+        switch run(source) {
+        case .success(let output):
+            return .success(parseWindows(output, browser: browser))
+        case .denied:
+            return .denied
+        case .failed(let message):
+            return .failed(message)
+        }
+    }
+
+    static func parseWindows(
+        _ output: String,
+        browser: BrowserTab.Browser
+    ) -> [ScriptedBrowserWindow] {
+        var windows: [ScriptedBrowserWindow] = []
+
+        for record in output.components(separatedBy: recordDelimiter) where !record.isEmpty {
+            let fields = record.components(separatedBy: fieldDelimiter)
+            guard
+                fields.count == 7,
+                let identifier = Int(fields[0]),
+                let left = Double(fields[3]),
+                let top = Double(fields[4]),
+                let right = Double(fields[5]),
+                let bottom = Double(fields[6])
+            else { continue }
+
+            windows.append(
+                ScriptedBrowserWindow(
+                    browser: browser,
+                    identifier: identifier,
+                    // Chromium reports "normal" or "incognito". Anything unrecognised is treated
+                    // as normal, so a future mode cannot start badging ordinary windows.
+                    isIncognito: fields[1].trimmingCharacters(in: .whitespaces) == "incognito",
+                    title: fields[2],
+                    // AppleScript gives edges, not an origin and a size.
+                    frame: CGRect(
+                        x: left,
+                        y: top,
+                        width: max(0, right - left),
+                        height: max(0, bottom - top)
+                    )
+                )
+            )
+        }
+        return windows
     }
 
     private static func parse(_ output: String, browser: BrowserTab.Browser) -> [BrowserTab] {
