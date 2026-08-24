@@ -362,13 +362,9 @@ public final class SwitcherController {
     private func beginPresentation(mode: PresentationMode) {
         guard !isPresenting else { return }
 
-        if state.isVisible {
-            // Requirement 6.2's toggle: a second hotkey press closes it.
-            if mode == .toggle {
-                dismiss(activating: nil)
-            }
-            return
-        }
+        // A press arriving while the overlay is up never reaches here: `TriggerResponse` has
+        // already turned it into a commit, a dismissal or nothing at all.
+        guard !state.isVisible else { return }
 
         // Cancel a dismissal-time request that is still in its grace period. Once its synchronous
         // Apple Event has begun it cannot be cancelled safely; in that short interval, do not put
@@ -1493,7 +1489,35 @@ public final class SwitcherController {
     /// same press/release logic means such a button gets identical behaviour: tap to
     /// keep the strip open, hold and release to switch.
     private func handleHotKeyPressed() {
-        triggerButtonPressed()
+        handlePress(from: .keyboardShortcut)
+    }
+
+    /// One entry point for both triggers, differing only where they should.
+    private func handlePress(from source: TriggerSource) {
+        switch TriggerResponse.forPress(
+            from: source,
+            overlayVisible: state.isVisible,
+            mode: presentationMode
+        ) {
+        case .open:
+            guard !isTriggerSuppressed else {
+                Log.trigger.debug("ignoring trigger press immediately after a dismissal")
+                return
+            }
+            // Requirement 5.5.
+            beginPresentation(mode: .hold)
+
+        case .commitSelection:
+            commitSelection()
+
+        case .dismissWithoutSwitching:
+            // Requirement 6.2.
+            Log.overlay.info("shortcut pressed again; closing the overlay without switching")
+            dismiss(activating: nil)
+
+        case .ignore:
+            break
+        }
     }
 
     private func handleHotKeyReleased(heldFor duration: TimeInterval) {
@@ -1506,22 +1530,15 @@ public final class SwitcherController {
 extension SwitcherController: TriggerMonitorDelegate {
 
     func triggerButtonPressed() {
-        // A second press while the strip is being held open commits the selection.
-        // That is what makes toggle mode fully mouse-driven: tap to open, scroll to
-        // choose, tap to switch, without ever needing to click precisely on a card.
-        if state.isVisible, presentationMode == .toggle {
-            commitSelection()
-            return
-        }
-        guard !isTriggerSuppressed else {
-            Log.trigger.debug("ignoring trigger press immediately after a dismissal")
-            return
-        }
-        // Requirement 5.5.
-        beginPresentation(mode: .hold)
+        handlePress(from: .button)
     }
 
     func triggerButtonReleased(heldFor duration: TimeInterval) {
+        // A release with nothing on screen has nothing to act on. It arrives routinely — the
+        // shortcut's own release lands just after a press closed the overlay — and without this it
+        // would leave the tap branch below setting flags for a presentation that is already gone.
+        guard state.isVisible || isPresenting else { return }
+
         // Requirement 5.10 and 8.3, now filtered through the activation mode.
         guard presentationMode == .hold else { return }
 
