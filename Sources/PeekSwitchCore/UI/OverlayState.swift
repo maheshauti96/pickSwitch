@@ -86,6 +86,25 @@ final class OverlayState: ObservableObject {
     /// Whether items are drawn as window previews or as large application icons.
     @Published var viewMode: OverlayViewMode = .window
 
+    /// Whether containers are tinted by their window's icon (Requirement 3.12).
+    @Published var tintsWindowsByIcon: Bool = true
+
+    /// Increase Contrast, sampled per presentation like `reduceMotion`.
+    ///
+    /// A user who has asked the system for more contrast has asked for the opposite of a
+    /// decorative tint, so the tint is dropped entirely rather than merely reduced.
+    @Published var increaseContrast: Bool = false
+
+    /// Dominant hues already sampled this session, keyed by application identity.
+    ///
+    /// Not published: sampling is a pure function of an icon that never changes, so a cache hit
+    /// must not invalidate any view. Bounded implicitly by the number of applications installed.
+    private var applicationTints: [String: IconTint?] = [:]
+
+    /// Hues taken from a browser window's active site icon, which say more than the browser's own
+    /// icon: three Chrome windows share one application icon but rarely one site.
+    private var siteTintsByWindowID: [CGWindowID: IconTint] = [:]
+
     /// Windows that are private browsing windows.
     ///
     /// Arrives shortly after the overlay appears rather than with it — the browser has to be
@@ -285,8 +304,10 @@ final class OverlayState: ObservableObject {
         hasLoadedTabs = false
         searchQuery = ""
         // A native window id can be reused, and its active tab can change between invocations.
-        // Never carry a per-window favicon across presentations without rematching it.
+        // Never carry a per-window favicon, or the tint taken from it, across presentations
+        // without rematching it.
         browserIconsByWindowID.removeAll(keepingCapacity: true)
+        siteTintsByWindowID.removeAll(keepingCapacity: true)
         reload(entries: entries, selectedIndex: selectedIndex)
     }
 
@@ -340,12 +361,34 @@ final class OverlayState: ObservableObject {
         return browserIconsByWindowID[entry.windowID] ?? entry.applicationIcon
     }
 
+    /// The tint for an entry's container, or `nil` when it should keep the flat palette fill.
+    ///
+    /// Sampling happens on demand and is cached, so an application whose card is never drawn is
+    /// never sampled, and one that appears in every presentation is sampled once per session.
+    func tint(for entry: WindowEntry) -> IconTint? {
+        guard tintsWindowsByIcon, !increaseContrast else { return nil }
+
+        // A private window is deliberately excluded: its site icon is never fetched, so tinting it
+        // by the browser icon would only make two Chrome windows look like the same window.
+        if entry.isWindow, !isIncognito(entry), let site = siteTintsByWindowID[entry.windowID] {
+            return site
+        }
+
+        let key = entry.bundleIdentifier ?? entry.applicationName
+        if let cached = applicationTints[key] { return cached }
+
+        let sampled = entry.applicationIcon.flatMap(IconTint.sampled(from:))
+        applicationTints[key] = sampled
+        return sampled
+    }
+
     /// Publish a browser-window icon only if it still belongs to the visible presentation and
     /// window.
     ///
     /// - Parameter isComposed: `true` when the caller supplies an icon that already carries both
     ///   identities, which is the case for one restored from an earlier verification. A freshly
     ///   downloaded favicon is composed here instead.
+    /// - Parameter siteTint: the hue of the active site's icon, which tints the container.
     /// - Returns: the icon actually published, so a caller can remember exactly what was shown, or
     ///   `nil` when the update was rejected as stale.
     @discardableResult
@@ -353,7 +396,8 @@ final class OverlayState: ObservableObject {
         _ image: NSImage,
         for windowID: CGWindowID,
         presentationID expectedPresentationID: Int,
-        isComposed: Bool = false
+        isComposed: Bool = false,
+        siteTint: IconTint? = nil
     ) -> NSImage? {
         guard isVisible,
               presentationID == expectedPresentationID,
@@ -380,6 +424,9 @@ final class OverlayState: ObservableObject {
         }
 
         browserIconsByWindowID[windowID] = published
+        if let siteTint {
+            siteTintsByWindowID[windowID] = siteTint
+        }
         return published
     }
 
@@ -412,6 +459,7 @@ final class OverlayState: ObservableObject {
 
         thumbnails.removeValue(forKey: windowID)
         browserIconsByWindowID.removeValue(forKey: windowID)
+        siteTintsByWindowID.removeValue(forKey: windowID)
         // Reload so the per-application counts, display badges and scroll offset all
         // reflect the shorter list rather than going stale. Deliberately not `load`,
         // which would also clear an active search.
@@ -434,6 +482,9 @@ final class OverlayState: ObservableObject {
     func releaseThumbnails() {
         thumbnails.removeAll(keepingCapacity: false)
         browserIconsByWindowID.removeAll(keepingCapacity: false)
+        siteTintsByWindowID.removeAll(keepingCapacity: false)
+        // `applicationTints` deliberately survives: an application icon does not change, and
+        // re-sampling every icon on the next presentation would be pure waste.
     }
 
     /// Whether to offer a close affordance for this window.

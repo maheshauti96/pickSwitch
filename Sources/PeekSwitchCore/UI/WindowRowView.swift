@@ -19,6 +19,8 @@ struct WindowRowView: View {
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
+    /// Hue taken from this window's icon. `nil` leaves the row transparent as before.
+    var tint: IconTint?
 
     @Environment(\.overlayPalette) private var palette
 
@@ -30,7 +32,10 @@ struct WindowRowView: View {
         // The fill variant, not the border variant: this surface carries text.
         if isSelected { return palette.accentFill }
         if isHovered { return palette.strongBorder.opacity(0.35) }
-        return .clear
+        // An untinted row stays transparent so the sidebar plate reads as one column; a tinted one
+        // becomes its own chip, which is the point of the tint.
+        guard let tint else { return .clear }
+        return palette.cardFill(tintedBy: tint)
     }
 
     private var primaryColor: Color {

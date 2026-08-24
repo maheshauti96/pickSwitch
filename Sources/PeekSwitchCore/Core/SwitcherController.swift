@@ -71,6 +71,9 @@ public final class SwitcherController {
     private struct CachedBrowserIcon {
         let title: String
         let icon: NSImage
+        /// Hue of the site icon, remembered with it so a restored icon also restores the tint the
+        /// container had when it was verified.
+        let tint: IconTint?
     }
 
     private var browserIconsByWindowID: [CGWindowID: CachedBrowserIcon] = [:]
@@ -408,6 +411,10 @@ public final class SwitcherController {
         let depth = settings.historyDepth
         // Requirement 15.4: sampled per presentation.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        // Same treatment for the tint: read per presentation so toggling either the setting or the
+        // system's Increase Contrast takes effect on the next trigger rather than needing a restart.
+        let tintWindows = settings.tintWindowsByIcon
+        let increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
 
         // Hoisted out of the closure: `self` is main-actor isolated, so reaching
         // through it for `registry` on the work queue would be an isolation
@@ -442,6 +449,8 @@ public final class SwitcherController {
                         pinnedApplications: pinned,
                         historyDepth: depth,
                         reduceMotion: reduceMotion,
+                        tintWindows: tintWindows,
+                        increaseContrast: increaseContrast,
                         stopwatch: stopwatch
                     )
                 }
@@ -462,6 +471,8 @@ public final class SwitcherController {
         pinnedApplications: Set<String>,
         historyDepth: Int,
         reduceMotion: Bool,
+        tintWindows: Bool,
+        increaseContrast: Bool,
         stopwatch: Stopwatch
     ) {
         defer { isPresenting = false }
@@ -475,6 +486,8 @@ public final class SwitcherController {
         )
 
         state.reduceMotion = reduceMotion
+        state.tintsWindowsByIcon = tintWindows
+        state.increaseContrast = increaseContrast
         state.availableContentWidth = contentWidth
         state.availableContentHeight = contentHeight
         // Set before `load`, because the layout the state derives — including the
@@ -585,7 +598,8 @@ public final class SwitcherController {
                 remembered.icon,
                 for: entry.windowID,
                 presentationID: presentationID,
-                isComposed: true
+                isComposed: true,
+                siteTint: remembered.tint
             ) != nil {
                 restored += 1
             }
@@ -596,8 +610,17 @@ public final class SwitcherController {
         }
     }
 
-    private func rememberBrowserIcon(_ icon: NSImage, for windowID: CGWindowID, title: String) {
-        browserIconsByWindowID[windowID] = CachedBrowserIcon(title: title, icon: icon)
+    private func rememberBrowserIcon(
+        _ icon: NSImage,
+        for windowID: CGWindowID,
+        title: String,
+        tint: IconTint?
+    ) {
+        browserIconsByWindowID[windowID] = CachedBrowserIcon(
+            title: title,
+            icon: icon,
+            tint: tint
+        )
         browserIconOrder.removeAll { $0 == windowID }
         browserIconOrder.append(windowID)
 
@@ -818,7 +841,16 @@ public final class SwitcherController {
                             let composed = entry.applicationIcon.map {
                                 BrowserWindowIcon.layered(siteIcon: image, browserIcon: $0)
                             } ?? image
-                            self.rememberBrowserIcon(composed, for: windowID, title: entry.title)
+                            // Sampled from the site icon rather than the composition, which is
+                            // mostly browser: the site is what distinguishes one browser window
+                            // from the next.
+                            let siteTint = IconTint.sampled(from: image)
+                            self.rememberBrowserIcon(
+                                composed,
+                                for: windowID,
+                                title: entry.title,
+                                tint: siteTint
+                            )
 
                             // A dismissal-time lookup exists only to warm the caches.
                             guard let presentationID else { return }
@@ -827,7 +859,8 @@ public final class SwitcherController {
                                 composed,
                                 for: windowID,
                                 presentationID: presentationID,
-                                isComposed: true
+                                isComposed: true,
+                                siteTint: siteTint
                             ) != nil {
                                 Log.registry.info("published a layered site icon for a browser window")
                             } else {

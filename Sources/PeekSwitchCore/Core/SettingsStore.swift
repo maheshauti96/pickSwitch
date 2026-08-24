@@ -18,6 +18,7 @@ final class SettingsStore {
         static let pinnedApplications = "pinnedApplications"
         static let overlayViewMode = "overlayViewMode"
         static let includeOverlayInScreenshots = "includeOverlayInScreenshots"
+        static let tintWindowsByIcon = "tintWindowsByIcon"
     }
 
     /// Applications whose windows are always offered first.
@@ -52,6 +53,10 @@ final class SettingsStore {
     /// Visible to screen capture by default. Anything on screen that cannot be screenshotted is
     /// surprising, and impossible to file a bug about.
     static let defaultIncludeOverlayInScreenshots = true
+    /// On by default. Several windows of one application are the case the switcher is worst at,
+    /// and a hue per window is the cheapest way to tell them apart. Increase Contrast overrides it
+    /// whatever this says.
+    static let defaultTintWindowsByIcon = true
 
     private let defaults: UserDefaults
 
@@ -119,6 +124,17 @@ final class SettingsStore {
             return defaults.bool(forKey: Key.includeOverlayInScreenshots)
         }
         set { defaults.set(newValue, forKey: Key.includeOverlayInScreenshots) }
+    }
+
+    /// Whether each window's container is tinted with the dominant hue of its icon.
+    var tintWindowsByIcon: Bool {
+        get {
+            guard defaults.object(forKey: Key.tintWindowsByIcon) != nil else {
+                return Self.defaultTintWindowsByIcon
+            }
+            return defaults.bool(forKey: Key.tintWindowsByIcon)
+        }
+        set { defaults.set(newValue, forKey: Key.tintWindowsByIcon) }
     }
 
     var overlayViewMode: OverlayViewMode {

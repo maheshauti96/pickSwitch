@@ -38,6 +38,9 @@ struct WindowWedgeView: View {
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
+    /// Hue taken from this window's icon, so a ring of same-application wedges is still
+    /// distinguishable. `nil` leaves the flat palette fill.
+    var tint: IconTint?
     /// The spiral draws no plate, so each wedge lifts itself off the desktop.
     var shadowRadius: CGFloat = 9
     var shadowOpacity: Double = 0.34
@@ -45,9 +48,11 @@ struct WindowWedgeView: View {
     @Environment(\.overlayPalette) private var palette
 
     private var fill: Color {
+        // Selection keeps the untinted accent. It is the strongest signal on screen and must not
+        // shift hue with whatever application happens to be selected.
         if isSelected { return palette.accentFill }
-        if isHovered { return palette.selectedCardFill }
-        return palette.cardFill
+        if isHovered { return palette.selectedCardFill(tintedBy: tint) }
+        return palette.cardFill(tintedBy: tint)
     }
 
     private var borderColor: Color {

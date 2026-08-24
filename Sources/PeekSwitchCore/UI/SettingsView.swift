@@ -293,6 +293,19 @@ struct SettingsView: View {
 
             Divider()
 
+            Toggle("Tint each window by its icon", isOn: $model.tintWindowsByIcon)
+
+            Text(
+                model.tintWindowsByIcon
+                    ? "Each card takes a hint of colour from its icon, so several windows of one application are easier to tell apart. Browser windows use their open site's colour. Turned off automatically when Increase Contrast is on."
+                    : "Every card uses the same neutral background."
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
             Toggle("Include the switcher in screenshots", isOn: $model.includeOverlayInScreenshots)
 
             Text(

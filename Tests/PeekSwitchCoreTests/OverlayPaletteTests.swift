@@ -192,6 +192,165 @@ struct OverlayPaletteTests {
 
     // MARK: - Theme selection
 
+    // MARK: - Icon tints
+
+    /// Every hue an icon can possibly have, at full vividness, which is the strongest tint the
+    /// palette will ever apply.
+    private static let everyHue: [IconTint] = stride(from: 0.0, to: 1.0, by: 1.0 / 72.0)
+        .map { IconTint(hue: $0, vividness: 1) }
+
+    /// The guarantee that makes tinting safe at all: the hue is the icon's, but the luminance band
+    /// is the palette's, so text keeps clearing 4.5:1 whatever application it belongs to.
+    ///
+    /// Without this the feature would reintroduce exactly the regression this suite was written
+    /// for — a fill chosen from something other than the palette, and contrast left to luck.
+    @Test("Tinted cards keep their text legible at every hue")
+    func tintedCardsKeepTextLegible() {
+        for (name, palette) in palettes {
+            for tint in Self.everyHue {
+                for (desktop, label) in [(Self.black, "black"), (Self.white, "white")] {
+                    for (fill, fillName) in [
+                        (palette.cardFill(tintedBy: tint), "cardFill"),
+                        (palette.selectedCardFill(tintedBy: tint), "selectedCardFill"),
+                    ] {
+                        let primary = ratio(text: palette.text, on: fill, over: desktop)
+                        #expect(
+                            primary >= Self.minimumRatio,
+                            """
+                            \(name) \(fillName) hue \(tint.hue) over \(label): \
+                            primary \(primary) < \(Self.minimumRatio)
+                            """
+                        )
+
+                        let secondary = ratio(text: palette.secondaryText, on: fill, over: desktop)
+                        #expect(
+                            secondary >= Self.minimumRatio,
+                            """
+                            \(name) \(fillName) hue \(tint.hue) over \(label): \
+                            secondary \(secondary) < \(Self.minimumRatio)
+                            """
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /// Tinting must not thin the fill out, or contrast would start depending on the desktop again.
+    @Test("Tinted fills stay as opaque as the flat ones")
+    func tintedFillsStayOpaque() {
+        for (name, palette) in palettes {
+            for tint in Self.everyHue {
+                let tinted = components(palette.cardFill(tintedBy: tint))
+                #expect(
+                    tinted.alpha == components(palette.cardFill).alpha,
+                    "\(name) hue \(tint.hue) changed the fill's opacity"
+                )
+            }
+        }
+    }
+
+    /// The selection colour is deliberately not tintable. It is the one unambiguous signal on
+    /// screen, and it would stop being one if it shifted hue with the selected application.
+    @Test("A window with no usable icon colour gets the flat palette")
+    func noTintMeansNoChange() {
+        for (_, palette) in palettes {
+            #expect(palette.cardFill(tintedBy: nil) == palette.cardFill)
+            #expect(palette.selectedCardFill(tintedBy: nil) == palette.selectedCardFill)
+        }
+    }
+
+    /// Distinct hues have to produce distinct fills, or the feature buys nothing.
+    @Test("Different hues produce visibly different fills")
+    func differentHuesDiffer() {
+        for (name, palette) in palettes {
+            let red = components(palette.cardFill(tintedBy: IconTint(hue: 0, vividness: 1)))
+            let green = components(palette.cardFill(tintedBy: IconTint(hue: 1.0 / 3, vividness: 1)))
+            let blue = components(palette.cardFill(tintedBy: IconTint(hue: 2.0 / 3, vividness: 1)))
+
+            #expect(abs(red.red - green.red) > 0.02, "\(name) red and green fills are too close")
+            #expect(abs(green.green - blue.green) > 0.02, "\(name) green and blue fills are too close")
+            #expect(abs(blue.blue - red.blue) > 0.02, "\(name) blue and red fills are too close")
+        }
+    }
+
+    // MARK: - Sampling
+
+    private func solidImage(_ color: NSColor, side: Int = 32) -> NSImage {
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: side,
+            pixelsHigh: side,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: side * 4,
+            bitsPerPixel: 32
+        ) else {
+            Issue.record("could not allocate a test bitmap")
+            return NSImage()
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        color.setFill()
+        NSRect(x: 0, y: 0, width: side, height: side).fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: NSSize(width: side, height: side))
+        image.addRepresentation(rep)
+        return image
+    }
+
+    @Test("A solid icon reports its own hue")
+    func sampledHueMatchesTheIcon() {
+        let cases: [(name: String, color: NSColor, hue: Double)] = [
+            ("red", NSColor(srgbRed: 0.90, green: 0.15, blue: 0.15, alpha: 1), 0),
+            ("green", NSColor(srgbRed: 0.15, green: 0.80, blue: 0.25, alpha: 1), 1.0 / 3),
+            ("blue", NSColor(srgbRed: 0.15, green: 0.25, blue: 0.90, alpha: 1), 2.0 / 3),
+        ]
+
+        for (name, color, expected) in cases {
+            guard let tint = IconTint.sampled(from: solidImage(color)) else {
+                Issue.record("\(name) icon reported no tint")
+                continue
+            }
+            // Compared as an angle, so red sampling as 0.99 counts as red rather than as magenta.
+            let distance = min(
+                abs(tint.hue - expected),
+                1 - abs(tint.hue - expected)
+            )
+            #expect(distance < 0.05, "\(name) sampled as hue \(tint.hue), expected \(expected)")
+            #expect(tint.vividness > 0.4, "\(name) sampled as washed out: \(tint.vividness)")
+        }
+    }
+
+    /// A monochrome icon has no hue to report, and inventing one would tint two unrelated
+    /// applications identically.
+    @Test("Grey, black and white icons report no tint")
+    func monochromeIconsReportNoTint() {
+        for (name, color) in [
+            ("grey", NSColor(white: 0.5, alpha: 1)),
+            ("black", NSColor(white: 0.02, alpha: 1)),
+            ("white", NSColor(white: 1, alpha: 1)),
+        ] {
+            #expect(
+                IconTint.sampled(from: solidImage(color)) == nil,
+                "\(name) icon produced a tint"
+            )
+        }
+    }
+
+    /// A fully transparent icon has no pixels worth sampling.
+    @Test("A transparent icon reports no tint")
+    func transparentIconReportsNoTint() {
+        #expect(IconTint.sampled(from: solidImage(.clear)) == nil)
+    }
+
+    // MARK: - Theme selection
+
     @Test("The palette follows the system appearance")
     func paletteFollowsAppearance() {
         #expect(OverlayPalette.forScheme(.dark).text == OverlayPalette.dark.text)

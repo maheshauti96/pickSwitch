@@ -21,13 +21,21 @@ struct WindowCardView: View {
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
+    /// Hue taken from this window's icon, so cards of different applications are separable at a
+    /// glance. `nil` leaves the flat palette fill.
+    var tint: IconTint?
 
     @Environment(\.overlayPalette) private var palette
 
     /// Near-opaque, so the card is legible over any desktop rather than only over a
     /// panel plate.
+    ///
+    /// Selection is carried by the border and glow here rather than by the fill, so a selected
+    /// card keeps its tint instead of losing the identity it was picked out of.
     private var fill: Color {
-        isSelected ? palette.selectedCardFill : palette.cardFill
+        isSelected
+            ? palette.selectedCardFill(tintedBy: tint)
+            : palette.cardFill(tintedBy: tint)
     }
 
     private var borderColor: Color {

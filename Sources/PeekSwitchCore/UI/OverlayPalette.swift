@@ -48,6 +48,17 @@ struct OverlayPalette {
     let onAccentText: Color
     let onAccentSecondaryText: Color
     let liveIndicator: Color
+    /// How far a card's fill may be pushed toward its window's icon hue, `0...1`.
+    ///
+    /// Small on purpose, and owned here rather than by the icon: the fill still has to carry text
+    /// at 4.5:1, and that is the whole reason this type names its colours outright. `IconTint`
+    /// supplies a hue; these three values are what keep the result inside a luminance band the
+    /// palette's text colours were chosen against.
+    let tintStrength: Double
+    /// Saturation and brightness of the colour the fill is pushed toward. Together with
+    /// `tintStrength` these bound the tint whatever hue an icon turns out to have.
+    let tintSaturation: Double
+    let tintBrightness: Double
 
     static func forScheme(_ scheme: ColorScheme) -> OverlayPalette {
         scheme == .dark ? .dark : .light
@@ -67,7 +78,14 @@ struct OverlayPalette {
         accentFill: Self.brandFill,
         onAccentText: .white,
         onAccentSecondaryText: Color(.sRGB, white: 1, opacity: 0.85),
-        liveIndicator: Color(.sRGB, red: 98 / 255, green: 197 / 255, blue: 238 / 255, opacity: 1)
+        liveIndicator: Color(.sRGB, red: 98 / 255, green: 197 / 255, blue: 238 / 255, opacity: 1),
+        // Fully saturated but dark, which matters more here than it looks. Mixing a *bright* hue
+        // into a near-black card raises its luminance, and the secondary line is white at 58% —
+        // measured against yellows it fell to 4.4:1, just under the bar. Keeping the hue dark lets
+        // the tint colour the card without lightening it, so contrast stays where it was.
+        tintStrength: 0.26,
+        tintSaturation: 1.0,
+        tintBrightness: 0.26
     )
 
     /// `--ps-*` light theme.
@@ -86,7 +104,13 @@ struct OverlayPalette {
         accentFill: Self.brandFill,
         onAccentText: .white,
         onAccentSecondaryText: Color(.sRGB, white: 1, opacity: 0.85),
-        liveIndicator: Color(.sRGB, red: 0 / 255, green: 106 / 255, blue: 141 / 255, opacity: 1)
+        liveIndicator: Color(.sRGB, red: 0 / 255, green: 106 / 255, blue: 141 / 255, opacity: 1),
+        // A light card is white, so every point of tint costs luminance the secondary line is
+        // measured against. This is the value the hue sweep in `OverlayPaletteTests` clears with
+        // room to spare, and it is still enough to tell a ring of Chrome windows apart.
+        tintStrength: 0.15,
+        tintSaturation: 0.85,
+        tintBrightness: 1.0
     )
 
     /// PeekSwitch's selection colour, `#0088b0`.

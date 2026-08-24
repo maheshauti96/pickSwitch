@@ -64,6 +64,14 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var tintWindowsByIcon: Bool {
+        didSet {
+            guard tintWindowsByIcon != oldValue else { return }
+            store.tintWindowsByIcon = tintWindowsByIcon
+            onSettingsChanged()
+        }
+    }
+
     @Published var overlayLayoutStyle: OverlayLayoutStyle {
         didSet {
             guard overlayLayoutStyle != oldValue else { return }
@@ -217,6 +225,7 @@ final class SettingsViewModel: ObservableObject {
         self.hotKeyShortcut = store.hotKeyShortcut
         self.overlayViewMode = store.overlayViewMode
         self.includeOverlayInScreenshots = store.includeOverlayInScreenshots
+        self.tintWindowsByIcon = store.tintWindowsByIcon
         self.overlayLayoutStyle = store.overlayLayoutStyle
         self.historyDepth = Double(store.historyDepth)
         self.pinnedApplications = store.pinnedApplications

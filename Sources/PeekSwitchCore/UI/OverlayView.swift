@@ -152,7 +152,8 @@ struct OverlayView: View {
             reduceMotion: state.reduceMotion,
             metrics: state.cardMetrics,
             display: state.display(for: entry),
-            isIncognito: state.isIncognito(entry)
+            isIncognito: state.isIncognito(entry),
+            tint: state.tint(for: entry)
         )
         .scaleEffect(isSelected ? state.selectedScale : 1.0)
         .shadow(
@@ -180,7 +181,8 @@ struct OverlayView: View {
             isHovered: card.index == hoveredIndex && !isSelected,
             badgeCount: state.badgeCount(for: entry),
             display: state.display(for: entry),
-            isIncognito: state.isIncognito(entry)
+            isIncognito: state.isIncognito(entry),
+            tint: state.tint(for: entry)
         )
         .frame(width: card.frame.width, height: card.frame.height)
         .opacity(state.isRevealed ? 1 : 0)
@@ -314,6 +316,7 @@ struct OverlayView: View {
             metrics: state.cardMetrics.scaled(by: layout.radialScale),
             display: state.display(for: entry),
             isIncognito: state.isIncognito(entry),
+            tint: state.tint(for: entry),
             shadowRadius: cardShadowRadius,
             shadowOpacity: cardShadowOpacity
         )
