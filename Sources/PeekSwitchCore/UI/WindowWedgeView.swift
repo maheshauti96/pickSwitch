@@ -120,21 +120,38 @@ struct WindowWedgeView: View {
 
     // MARK: - Contents
 
-    /// Whether the content box can hold both a two-line name and a useful icon.
+    /// Height the name needs for its two lines.
     ///
     /// A radial label never degrades to one truncated line: it either gets enough room to wrap
     /// or, once the arrangement is too small, disappears and leaves identification to the icon
     /// and hub caption.
-    private var labelBandHeight: CGFloat {
+    private var nameBandHeight: CGFloat {
         metrics.titleFontSize * 2 + 6
+    }
+
+    private var badgeRowHeight: CGFloat { badgeSize + 3 }
+
+    /// Everything below the icon: the name, and the badge row when one is drawn.
+    private var labelBandHeight: CGFloat {
+        nameBandHeight + (showsBadges ? badgeRowHeight : 0)
     }
 
     private var contentSpacing: CGFloat { 2 }
 
+    /// The icon is the faster identifier and must stay usable, so the label only appears while
+    /// this much of the box is still left for it.
+    private var minimumLabeledIconHeight: CGFloat { 24 }
+
     private var showsLabel: Bool {
-        let minimumLabeledIconHeight: CGFloat = 24
+        metrics.size.height >= nameBandHeight + contentSpacing + minimumLabeledIconHeight
+    }
+
+    /// Badges are the first thing to go: they now occupy a row of their own, and that row is worth
+    /// less than the icon it would otherwise shrink.
+    private var showsBadges: Bool {
+        guard hasBadges, showsLabel else { return false }
         return metrics.size.height
-            >= labelBandHeight + contentSpacing + minimumLabeledIconHeight
+            >= nameBandHeight + badgeRowHeight + contentSpacing + minimumLabeledIconHeight
     }
 
     @ViewBuilder
@@ -188,55 +205,84 @@ struct WindowWedgeView: View {
 
     /// The application name, plus whichever markers apply.
     ///
-    /// Every visible name may use two lines, so multi-word names such as “Google Chrome” wrap at
-    /// their word boundary rather than becoming “Googl…”. At scales too small for two legible
-    /// lines, `showsLabel` removes the label instead of bringing the truncation back.
+    /// ## Why the badges are on their own row
+    ///
+    /// They used to sit beside the name, and they quietly broke it. A wedge's content box is
+    /// around 80pt wide before the arrangement scales it down, so two 8pt glyphs and their spacing
+    /// take a quarter of the line — and an incognito browser window on a second display carries
+    /// exactly that. "Google Chrome" was left with too little room to wrap at its space and came
+    /// out as "Goog / le C…": a mid-word break *and* an ellipsis, which is the thing two-line
+    /// wrapping was introduced to prevent.
+    ///
+    /// Giving the name the full width fixes it at the cause. The badges are markers rather than
+    /// reading matter, so they lose nothing by dropping below it, and they are only drawn when
+    /// there is a row's worth of height spare for them.
     private var label: some View {
+        VStack(spacing: 1) {
+            Text(entry.applicationName)
+                .font(.system(size: metrics.titleFontSize, weight: .medium))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                // A last resort before an ellipsis, and only a little: at 88% "Google Chrome"
+                // still wraps to two legible lines in a wedge that has been scaled down, where
+                // at full size it would have to cut a word.
+                .minimumScaleFactor(0.88)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .foregroundStyle(textColor)
+
+            if showsBadges {
+                badges
+            }
+        }
+        .padding(.horizontal, 2)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Markers for this window, none of which are load-bearing enough to cost the name any width.
+    ///
+    /// The screen glyph is deliberately the outline alone, without the number `DisplayBadge` also
+    /// carries: set near a name, a bare "2" reads as part of it, so "Kiro 2" looks like a window
+    /// title. The laptop-versus-monitor shape says the same thing and cannot be misread, and the
+    /// hub spells the screen out in full for the selection.
+    ///
+    /// Deliberately no window-count badge either, unlike the other arrangements. It says how many
+    /// windows an application has, which is worth knowing on a strip card that stands for several
+    /// — but here every window already has its own wedge, so three Chrome windows are three
+    /// visible wedges.
+    private var badges: some View {
         HStack(spacing: 3) {
             if entry.isTab {
                 Image(systemName: "square.on.square.dashed")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: badgeSize, weight: .semibold))
                     .foregroundStyle(isSelected ? palette.onAccentSecondaryText : palette.secondaryText)
             }
 
             if entry.isApplication {
                 Image(systemName: "arrow.up.forward.app")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: badgeSize, weight: .semibold))
                     .foregroundStyle(isSelected ? palette.onAccentSecondaryText : palette.secondaryText)
                     .help("Open installed application")
             }
 
-            Text(entry.applicationName)
-                .font(.system(size: metrics.titleFontSize, weight: .medium))
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .truncationMode(.tail)
-                .layoutPriority(1)
-                .fixedSize(horizontal: false, vertical: true)
-                .foregroundStyle(textColor)
-
-            // The glyph alone, without the screen number that `DisplayBadge` also carries.
-            // Set beside a name, a bare "2" reads as part of the name — "Kiro 2" looks like a
-            // window title. The laptop-versus-monitor outline says the same thing and cannot
-            // be misread, and the hub spells the screen out in full for the selection.
-            //
-            // Deliberately no window-count badge either, unlike the other arrangements. It
-            // says how many windows the application has, which is worth knowing on a strip
-            // card that stands for one of several — but here every window already has its own
-            // wedge, so three Chrome windows are three visible wedges.
             if isIncognito {
-                IncognitoBadge(isOnAccent: isSelected, size: max(8, metrics.subtitleFontSize - 1))
+                IncognitoBadge(isOnAccent: isSelected, size: badgeSize)
             }
 
             if let display {
                 Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
-                    .font(.system(size: 8, weight: .medium))
+                    .font(.system(size: badgeSize, weight: .medium))
                     .foregroundStyle(isSelected ? palette.onAccentSecondaryText : palette.secondaryText)
                     .help(display.detailedLabel)
             }
         }
-        .padding(.horizontal, 4)
-        .frame(maxWidth: .infinity)
+    }
+
+    private var badgeSize: CGFloat { 8 }
+
+    private var hasBadges: Bool {
+        entry.isTab || entry.isApplication || isIncognito || display != nil
     }
 
     private var minimizedBadge: some View {

@@ -139,6 +139,95 @@ struct IconTint: Equatable, Sendable {
         )
     }
 
+    // MARK: - Separation
+
+    /// Closest two hues may sit before they are pushed apart, as a fraction of the wheel. ≈20°.
+    private static let minimumSeparation = 0.055
+    /// Furthest a hue may be moved from the one its icon actually has. ≈22°.
+    ///
+    /// This is the honesty limit. Beyond it the tint stops describing the icon — a blue application
+    /// would end up green — and the feature would be inventing identities rather than surfacing
+    /// them. A cluster too dense to separate within this bound stays partly clustered on purpose.
+    private static let maximumDrift = 0.06
+
+    /// Spread hues that are too close together to tell apart.
+    ///
+    /// Icons are not distributed evenly around the colour wheel: on a typical Mac a third of them
+    /// are the same blue, and Safari, Figma and VS Code all sample within six degrees of one
+    /// another. Reporting that faithfully produces a row of containers that look identical, which
+    /// defeats the point of tinting them at all.
+    ///
+    /// The order is by hue and then by key, never by how recently a window was used. That matters
+    /// more than it looks: keyed off recency, an application's colour would change every time you
+    /// switched windows. Keyed off the hue and a stable identifier, a given set of applications
+    /// always resolves the same way.
+    ///
+    /// - Parameter tints: one entry per thing being told apart, keyed by a stable identifier.
+    static func separated(_ tints: [String: IconTint]) -> [String: IconTint] {
+        guard tints.count > 1 else { return tints }
+
+        let ordered = tints.sorted { ($0.value.hue, $0.key) < ($1.value.hue, $1.key) }
+        var separated = tints
+
+        // Clusters are resolved as a group rather than one hue at a time. Nudging each hue forward
+        // off the one before it does not work: in a dense cluster the drift limit binds on every
+        // member, so all of them shift by the same amount, keep their original spacing, and end up
+        // exactly as indistinguishable as they started. Seven blue icons on a real desktop moved
+        // 21.6° each and stayed 0.2° apart.
+        var clusterStart = 0
+        while clusterStart < ordered.count {
+            var clusterEnd = clusterStart
+            while clusterEnd + 1 < ordered.count,
+                  ordered[clusterEnd + 1].value.hue - ordered[clusterEnd].value.hue
+                      < minimumSeparation {
+                clusterEnd += 1
+            }
+
+            let cluster = ordered[clusterStart...clusterEnd]
+            if cluster.count > 1 {
+                for (key, hue) in distribute(cluster) {
+                    guard let vividness = tints[key]?.vividness else { continue }
+                    separated[key] = IconTint(hue: hue - floor(hue), vividness: vividness)
+                }
+            }
+            clusterStart = clusterEnd + 1
+        }
+        return separated
+    }
+
+    /// Positions for one cluster, spread symmetrically about its own centre.
+    ///
+    /// Members move in both directions, which is what makes the drift limit a budget rather than a
+    /// wall: a cluster of `n` has `2 × maximumDrift` of room to work with instead of one drift's
+    /// worth in a single direction. When that is still not enough to reach full separation — seven
+    /// icons inside twenty degrees cannot all be twenty degrees apart — the cluster spreads evenly
+    /// across whatever room it does have rather than giving up.
+    private static func distribute(
+        _ cluster: ArraySlice<(key: String, value: IconTint)>
+    ) -> [(key: String, hue: Double)] {
+        let hues = cluster.map(\.value.hue)
+        guard let lowest = hues.first, let highest = hues.last else { return [] }
+
+        let lowerBound = lowest - maximumDrift
+        let upperBound = highest + maximumDrift
+        let steps = Double(cluster.count - 1)
+        // Never spread further than needed: a cluster with room to spare gets exactly the minimum
+        // separation, centred, rather than being fanned across the whole budget.
+        let step = min(minimumSeparation, (upperBound - lowerBound) / steps)
+        let start = (lowerBound + upperBound) / 2 - step * steps / 2
+
+        return cluster.enumerated().map { offset, member in
+            let ideal = start + step * Double(offset)
+            // Clamped per member against its own icon's hue. Both bounds rise with the sorted
+            // order, so clamping cannot reorder the cluster or cross two members over.
+            let bounded = min(
+                max(ideal, member.value.hue - maximumDrift),
+                member.value.hue + maximumDrift
+            )
+            return (member.key, bounded)
+        }
+    }
+
     /// Hue, saturation and brightness for one sRGB pixel, all `0...1`.
     private static func hsb(
         red: Double,

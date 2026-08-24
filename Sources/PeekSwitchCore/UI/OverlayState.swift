@@ -105,6 +105,12 @@ final class OverlayState: ObservableObject {
     /// icon: three Chrome windows share one application icon but rarely one site.
     private var siteTintsByWindowID: [CGWindowID: IconTint] = [:]
 
+    /// The tint each entry actually draws with, after clustered hues have been spread apart.
+    ///
+    /// Resolved for the whole presentation rather than per card, because separation is a property
+    /// of the set: a hue can only be moved once it is known what it collides with.
+    private var resolvedTints: [String: IconTint] = [:]
+
     /// Windows that are private browsing windows.
     ///
     /// Arrives shortly after the overlay appears rather than with it — the browser has to be
@@ -331,6 +337,7 @@ final class OverlayState: ObservableObject {
         }
         windowCountsByApplication = counts
         displaysByWindowID = displays
+        recomputeTints()
         // A fresh presentation starts at the top rather than wherever the last one left
         // off, then pages forward if the initial selection is somehow past the first page.
         visibleStart = 0
@@ -362,24 +369,58 @@ final class OverlayState: ObservableObject {
     }
 
     /// The tint for an entry's container, or `nil` when it should keep the flat palette fill.
-    ///
-    /// Sampling happens on demand and is cached, so an application whose card is never drawn is
-    /// never sampled, and one that appears in every presentation is sampled once per session.
     func tint(for entry: WindowEntry) -> IconTint? {
         guard tintsWindowsByIcon, !increaseContrast else { return nil }
+        if let resolved = resolvedTints[entry.id] { return resolved }
+        // A tab or installed application surfaced by a search is not part of the window list the
+        // separation was computed over, so it takes its icon's own hue.
+        return tintSource(for: entry)?.tint
+    }
 
-        // A private window is deliberately excluded: its site icon is never fetched, so tinting it
-        // by the browser icon would only make two Chrome windows look like the same window.
+    /// What an entry's tint is taken from, and the identity it shares that source with.
+    ///
+    /// Two windows of one application deliberately share an owner, so they are never pushed apart
+    /// from each other: they are the same application, and for browsers the site icon already
+    /// distinguishes them.
+    ///
+    /// A private window is excluded from the site source: its icon is never fetched, so tinting it
+    /// by the browser's own icon would only make two Chrome windows look like one.
+    private func tintSource(for entry: WindowEntry) -> (owner: String, tint: IconTint)? {
         if entry.isWindow, !isIncognito(entry), let site = siteTintsByWindowID[entry.windowID] {
-            return site
+            return ("site:\(entry.windowID)", site)
         }
 
         let key = entry.bundleIdentifier ?? entry.applicationName
-        if let cached = applicationTints[key] { return cached }
+        if let cached = applicationTints[key] {
+            return cached.map { (key, $0) }
+        }
 
+        // Sampled once per application per session. An icon does not change while the app runs.
         let sampled = entry.applicationIcon.flatMap(IconTint.sampled(from:))
         applicationTints[key] = sampled
-        return sampled
+        return sampled.map { (key, $0) }
+    }
+
+    /// Re-resolve every entry's tint, spreading hues that would otherwise be indistinguishable.
+    ///
+    /// Computed over the unfiltered list rather than the visible one, so typing a search query
+    /// narrows the list without recolouring what stays on screen.
+    private func recomputeTints() {
+        guard tintsWindowsByIcon, !increaseContrast else {
+            resolvedTints = [:]
+            return
+        }
+
+        var ownerByEntry: [String: String] = [:]
+        var tintByOwner: [String: IconTint] = [:]
+        for entry in allEntries {
+            guard let source = tintSource(for: entry) else { continue }
+            ownerByEntry[entry.id] = source.owner
+            tintByOwner[source.owner] = source.tint
+        }
+
+        let separated = IconTint.separated(tintByOwner)
+        resolvedTints = ownerByEntry.compactMapValues { separated[$0] }
     }
 
     /// Publish a browser-window icon only if it still belongs to the visible presentation and
@@ -424,8 +465,10 @@ final class OverlayState: ObservableObject {
         }
 
         browserIconsByWindowID[windowID] = published
-        if let siteTint {
+        if let siteTint, siteTintsByWindowID[windowID] != siteTint {
             siteTintsByWindowID[windowID] = siteTint
+            // A site hue replaces the browser's, which can change what it collides with.
+            recomputeTints()
         }
         return published
     }

@@ -349,6 +349,130 @@ struct OverlayPaletteTests {
         #expect(IconTint.sampled(from: solidImage(.clear)) == nil)
     }
 
+    // MARK: - Separation
+
+    /// Shortest distance between two hues, treating them as angles.
+    private func hueDistance(_ first: Double, _ second: Double) -> Double {
+        let raw = abs(first - second)
+        return min(raw, 1 - raw)
+    }
+
+    /// The case from a real desktop: Figma, VS Code and Safari all sample within six degrees, so
+    /// faithfully reporting their hues produces three containers that look the same.
+    @Test("Clustered hues are pushed apart")
+    func clusteredHuesAreSeparated() {
+        let clustered = [
+            "com.figma.Desktop": IconTint(hue: 0.549, vividness: 0.9),
+            "com.microsoft.VSCode": IconTint(hue: 0.567, vividness: 0.9),
+            "com.apple.Safari": IconTint(hue: 0.568, vividness: 0.9),
+        ]
+
+        let separated = IconTint.separated(clustered)
+        #expect(separated.count == clustered.count)
+
+        let hues = separated.values.map(\.hue).sorted()
+        for (first, second) in zip(hues, hues.dropFirst()) {
+            // Not the full separation for every pair — the drift limit takes precedence — but
+            // enough that neighbouring containers no longer read as one colour.
+            #expect(
+                hueDistance(first, second) > 0.02,
+                "hues \(first) and \(second) are still indistinguishable"
+            )
+        }
+    }
+
+    /// The honesty limit. A blue application must still look blue, or the tint has stopped
+    /// describing its icon and is simply making colours up.
+    @Test("No hue is moved further than the drift limit")
+    func separationRespectsTheDriftLimit() {
+        // Eight icons crammed into 20°, which is worse than any real desktop.
+        let crowded = Dictionary(
+            uniqueKeysWithValues: (0..<8).map { index in
+                ("app.\(index)", IconTint(hue: 0.55 + Double(index) * 0.007, vividness: 1))
+            }
+        )
+
+        let separated = IconTint.separated(crowded)
+        for (key, tint) in crowded {
+            guard let moved = separated[key] else {
+                Issue.record("\(key) lost its tint")
+                continue
+            }
+            #expect(
+                hueDistance(tint.hue, moved.hue) <= 0.0601,
+                "\(key) drifted from \(tint.hue) to \(moved.hue)"
+            )
+        }
+    }
+
+    /// Hues that are already far apart are left exactly as their icons reported them.
+    @Test("Well-spread hues are left alone")
+    func spreadHuesAreUnchanged() {
+        let spread = [
+            "red": IconTint(hue: 0.02, vividness: 1),
+            "green": IconTint(hue: 0.35, vividness: 1),
+            "blue": IconTint(hue: 0.62, vividness: 1),
+        ]
+        #expect(IconTint.separated(spread) == spread)
+    }
+
+    @Test("A single tint is never moved")
+    func singleTintIsUnchanged() {
+        let single = ["only": IconTint(hue: 0.5, vividness: 0.8)]
+        #expect(IconTint.separated(single) == single)
+    }
+
+    /// Separation must not depend on dictionary iteration order, or an application's colour would
+    /// change between presentations for no visible reason.
+    @Test("Separation is stable whatever order the tints arrive in")
+    func separationIsOrderIndependent() {
+        let pairs = [
+            ("com.a.app", IconTint(hue: 0.550, vividness: 1)),
+            ("com.b.app", IconTint(hue: 0.556, vividness: 1)),
+            ("com.c.app", IconTint(hue: 0.562, vividness: 1)),
+            ("com.d.app", IconTint(hue: 0.300, vividness: 1)),
+        ]
+
+        let forward = IconTint.separated(Dictionary(uniqueKeysWithValues: pairs))
+        let backward = IconTint.separated(Dictionary(uniqueKeysWithValues: pairs.reversed()))
+        #expect(forward == backward)
+    }
+
+    /// Vividness belongs to the icon and is never traded away for separation.
+    @Test("Separation changes only the hue")
+    func separationPreservesVividness() {
+        let tints = [
+            "a": IconTint(hue: 0.55, vividness: 0.42),
+            "b": IconTint(hue: 0.56, vividness: 0.91),
+        ]
+        let separated = IconTint.separated(tints)
+        #expect(separated["a"]?.vividness == 0.42)
+        #expect(separated["b"]?.vividness == 0.91)
+    }
+
+    /// Every separated hue still has to survive the palette's contrast guarantee.
+    @Test("Separated hues stay legible")
+    func separatedHuesStayLegible() {
+        let clustered = Dictionary(
+            uniqueKeysWithValues: (0..<12).map { index in
+                ("app.\(index)", IconTint(hue: 0.10 + Double(index) * 0.005, vividness: 1))
+            }
+        )
+
+        for (name, palette) in palettes {
+            for tint in IconTint.separated(clustered).values {
+                for (desktop, label) in [(Self.black, "black"), (Self.white, "white")] {
+                    let fill = palette.cardFill(tintedBy: tint)
+                    let secondary = ratio(text: palette.secondaryText, on: fill, over: desktop)
+                    #expect(
+                        secondary >= Self.minimumRatio,
+                        "\(name) separated hue \(tint.hue) over \(label): \(secondary)"
+                    )
+                }
+            }
+        }
+    }
+
     // MARK: - Theme selection
 
     @Test("The palette follows the system appearance")
