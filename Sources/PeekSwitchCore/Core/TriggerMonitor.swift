@@ -120,11 +120,12 @@ final class TriggerMonitor {
     private static let backoffDuration: TimeInterval = 5
     private var backoffUntil: Date?
 
-    private static let escapeKeyCode: Int64 = 53
-    private static let returnKeyCode: Int64 = 36
-    private static let keypadEnterKeyCode: Int64 = 76
-    private static let deleteKeyCode: Int64 = 51
-    private static let forwardDeleteKeyCode: Int64 = 117
+    /// The registered global shortcut, so its key is never mistaken for typing.
+    ///
+    /// Without this the shortcut cannot close the overlay it opened: the tap sits ahead of the
+    /// hotkey in the pipeline, so consuming the keystroke as a search character means the hotkey
+    /// never fires. See `KeyResponse`.
+    var keyboardShortcut: HotKeyShortcut?
 
     private(set) var isInstalled = false
     /// Which pipeline position the button tap ended up at. Surfaced in diagnostics
@@ -459,35 +460,32 @@ final class TriggerMonitor {
             return nil
 
         case .keyDown:
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-            switch keyCode {
-            case Self.escapeKeyCode:
+            // Decided by `KeyResponse` rather than here: a C callback is the worst place in the app
+            // to keep branching logic, and the branch that was here shipped a defect no test could
+            // have reached.
+            switch KeyResponse.forKeyDown(
+                keyCode: event.getIntegerValueField(.keyboardEventKeycode),
+                flags: event.flags,
+                characters: Self.characters(from: event),
+                shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) }
+            ) {
+            case .dismiss:
                 monitor.dispatch { $0.escapePressed() }
                 return nil
-            case Self.returnKeyCode, Self.keypadEnterKeyCode:
+            case .confirm:
                 monitor.dispatch { $0.confirmPressed() }
                 return nil
-            case Self.deleteKeyCode, Self.forwardDeleteKeyCode:
+            case .deleteSearchCharacter:
                 monitor.dispatch { $0.searchBackspacePressed() }
                 return nil
-            default:
-                // A command or control chord is a shortcut, not typing — passing those
-                // through is what keeps ⌘Tab and the like working while the overlay is up.
-                let flags = event.flags
-                guard !flags.contains(.maskCommand),
-                      !flags.contains(.maskControl),
-                      !flags.contains(.maskAlternate)
-                else { return Unmanaged.passUnretained(event) }
-
-                guard let characters = Self.characters(from: event),
-                      WindowSearch.isSearchable(characters)
-                else { return Unmanaged.passUnretained(event) }
-
-                // Consumed rather than passed through. The overlay is visibly in front
-                // and the keystroke is going into its search, so letting it also reach
-                // the application underneath would type into the user's document.
+            case .typeIntoSearch(let characters):
+                // Consumed rather than passed through. The overlay is visibly in front and the
+                // keystroke is going into its search, so letting it also reach the application
+                // underneath would type into the user's document.
                 monitor.dispatch { $0.searchCharactersTyped(characters) }
                 return nil
+            case .passThrough:
+                return Unmanaged.passUnretained(event)
             }
 
         default:

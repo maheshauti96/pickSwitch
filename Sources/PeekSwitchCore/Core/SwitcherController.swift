@@ -175,6 +175,9 @@ public final class SwitcherController {
     func start() {
         triggerMonitor.delegate = self
         triggerMonitor.triggerButton = settings.triggerButton
+        // So the overlay's tap never swallows the shortcut and leaves it unable to close what it
+        // opened.
+        triggerMonitor.keyboardShortcut = settings.hotKeyShortcut
         triggerMonitor.logsAllHIDInput = settings.logsAllHIDInput
 
         // Requirement 5.14 / 10.9: no tap means hotkey-only, not a dead app.
@@ -303,6 +306,7 @@ public final class SwitcherController {
     /// Requirement 12.3: takes effect without a restart.
     func applySettingsChange() {
         triggerMonitor.triggerButton = settings.triggerButton
+        triggerMonitor.keyboardShortcut = settings.hotKeyShortcut
 
         // Re-register only on an actual change; re-registering needlessly would reset
         // `hasEverFired`, which is the signal used to tell a swallowed shortcut from a
