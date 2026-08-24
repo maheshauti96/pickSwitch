@@ -250,7 +250,23 @@ public final class SwitcherController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.learnCurrentSpace()
+                guard let self else { return }
+
+                // An overlay belongs to the Space it was opened on. The panel joins every Space, so
+                // without this it followed the user to the next desktop still listing the windows
+                // enumerated on the previous one, and still placed where their cursor had been.
+                //
+                // Worse than looking stale, it broke the trigger. The overlay counted as visible, so
+                // the next press of the shortcut meant "close this" rather than "open here" — which
+                // read as the shortcut simply not working on the new desktop. Dismissing here is
+                // what makes the next press open a fresh overlay for the Space the user is actually
+                // on, and it matches how a display change is already handled.
+                if self.state.isVisible {
+                    Log.overlay.info("active Space changed; dismissing so the next trigger opens here")
+                    self.dismiss(activating: nil)
+                }
+
+                self.learnCurrentSpace()
             }
         }
 
