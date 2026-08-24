@@ -183,6 +183,12 @@ if [[ "$INSTALL" -eq 1 ]]; then
 	cp -R "$APP_BUNDLE" /Applications/
 	echo "    installed at /Applications/$APP_NAME.app"
 	INSTALLED_PATH="/Applications/$APP_NAME.app"
+
+	# Remove the staging copy once it has been installed. Leaving it behind gave Spotlight two
+	# identical "PeekSwitch" results with no way to tell which was which, and the wrong one is a
+	# trap: build/ is deleted on the next build, so a privacy grant given to it points at a path
+	# that no longer exists. Without --install the bundle stays put, since then it is the product.
+	rm -rf "$APP_BUNDLE"
 else
 	INSTALLED_PATH="$APP_BUNDLE"
 fi

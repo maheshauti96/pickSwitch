@@ -154,8 +154,25 @@ final class MRUTracker {
             sorted.insert(front, at: 0)
         }
 
-        guard sorted.count > historyDepth else { return sorted }
-        return Array(sorted.prefix(historyDepth))
+        let result = sorted.count > historyDepth ? Array(sorted.prefix(historyDepth)) : sorted
+
+        // The head of the list, and which tier put it there. Ordering complaints are otherwise
+        // impossible to diagnose from the outside: the list looks wrong, and nothing says whether a
+        // window was placed by an observed activation, by when it was last seen, or by the stack.
+        let summary = result.prefix(4).map { entry -> String in
+            let tier: String
+            if timestamps[entry.windowID] != nil {
+                tier = "used"
+            } else if entry.lastSeenOnActiveSpace != nil {
+                tier = "seen"
+            } else {
+                tier = "stack"
+            }
+            return "\(entry.applicationName) [\(tier)]"
+        }
+        Log.registry.info("ordered by recency: \(summary.joined(separator: ", "), privacy: .public)")
+
+        return result
     }
 
     // MARK: - Live observation
@@ -216,9 +233,15 @@ final class MRUTracker {
         let element = AXUIElementCreateApplication(pid)
         AXBridge.applyMessagingTimeout(element)
 
+        let name = app.localizedName ?? "pid \(pid)"
+
         if let focused = AXBridge.element(element, kAXFocusedWindowAttribute as String),
            let windowID = AXBridge.windowID(for: focused) {
             recordActivation(windowID: windowID)
+            Log.registry.info("""
+                recorded activation of \(name, privacy: .public) window \
+                \(windowID, privacy: .public) from Accessibility
+                """)
             return
         }
 
@@ -230,7 +253,19 @@ final class MRUTracker {
         // permission and cannot decline.
         if let windowID = Self.frontmostWindowID(ofProcess: pid) {
             recordActivation(windowID: windowID)
+            Log.registry.info("""
+                recorded activation of \(name, privacy: .public) window \
+                \(windowID, privacy: .public) from the window server; Accessibility named none
+                """)
+            return
         }
+
+        // Worth saying out loud rather than swallowing: this application will keep no recency of
+        // its own and will be ordered among the windows nobody has touched.
+        Log.registry.info("""
+            could not identify a window for \(name, privacy: .public); \
+            it keeps no activation of its own
+            """)
     }
 
     /// The frontmost normal window belonging to `pid`, according to the window server.
