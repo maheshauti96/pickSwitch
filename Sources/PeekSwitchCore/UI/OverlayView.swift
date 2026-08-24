@@ -365,6 +365,10 @@ struct OverlayView: View {
                     .font(.system(size: titleSize, weight: .semibold))
                     .lineLimit(titleLines)
                     .multilineTextAlignment(.center)
+                    // Cross-faded rather than replaced. Without this the title hard-cuts on every
+                    // selection change, and unlike the entrance that happens continuously — once
+                    // per wedge as the pointer crosses the ring.
+                    .contentTransition(.opacity)
                     // A window with no title of its own falls back to its application name, so
                     // dropping the line above can never leave the middle blank.
                     .foregroundStyle(palette.text)
@@ -385,6 +389,14 @@ struct OverlayView: View {
                     }
                 }
             }
+            // Scoped to the selected window's identity rather than to the index: a search that
+            // filters the list can leave the same index pointing at a different window, and that is
+            // a change of caption like any other.
+            //
+            // Placed here so it governs the contents only. The disc's own entrance is animated
+            // below against `isRevealed`, and the two must not drive each other — a caption change
+            // is not a reason to replay the entrance.
+            .animation(captionChangeAnimation, value: entry.id)
             .padding(.horizontal, 18 * scale)
             .frame(width: frame.width, height: frame.height)
             // A disc rather than nothing: the caption sits over whatever desktop happens to
@@ -450,6 +462,15 @@ struct OverlayView: View {
     private var hubRevealAnimation: Animation? {
         guard !state.reduceMotion else { return nil }
         return .easeOut(duration: OverlayReveal.duration).delay(OverlayReveal.hubDelay)
+    }
+
+    /// The hub swapping one window's caption for another.
+    ///
+    /// `easeInOut` rather than `easeOut`: this is a change of contents with no direction to it, so
+    /// there is nothing for a decelerating curve to describe. Requirement 15.1 — under Reduce Motion
+    /// the caption simply changes.
+    private var captionChangeAnimation: Animation? {
+        state.reduceMotion ? nil : .easeInOut(duration: OverlayReveal.captionChange)
     }
 
     /// The hub, as a fraction of the panel. The spiral's wedges scale about this.

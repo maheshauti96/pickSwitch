@@ -83,6 +83,20 @@ struct OverlayRevealTests {
         #expect(OverlayReveal.initialScale < 1)
     }
 
+    /// The caption's cross-fade has to keep up with the pointer.
+    ///
+    /// It runs once per selection change, which on a ring is continuous rather than occasional:
+    /// sweeping across the wedges fires one per wedge. At the length of a card's arrival they would
+    /// overlap and the title would smear into something unreadable — worse than the hard cut the
+    /// fade replaces. So it is bounded against the entrance rather than chosen on its own.
+    @Test("The caption cross-fade is quicker than a card's arrival")
+    func captionChangeIsQuick() {
+        #expect(OverlayReveal.captionChange > 0)
+        #expect(OverlayReveal.captionChange < OverlayReveal.duration)
+        // And quick enough that crossing a wedge cannot outrun it.
+        #expect(OverlayReveal.captionChange <= 0.15)
+    }
+
     private func isCloseDouble(_ lhs: Double, _ rhs: Double, tolerance: Double = 0.0001) -> Bool {
         abs(lhs - rhs) <= tolerance
     }

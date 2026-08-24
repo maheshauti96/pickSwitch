@@ -32,6 +32,15 @@ enum OverlayReveal {
     /// The hub caption follows the wedges in rather than competing with them.
     static let hubDelay: Double = 0.08
 
+    /// How long the hub takes to cross-fade from one window's title to the next.
+    ///
+    /// Deliberately quicker than a card's arrival, and quicker than a pointer can cross a wedge.
+    /// The caption changes every time the selection moves, which on a ring is continuous — sweeping
+    /// around it fires one of these per wedge. At the length of a normal transition they would queue
+    /// up and the title would smear into an unreadable blur, which is worse than the hard cut it
+    /// replaces. Short enough to soften the swap, short enough to keep up.
+    static let captionChange: Double = 0.12
+
     /// When the card at `offset` in the visible run should start.
     ///
     /// - Parameters:
