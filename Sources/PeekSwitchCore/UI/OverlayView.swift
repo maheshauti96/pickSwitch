@@ -368,16 +368,13 @@ struct OverlayView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(palette.text)
 
-                if entry.isApplication || selectedDisplay != nil || entry.isMinimized || state.isIncognito(entry) {
+                if entry.isApplication || entry.isMinimized || state.isIncognito(entry) {
                     HStack(spacing: 4) {
                         if entry.isApplication {
                             ApplicationBadge()
                         }
                         if state.isIncognito(entry) {
                             IncognitoBadge(size: max(9, 10 * scale))
-                        }
-                        if let selectedDisplay {
-                            DisplayBadge(display: selectedDisplay)
                         }
                         if entry.isMinimized {
                             Image(systemName: "arrow.down.right.and.arrow.up.left")

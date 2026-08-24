@@ -17,7 +17,9 @@ struct WindowCardView: View {
     let badgeCount: Int?
     let reduceMotion: Bool
     var metrics: OverlayCardMetrics = .strip
-    /// Which screen this window is on, when there is more than one to tell apart.
+    /// Which screen this window is on, when there is more than one. Spoken by VoiceOver only: the
+    /// switch animation shows a sighted user the screen by flying toward it, which a description
+    /// cannot do.
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
@@ -223,10 +225,6 @@ struct WindowCardView: View {
 
             if isIncognito {
                 IncognitoBadge()
-            }
-
-            if let display {
-                DisplayBadge(display: display)
             }
 
             if let badgeCount {

@@ -35,6 +35,7 @@ struct WindowWedgeView: View {
     let badgeCount: Int?
     let reduceMotion: Bool
     var metrics: OverlayCardMetrics = .spiral
+    /// Which screen this window is on, when there is more than one. Spoken by VoiceOver only.
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
@@ -242,10 +243,9 @@ struct WindowWedgeView: View {
 
     /// Markers for this window, none of which are load-bearing enough to cost the name any width.
     ///
-    /// The screen glyph is deliberately the outline alone, without the number `DisplayBadge` also
-    /// carries: set near a name, a bare "2" reads as part of it, so "Kiro 2" looks like a window
-    /// title. The laptop-versus-monitor shape says the same thing and cannot be misread, and the
-    /// hub spells the screen out in full for the selection.
+    /// Deliberately no screen marker. The switch animation already flies toward the display the
+    /// window is on, which answers "where is it" by showing rather than labelling — and a glyph
+    /// that appeared on every wedge said nothing that distinguished one from another.
     ///
     /// Deliberately no window-count badge either, unlike the other arrangements. It says how many
     /// windows an application has, which is worth knowing on a strip card that stands for several
@@ -269,20 +269,13 @@ struct WindowWedgeView: View {
             if isIncognito {
                 IncognitoBadge(isOnAccent: isSelected, size: badgeSize)
             }
-
-            if let display {
-                Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
-                    .font(.system(size: badgeSize, weight: .medium))
-                    .foregroundStyle(isSelected ? palette.onAccentSecondaryText : palette.secondaryText)
-                    .help(display.detailedLabel)
-            }
         }
     }
 
     private var badgeSize: CGFloat { 8 }
 
     private var hasBadges: Bool {
-        entry.isTab || entry.isApplication || isIncognito || display != nil
+        entry.isTab || entry.isApplication || isIncognito
     }
 
     private var minimizedBadge: some View {

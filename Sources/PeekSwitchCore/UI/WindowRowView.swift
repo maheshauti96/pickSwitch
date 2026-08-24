@@ -15,7 +15,7 @@ struct WindowRowView: View {
     let isSelected: Bool
     let isHovered: Bool
     let badgeCount: Int?
-    /// Which screen this window is on, when there is more than one to tell apart.
+    /// Which screen this window is on, when there is more than one. Spoken by VoiceOver only.
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
@@ -85,10 +85,6 @@ struct WindowRowView: View {
 
             if isIncognito {
                 IncognitoBadge(isOnAccent: isSelected, size: 10)
-            }
-
-            if let display {
-                DisplayBadge(display: display, isOnAccent: isSelected)
             }
 
             if entry.isMinimized {

@@ -23,7 +23,8 @@ struct WindowPreviewView: View {
     /// In Icon View there is no screenshot to show, so the pane shows the application's icon at
     /// size instead. Nothing is captured in that mode, so a "LIVE" badge would be a lie.
     var showsIconInsteadOfThumbnail: Bool = false
-    /// Which screen the previewed window is on, when there is more than one.
+    /// Which screen the previewed window is on, when there is more than one. Spoken by VoiceOver
+    /// only.
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
@@ -176,12 +177,8 @@ struct WindowPreviewView: View {
     }
 
     /// Built only from facts the enumerator actually has, in the design's
-    /// "app · display · detail" shape. The mock's "active 12 s ago" is still missing:
+    /// "app · detail" shape. The mock's "active 12 s ago" is still missing:
     /// MRU order is tracked, but not a per-window timestamp worth printing.
-    ///
-    /// The display's own name goes here rather than on the cards, because this is the
-    /// one place with room for it — "DELL U2720Q" is more use than "Screen 2" when you
-    /// are deciding whether that is the screen you meant.
     private var metaLine: String {
         guard let entry else { return "" }
         if entry.isApplication {
@@ -195,9 +192,9 @@ struct WindowPreviewView: View {
         if isIncognito {
             parts.append("Incognito")
         }
-        if let display {
-            parts.append(display.name.isEmpty ? display.label : "\(display.label) · \(display.name)")
-        }
+        // No screen here either. Naming the display was the most defensible place to do it, since
+        // "DELL U2720Q" beats "Screen 2" — but it is still answering a question the switch
+        // animation answers by flying toward that screen.
         if entry.isMinimized {
             parts.append("Minimized")
         } else if entry.frame.width > 1, entry.frame.height > 1 {

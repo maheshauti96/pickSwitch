@@ -25,8 +25,8 @@ struct OverlayRenderingTests {
         state.availableContentHeight = 860
         state.layoutStyle = style
         state.viewMode = viewMode
-        // Two displays, so the screen badge is drawn in every style rather than being
-        // silently skipped the way it is on a single-display machine.
+        // Two displays, so every window resolves to one rather than being skipped the way it is
+        // on a single-display machine.
         state.displayLayout = Self.twoDisplays
         state.load(
             entries: (0..<count).map { index in
@@ -123,10 +123,10 @@ struct OverlayRenderingTests {
         #expect(subject.selectedScale == 1.0)
     }
 
-    /// Both a laptop and an external monitor have to appear, since the glyph differs
-    /// per kind and each style places the badge in its own footer or row.
-    @Test("Every arrangement renders screen badges for both displays", arguments: OverlayLayoutStyle.allCases)
-    func displayBadgesRender(style: OverlayLayoutStyle) {
+    /// No arrangement draws a screen marker any more — the switch animation flies toward the
+    /// display instead — but each window is still resolved to one, because VoiceOver says it.
+    @Test("Every arrangement resolves each window to a display", arguments: OverlayLayoutStyle.allCases)
+    func displaysResolveForEveryWindow(style: OverlayLayoutStyle) {
         let subject = state(style: style, count: 6)
         _ = render(subject)
 
@@ -137,9 +137,9 @@ struct OverlayRenderingTests {
         #expect(resolved.contains { !$0.isBuiltIn })
     }
 
-    /// On one display the badge is suppressed, and the styles must still render.
-    @Test("Every arrangement renders with no screen badges", arguments: OverlayLayoutStyle.allCases)
-    func rendersWithoutDisplayBadges(style: OverlayLayoutStyle) {
+    /// On one display there is nothing to tell apart, so no window resolves to one at all.
+    @Test("A single display resolves no screens", arguments: OverlayLayoutStyle.allCases)
+    func rendersWithoutResolvedDisplays(style: OverlayLayoutStyle) {
         let subject = state(style: style, count: 6)
         subject.displayLayout = DisplayLayout(displays: [Self.twoDisplays.displays[0]])
         subject.load(entries: subject.entries, selectedIndex: 0)
@@ -463,11 +463,10 @@ struct OverlayRenderingTests {
         #expect(subject.selectedScale == 1.0)
     }
 
-    /// A single display suppresses the screen badge; two displays draw it. Both paths have to
-    /// hold in Icon View, where the metadata block sits above the icon instead of below a
-    /// screenshot and so has a different amount of room.
-    @Test("Icon View renders screen badges with one and two displays", arguments: OverlayLayoutStyle.allCases)
-    func iconViewRendersDisplayBadges(style: OverlayLayoutStyle) {
+    /// Both display arrangements have to render in Icon View, where the metadata block sits above
+    /// the icon instead of below a screenshot and so has a different amount of room.
+    @Test("Icon View renders with one and with two displays", arguments: OverlayLayoutStyle.allCases)
+    func iconViewRendersWithEitherDisplayCount(style: OverlayLayoutStyle) {
         let twoScreens = state(style: style, count: 6, viewMode: .icon)
         _ = render(twoScreens)
         #expect(Set(twoScreens.entries.compactMap { twoScreens.display(for: $0)?.number }) == [1, 2])
