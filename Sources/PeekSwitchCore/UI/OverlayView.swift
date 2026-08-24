@@ -349,23 +349,24 @@ struct OverlayView: View {
             let frame = layout.radialHubFrame
 
             // Scaled with the arrangement, since the hub shrinks along with everything else.
-            // Floored at 9pt, and the title gives up lines rather than shrinking past that:
-            // three lines of illegible type says less than one line of readable type.
+            // Floored at 10pt, and the title gives up lines rather than shrinking past that:
+            // four lines of illegible type says less than two lines of readable type.
             let scale = layout.radialScale
-            let titleSize = max(9, 13 * scale)
-            let titleLines = scale > 0.8 ? 3 : 2
+            let titleSize = max(10, 15 * scale)
+            let titleLines = scale > 0.8 ? 4 : 3
 
             VStack(spacing: 4 * scale) {
-                Text(entry.applicationName)
-                    .font(.system(size: max(9, 10 * scale), weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundStyle(palette.secondaryText)
-
+                // The application name deliberately is not repeated here. The wedge under the
+                // pointer is already tinted, outlined, labelled with that name and showing its
+                // icon, and most titles end in it as well — it appeared four times in one glance.
+                // The title is the one thing a wedge has no room for, so the hub spends everything
+                // it has on that.
                 Text(entry.displayTitle)
                     .font(.system(size: titleSize, weight: .semibold))
                     .lineLimit(titleLines)
                     .multilineTextAlignment(.center)
+                    // A window with no title of its own falls back to its application name, so
+                    // dropping the line above can never leave the middle blank.
                     .foregroundStyle(palette.text)
 
                 if entry.isApplication || entry.isMinimized || state.isIncognito(entry) {

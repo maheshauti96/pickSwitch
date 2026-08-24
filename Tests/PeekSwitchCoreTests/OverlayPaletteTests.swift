@@ -181,12 +181,40 @@ struct OverlayPaletteTests {
         }
     }
 
-    @Test("Card fills are near-opaque, so contrast cannot depend on the desktop")
-    func cardFillsAreNearOpaque() {
+    /// Only the list draws a backdrop. For every other arrangement a card is the sole thing between
+    /// its own caption and the desktop, so these surfaces have to be fully opaque rather than
+    /// merely close to it.
+    ///
+    /// The last few percent were not cosmetic. At 92–96% a text-heavy window behind the overlay read
+    /// straight through it, and the spiral's hollow middle was the worst case: the most translucent
+    /// surface in the app carrying the smallest type.
+    @Test("Surfaces that carry text are opaque, so contrast cannot depend on the desktop")
+    func textCarryingSurfacesAreOpaque() {
         for (name, palette) in palettes {
-            #expect(components(palette.cardFill).alpha >= 0.9, "\(name) cardFill is too sheer")
-            #expect(components(palette.selectedCardFill).alpha >= 0.9, "\(name) selected fill is too sheer")
-            #expect(components(palette.thumbnailFill).alpha >= 0.98, "\(name) thumbnail well is not opaque")
+            for (fill, fillName) in [
+                (palette.cardFill, "cardFill"),
+                (palette.selectedCardFill, "selectedCardFill"),
+                (palette.chipFill, "chipFill"),
+                (palette.thumbnailFill, "thumbnailFill"),
+            ] {
+                #expect(
+                    components(fill).alpha == 1,
+                    "\(name) \(fillName) is translucent; the desktop will read through it"
+                )
+            }
+        }
+    }
+
+    /// A tint must not reintroduce the translucency either.
+    @Test("Tinting keeps a fill opaque at every hue")
+    func tintedFillsAreOpaque() {
+        for (name, palette) in palettes {
+            for tint in Self.everyHue {
+                #expect(
+                    components(palette.cardFill(tintedBy: tint)).alpha == 1,
+                    "\(name) hue \(tint.hue) produced a translucent fill"
+                )
+            }
         }
     }
 

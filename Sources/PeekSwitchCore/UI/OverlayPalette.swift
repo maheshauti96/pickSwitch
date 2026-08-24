@@ -11,9 +11,15 @@ import SwiftUI
 /// so a card over dark wallpaper in Light Mode ended up dark with black text on it —
 /// the app names disappeared entirely.
 ///
-/// The design solves this the same way: cards carry their own near-opaque fill
-/// (92–94%) and name their text colour outright, so contrast is a property of the card
-/// rather than a lucky consequence of what happens to be behind it.
+/// The design solves this the same way: cards carry their own fill and name their text colour
+/// outright, so contrast is a property of the card rather than a lucky consequence of what happens
+/// to be behind it.
+///
+/// Those fills are now fully opaque, and the last few percent mattered more than they sound. Only
+/// the list draws a backdrop; the strip, grid and both round arrangements have none, so a card is
+/// the only thing between its own caption and the desktop. At 92–96% a text-heavy window behind the
+/// overlay — an editor, a long document — read straight through it, and the hollow middle of the
+/// spiral was the worst of it: the most translucent surface in the app carrying the smallest type.
 ///
 /// Requirement 3.10 still holds — the palette is chosen from the environment's colour
 /// scheme, so the overlay follows the system appearance.
@@ -66,14 +72,14 @@ struct OverlayPalette {
 
     /// `--ps-*` dark theme.
     static let dark = OverlayPalette(
-        cardFill: Color(.sRGB, red: 38 / 255, green: 44 / 255, blue: 51 / 255, opacity: 0.94),
-        selectedCardFill: Color(.sRGB, red: 46 / 255, green: 54 / 255, blue: 63 / 255, opacity: 0.98),
+        cardFill: Color(.sRGB, red: 38 / 255, green: 44 / 255, blue: 51 / 255, opacity: 1),
+        selectedCardFill: Color(.sRGB, red: 46 / 255, green: 54 / 255, blue: 63 / 255, opacity: 1),
         thumbnailFill: Color(.sRGB, red: 25 / 255, green: 29 / 255, blue: 34 / 255, opacity: 1),
         border: Color(.sRGB, white: 1, opacity: 0.10),
         strongBorder: Color(.sRGB, white: 1, opacity: 0.20),
         text: Color(.sRGB, white: 1, opacity: 1),
         secondaryText: Color(.sRGB, white: 1, opacity: 0.58),
-        chipFill: Color(.sRGB, red: 18 / 255, green: 22 / 255, blue: 26 / 255, opacity: 0.86),
+        chipFill: Color(.sRGB, red: 18 / 255, green: 22 / 255, blue: 26 / 255, opacity: 1),
         accent: Self.brand,
         accentFill: Self.brandFill,
         onAccentText: .white,
@@ -90,7 +96,7 @@ struct OverlayPalette {
 
     /// `--ps-*` light theme.
     static let light = OverlayPalette(
-        cardFill: Color(.sRGB, white: 1, opacity: 0.96),
+        cardFill: Color(.sRGB, white: 1, opacity: 1),
         selectedCardFill: Color(.sRGB, white: 1, opacity: 1),
         thumbnailFill: Color(.sRGB, red: 231 / 255, green: 229 / 255, blue: 227 / 255, opacity: 1),
         border: Color(.sRGB, red: 32 / 255, green: 30 / 255, blue: 29 / 255, opacity: 0.16),
@@ -99,7 +105,7 @@ struct OverlayPalette {
         // The design's 0.55 measures 3.7:1 on a white card, which is short of 4.5:1 for
         // 10pt type. Weighted up until the secondary line actually clears it.
         secondaryText: Color(.sRGB, red: 32 / 255, green: 30 / 255, blue: 29 / 255, opacity: 0.68),
-        chipFill: Color(.sRGB, red: 252 / 255, green: 251 / 255, blue: 250 / 255, opacity: 0.92),
+        chipFill: Color(.sRGB, red: 252 / 255, green: 251 / 255, blue: 250 / 255, opacity: 1),
         accent: Self.brand,
         accentFill: Self.brandFill,
         onAccentText: .white,
