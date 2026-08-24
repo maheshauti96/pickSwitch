@@ -290,6 +290,19 @@ struct SettingsView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            Toggle("Include the switcher in screenshots", isOn: $model.includeOverlayInScreenshots)
+
+            Text(
+                model.includeOverlayInScreenshots
+                    ? "The switcher appears in screenshots, screen recordings and screen shares, like anything else on screen."
+                    : "The switcher is hidden from screenshots, recordings and screen shares. Useful while presenting, since the switcher lists the title of every window you have open."
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

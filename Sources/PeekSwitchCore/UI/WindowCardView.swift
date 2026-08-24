@@ -9,6 +9,8 @@ import SwiftUI
 struct WindowCardView: View {
 
     let entry: WindowEntry
+    /// Favicon for a matched browser window, otherwise the application's own icon.
+    let displayIcon: NSImage?
     let thumbnail: CGImage?
     let isSelected: Bool
     let isHovered: Bool
@@ -85,7 +87,7 @@ struct WindowCardView: View {
     /// "large, crisp icon" the mode exists to provide.
     private var iconArtworkArea: some View {
         ZStack {
-            if let icon = entry.applicationIcon {
+            if let icon = displayIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .interpolation(.high)
@@ -143,7 +145,7 @@ struct WindowCardView: View {
         // enough to identify at a glance.
         let side = min(64, metrics.artworkHeight * 0.56)
         return Group {
-            if let icon = entry.applicationIcon {
+            if let icon = displayIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -176,7 +178,7 @@ struct WindowCardView: View {
         HStack(spacing: 7) {
             // Suppressed in Icon View: a small icon beside the name is redundant when a large
             // one sits directly below it.
-            if metrics.iconSize > 0, let icon = entry.applicationIcon {
+            if metrics.iconSize > 0, let icon = displayIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: metrics.iconSize, height: metrics.iconSize)
@@ -193,7 +195,7 @@ struct WindowCardView: View {
                     .foregroundStyle(palette.text)
 
                 if metrics.showsSubtitle {
-                    Text(entry.applicationName)
+                    Text(entry.isApplication ? entry.displayTitle : entry.applicationName)
                         .font(.system(size: metrics.subtitleFontSize))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -205,6 +207,10 @@ struct WindowCardView: View {
 
             if entry.isTab {
                 TabBadge()
+            }
+
+            if entry.isApplication {
+                ApplicationBadge()
             }
 
             if isIncognito {
@@ -240,12 +246,14 @@ struct WindowCardView: View {
     /// A radial seat is too narrow for a window title, so it names the application —
     /// which is the part you can recognise at ring distance anyway.
     private var primaryText: String {
-        metrics.usesApplicationNameAsPrimary ? entry.applicationName : entry.displayTitle
+        if entry.isApplication { return entry.applicationName }
+        return metrics.usesApplicationNameAsPrimary ? entry.applicationName : entry.displayTitle
     }
 
     private var accessibilityLabel: String {
         var parts = [entry.applicationName, entry.displayTitle]
         if let tab = entry.tab { parts.append("tab, \(tab.host)") }
+        if entry.isApplication { parts.append("installed application") }
         if isIncognito { parts.append("incognito") }
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }

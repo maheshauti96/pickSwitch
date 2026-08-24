@@ -47,9 +47,9 @@ final class OverlayPanel: NSPanel {
         hidesOnDeactivate = false
         isMovable = false
         isReleasedWhenClosed = false
-        // Excluded from screenshots of other windows would be wrong; this only keeps
-        // the panel out of *its own* captures, avoiding a hall-of-mirrors thumbnail.
-        sharingType = .none
+        // Visible to screen capture, which is what people expect of anything they can see.
+        // Overridden per presentation from settings; see `setIncludedInScreenshots(_:)`.
+        sharingType = .readOnly
         animationBehavior = .none
         // No title bar, no traffic lights, nothing to tab into.
         titleVisibility = .hidden
@@ -63,6 +63,23 @@ final class OverlayPanel: NSPanel {
         let hosting = OverlayHostingView(rootView: content)
         hosting.autoresizingMask = [.width, .height]
         contentView = hosting
+    }
+
+    /// Whether the panel appears in screenshots, recordings and screen shares.
+    ///
+    /// It used to be permanently excluded, justified as keeping the overlay out of its own
+    /// thumbnails. That reasoning does not hold: `ThumbnailService` captures each window
+    /// individually through `SCContentFilter(desktopIndependentWindow:)`, and a per-window
+    /// capture of somebody else's window cannot contain this panel whatever its sharing type.
+    /// The only real effect was that the switcher could not be screenshotted at all, which is
+    /// surprising for something plainly on screen and makes it impossible to file a bug about.
+    ///
+    /// So it is visible by default and this exists to opt out — the reason someone would want to
+    /// is a screen recording, where the overlay lists the titles of every open window.
+    func setIncludedInScreenshots(_ included: Bool) {
+        let desired: NSWindow.SharingType = included ? .readOnly : .none
+        guard sharingType != desired else { return }
+        sharingType = desired
     }
 
     /// Requirement 13.4: never becomes key, so the app underneath keeps focus. Key

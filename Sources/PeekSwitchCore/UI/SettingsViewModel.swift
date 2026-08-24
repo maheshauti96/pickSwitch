@@ -56,6 +56,14 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var includeOverlayInScreenshots: Bool {
+        didSet {
+            guard includeOverlayInScreenshots != oldValue else { return }
+            store.includeOverlayInScreenshots = includeOverlayInScreenshots
+            onSettingsChanged()
+        }
+    }
+
     @Published var overlayLayoutStyle: OverlayLayoutStyle {
         didSet {
             guard overlayLayoutStyle != oldValue else { return }
@@ -208,6 +216,7 @@ final class SettingsViewModel: ObservableObject {
         self.activationMode = store.activationMode
         self.hotKeyShortcut = store.hotKeyShortcut
         self.overlayViewMode = store.overlayViewMode
+        self.includeOverlayInScreenshots = store.includeOverlayInScreenshots
         self.overlayLayoutStyle = store.overlayLayoutStyle
         self.historyDepth = Double(store.historyDepth)
         self.pinnedApplications = store.pinnedApplications

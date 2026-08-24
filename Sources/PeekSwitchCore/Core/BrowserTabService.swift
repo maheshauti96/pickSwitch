@@ -35,6 +35,10 @@ actor BrowserTabService {
     private static let notAuthorizedError = -1743
 
     private var deniedBrowsers: Set<BrowserTab.Browser> = []
+    /// Browsers that have answered at least one Apple Event this session. A window refresh while
+    /// the overlay is visible is restricted to this set, so it can never summon a first-time
+    /// Automation consent dialog over the switcher.
+    private var authorizedBrowsers: Set<BrowserTab.Browser> = []
 
     /// Every tab open in every supported browser that is currently running.
     func tabs() async -> [BrowserTab] {
@@ -45,6 +49,7 @@ actor BrowserTabService {
         for browser in running where !deniedBrowsers.contains(browser) {
             switch Self.enumerate(browser) {
             case .success(let tabs):
+                authorizedBrowsers.insert(browser)
                 all.append(contentsOf: tabs)
             case .denied:
                 // Remember, so a user who declined the prompt is not asked again on every
@@ -64,26 +69,34 @@ actor BrowserTabService {
         return all
     }
 
-    /// Every window of every running Chromium browser, with whether it is a private one.
+    /// Every window of every running Chromium browser, including its active-tab URL when the
+    /// browser exposes one.
+    ///
+    /// - Parameter allowPermissionPrompt: When `false`, only browsers that have already answered
+    ///   an Apple Event this session are queried. This is the only mode used while the overlay is
+    ///   visible, preventing a first-time Automation dialog from taking focus. The `true` mode is
+    ///   used after dismissal, where macOS may safely ask for access.
     ///
     /// Much cheaper than `tabs()`: one Apple Event per browser rather than one per window, and no
     /// per-tab lists to marshal — around 60 ms for a session with three Chrome windows against
-    /// roughly 300 ms to enumerate their tabs. Still an inter-process round trip, so still too
-    /// slow for the 150 ms budget to put the overlay on screen (Requirement 14.1); the caller
-    /// runs it just after presenting and badges the cards when it lands, the way thumbnails
-    /// already arrive.
+    /// roughly 300 ms to enumerate their tabs. It still never runs on the 150 ms trigger path.
     ///
     /// Safari is excluded. Its scripting dictionary has no equivalent of `mode`, so a Safari
     /// private window is indistinguishable from an ordinary one from out here.
-    func windows() async -> [ScriptedBrowserWindow] {
+    func windows(allowPermissionPrompt: Bool = true) async -> [ScriptedBrowserWindow] {
         let running = await MainActor.run { Self.runningBrowsers() }
-        let scriptable = running.filter { $0.reportsWindowMode && !deniedBrowsers.contains($0) }
+        let scriptable = running.filter {
+            $0.reportsWindowMode
+                && !deniedBrowsers.contains($0)
+                && (allowPermissionPrompt || authorizedBrowsers.contains($0))
+        }
         guard !scriptable.isEmpty else { return [] }
 
         var all: [ScriptedBrowserWindow] = []
         for browser in scriptable {
             switch Self.enumerateWindows(browser) {
             case .success(let windows):
+                authorizedBrowsers.insert(browser)
                 all.append(contentsOf: windows)
             case .denied:
                 deniedBrowsers.insert(browser)
@@ -182,20 +195,27 @@ actor BrowserTabService {
         case failed(String)
     }
 
-    /// One event for the whole browser: id, mode, title and rectangle for each of its windows.
+    /// One event for the whole browser: id, mode, title, rectangle and active-tab URL for each
+    /// window. The URL read is isolated per window: one transient or browser-specific failure
+    /// leaves that record usable with the browser icon fallback instead of failing the batch.
     private static func enumerateWindows(_ browser: BrowserTab.Browser) -> WindowsOutcome {
         let source = """
         set collected to {}
         tell application "\(browser.scriptingName)"
             repeat with w in windows
                 set edges to bounds of w
+                set activeAddress to ""
+                try
+                    set activeAddress to URL of active tab of w as text
+                end try
                 set end of collected to ((id of w as text) & "\(fieldDelimiter)" ¬
                     & (mode of w as text) & "\(fieldDelimiter)" ¬
                     & (name of w as text) & "\(fieldDelimiter)" ¬
                     & (item 1 of edges as text) & "\(fieldDelimiter)" ¬
                     & (item 2 of edges as text) & "\(fieldDelimiter)" ¬
                     & (item 3 of edges as text) & "\(fieldDelimiter)" ¬
-                    & (item 4 of edges as text))
+                    & (item 4 of edges as text) & "\(fieldDelimiter)" ¬
+                    & activeAddress)
             end repeat
         end tell
         set AppleScript's text item delimiters to "\(recordDelimiter)"
@@ -221,7 +241,7 @@ actor BrowserTabService {
         for record in output.components(separatedBy: recordDelimiter) where !record.isEmpty {
             let fields = record.components(separatedBy: fieldDelimiter)
             guard
-                fields.count == 7,
+                fields.count == 7 || fields.count == 8,
                 let identifier = Int(fields[0]),
                 let left = Double(fields[3]),
                 let top = Double(fields[4]),
@@ -229,13 +249,15 @@ actor BrowserTabService {
                 let bottom = Double(fields[6])
             else { continue }
 
+            let mode = fields[1].trimmingCharacters(in: .whitespaces).lowercased()
+            let activeTabURL = fields.count == 8 && !fields[7].isEmpty ? fields[7] : nil
             windows.append(
                 ScriptedBrowserWindow(
                     browser: browser,
                     identifier: identifier,
-                    // Chromium reports "normal" or "incognito". Anything unrecognised is treated
-                    // as normal, so a future mode cannot start badging ordinary windows.
-                    isIncognito: fields[1].trimmingCharacters(in: .whitespaces) == "incognito",
+                    // Unknown modes stay visually unbadged, but only an explicit `normal` is
+                    // eligible for a network favicon request.
+                    isIncognito: mode == "incognito",
                     title: fields[2],
                     // AppleScript gives edges, not an origin and a size.
                     frame: CGRect(
@@ -243,7 +265,9 @@ actor BrowserTabService {
                         y: top,
                         width: max(0, right - left),
                         height: max(0, bottom - top)
-                    )
+                    ),
+                    activeTabURL: activeTabURL,
+                    allowsFaviconRequest: mode == "normal"
                 )
             )
         }

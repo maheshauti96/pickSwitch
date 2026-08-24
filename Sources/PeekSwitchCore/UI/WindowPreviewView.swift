@@ -11,6 +11,8 @@ import SwiftUI
 struct WindowPreviewView: View {
 
     let entry: WindowEntry?
+    /// Favicon for a matched browser window, otherwise the application's own icon.
+    let displayIcon: NSImage?
     let thumbnail: CGImage?
     /// Draw the caption over the image on a gradient instead of below it.
     let overlaysCaption: Bool
@@ -64,7 +66,7 @@ struct WindowPreviewView: View {
                     .resizable()
                     // Requirement 9.5.
                     .aspectRatio(contentMode: .fit)
-            } else if let icon = entry?.applicationIcon {
+            } else if let icon = displayIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .interpolation(.high)
@@ -105,14 +107,14 @@ struct WindowPreviewView: View {
 
     private var caption: some View {
         HStack(spacing: 10) {
-            if let icon = entry?.applicationIcon {
+            if let icon = displayIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 32, height: 32)
             }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(entry?.displayTitle ?? "")
+                Text(titleLine)
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -131,14 +133,14 @@ struct WindowPreviewView: View {
 
     private var captionOverlay: some View {
         HStack(spacing: 8) {
-            if let icon = entry?.applicationIcon {
+            if let icon = displayIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 26, height: 26)
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(entry?.displayTitle ?? "")
+                Text(titleLine)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -168,6 +170,11 @@ struct WindowPreviewView: View {
         .allowsHitTesting(false)
     }
 
+    private var titleLine: String {
+        guard let entry else { return "" }
+        return entry.isApplication ? entry.applicationName : entry.displayTitle
+    }
+
     /// Built only from facts the enumerator actually has, in the design's
     /// "app · display · detail" shape. The mock's "active 12 s ago" is still missing:
     /// MRU order is tracked, but not a per-window timestamp worth printing.
@@ -177,6 +184,9 @@ struct WindowPreviewView: View {
     /// are deciding whether that is the screen you meant.
     private var metaLine: String {
         guard let entry else { return "" }
+        if entry.isApplication {
+            return ["Application", "Return to open"].joined(separator: "  ·  ")
+        }
         // A tab's address says more than its geometry, which it does not have.
         if let tab = entry.tab {
             return [entry.applicationName, "Tab", tab.host].joined(separator: "  ·  ")
@@ -198,6 +208,9 @@ struct WindowPreviewView: View {
 
     private var accessibilityLabel: String {
         guard let entry else { return "No window selected" }
+        if entry.isApplication {
+            return "Open \(entry.applicationName), installed application"
+        }
         var label = "Preview of \(entry.applicationName), \(entry.displayTitle)"
         if isIncognito { label += ", incognito" }
         if let display { label += ", \(display.label)" }

@@ -297,18 +297,17 @@ struct OverlayCardMetrics: Equatable, Sendable {
     // positioned and shaped by `SpiralLayout`, which owns the angles and radii; these
     // metrics only describe what is drawn inside it.
 
-    /// The content box of a wedge: a 52pt icon over one line naming the application.
+    /// The content box of a wedge: a 46pt icon over up to two lines naming the application.
     ///
-    /// One line, because a wedge holds an 80pt-wide box and a window title in that space is
-    /// four words of ellipsis. The hollow middle carries the full title of whichever window is
-    /// under the pointer instead, which is why the middle is not empty.
+    /// Short names remain on one line. Longer names wrap at a word boundary rather than turning
+    /// "Google Chrome" into "Googl…"; the hollow middle still carries the selected window title.
     ///
     /// `size` is taken from `RadialLayout` rather than restated, so the two cannot drift. It
     /// is the box at scale 1; the view scales these metrics to match however far the
     /// arrangement has had to shrink.
     static let spiral = OverlayCardMetrics(
         size: RadialLayout.baseContentSize,
-        artworkHeight: 52,
+        artworkHeight: 46,
         // Generous, to match a wedge 120pt deep. At 9 the corners read as square against
         // arcs that long.
         cornerRadius: 13,
@@ -320,13 +319,13 @@ struct OverlayCardMetrics: Equatable, Sendable {
         showsSubtitle: false,
         usesApplicationNameAsPrimary: true,
         contentLayout: .artworkThenMetadata,
-        artworkIconSize: 52
+        artworkIconSize: 46
     )
 
     /// Identical to `spiral` by design. See the note above.
     static let iconSpiral = OverlayCardMetrics(
         size: RadialLayout.baseContentSize,
-        artworkHeight: 52,
+        artworkHeight: 46,
         cornerRadius: 13,
         iconSize: 0,
         titleFontSize: 11,
@@ -334,6 +333,6 @@ struct OverlayCardMetrics: Equatable, Sendable {
         showsSubtitle: false,
         usesApplicationNameAsPrimary: true,
         contentLayout: .artworkThenMetadata,
-        artworkIconSize: 52
+        artworkIconSize: 46
     )
 }

@@ -184,9 +184,10 @@ struct IncognitoMatcherTests {
         #expect(IncognitoMatcher.incognitoWindowIDs(entries: entries, scripted: []).isEmpty)
     }
 
-    /// One scripted window cannot explain two entries.
-    @Test("A scripted window is used for at most one entry")
-    func eachScriptedWindowIsUsedOnce() {
+    /// One scripted window that fits two native entries does not identify either one. Guessing by
+    /// array order could put a private badge or active-tab favicon on the wrong window.
+    @Test("An ambiguous scripted window is not guessed")
+    func ambiguousScriptedWindowIsNotGuessed() {
         let shared = CGRect(x: 0, y: 0, width: 900, height: 700)
         let entries = [
             entry(id: 1, title: "New Tab", frame: shared),
@@ -195,7 +196,7 @@ struct IncognitoMatcherTests {
         let scripted = [self.scripted(10, incognito: true, title: "New Tab", frame: shared)]
 
         let badged = IncognitoMatcher.incognitoWindowIDs(entries: entries, scripted: scripted)
-        #expect(badged.count == 1)
+        #expect(badged.isEmpty)
     }
 
     // MARK: - Parsing what the browser said
@@ -205,7 +206,11 @@ struct IncognitoMatcherTests {
         let field = "\u{01}"
         let record = "\u{03}"
         let output = [
-            ["1263772735", "normal", "Inbox", "0", "0", "1920", "1044"].joined(separator: field),
+            [
+                "1263772735", "normal", "Inbox", "0", "0", "1920", "1044",
+                "https://mail.example/",
+            ].joined(separator: field),
+            // Legacy seven-field records still parse and simply have no active URL.
             ["1263773420", "incognito", "New Incognito tab", "-1512", "68", "0", "982"]
                 .joined(separator: field),
         ].joined(separator: record)
@@ -215,24 +220,28 @@ struct IncognitoMatcherTests {
 
         #expect(windows[0].identifier == 1_263_772_735)
         #expect(!windows[0].isIncognito)
+        #expect(windows[0].allowsFaviconRequest)
+        #expect(windows[0].activeTabURL == "https://mail.example/")
         #expect(windows[0].title == "Inbox")
         #expect(windows[0].frame == CGRect(x: 0, y: 0, width: 1920, height: 1044))
 
         #expect(windows[1].isIncognito)
+        #expect(!windows[1].allowsFaviconRequest)
+        #expect(windows[1].activeTabURL == nil)
         // AppleScript reports edges; the rectangle is derived from them.
         #expect(windows[1].frame == CGRect(x: -1512, y: 68, width: 1512, height: 914))
     }
 
-    /// An unrecognised mode is treated as normal, so a future Chromium mode cannot start badging
-    /// ordinary windows.
-    @Test("An unknown mode is treated as normal")
-    func unknownModeIsNormal() {
+    /// An unrecognised mode stays visually unbadged, but cannot authorize a favicon request.
+    @Test("An unknown mode is unbadged and network-ineligible")
+    func unknownModeFailsClosed() {
         let field = "\u{01}"
         let output = ["9", "guest", "Window", "0", "0", "100", "100"].joined(separator: field)
         let windows = BrowserTabService.parseWindows(output, browser: .chrome)
 
         #expect(windows.count == 1)
         #expect(!windows[0].isIncognito)
+        #expect(!windows[0].allowsFaviconRequest)
     }
 
     @Test("Malformed records are skipped rather than crashing")

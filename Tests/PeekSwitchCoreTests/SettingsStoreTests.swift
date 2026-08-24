@@ -41,6 +41,8 @@ final class SettingsStoreTests {
         #expect(store.overlayLayoutStyle == .strip)
         // Window View stays the default so an upgrade does not change what people see.
         #expect(store.overlayViewMode == .window)
+        // Screenshottable by default: anything visible that cannot be captured is surprising.
+        #expect(store.includeOverlayInScreenshots)
     }
 
     /// Bad persisted values must fall back rather than crash or disable the app.
@@ -88,6 +90,17 @@ final class SettingsStoreTests {
             store.overlayLayoutStyle = style
             #expect(SettingsStore(defaults: defaults).overlayLayoutStyle == style)
         }
+    }
+
+    @Test("Screenshot visibility round-trips and defaults to visible")
+    func screenshotVisibilityRoundTrips() {
+        #expect(store.includeOverlayInScreenshots)
+
+        store.includeOverlayInScreenshots = false
+        #expect(!SettingsStore(defaults: defaults).includeOverlayInScreenshots)
+
+        store.includeOverlayInScreenshots = true
+        #expect(SettingsStore(defaults: defaults).includeOverlayInScreenshots)
     }
 
     @Test("Every overlay view mode round-trips")
@@ -213,6 +226,7 @@ final class SettingsStoreTests {
         store.hotKeyShortcut = .f13
         store.overlayLayoutStyle = .grid
         store.overlayViewMode = .icon
+        store.includeOverlayInScreenshots = false
         store.pinnedApplications = ["com.slack"]
 
         let ownKeys: Set<String> = [
@@ -223,6 +237,7 @@ final class SettingsStoreTests {
             SettingsStore.Key.hotKeyShortcut,
             SettingsStore.Key.overlayLayoutStyle,
             SettingsStore.Key.overlayViewMode,
+            SettingsStore.Key.includeOverlayInScreenshots,
             SettingsStore.Key.pinnedApplications,
         ]
         let all = Set(defaults.dictionaryRepresentation().keys)

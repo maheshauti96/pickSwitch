@@ -208,13 +208,17 @@ struct OverlayRenderingTests {
         for count in [0, 1, 6, 25] {
             let subject = state(style: style, count: count, selected: count == 0 ? nil : 0)
 
-            subject.isRevealed = false
+            // Through the real entry points, so the test covers the sequence the controller
+            // actually runs rather than a flag poked by hand.
+            subject.beginPresentation()
+            subject.isVisible = true
             let hidden = subject.layout.panelSize
             _ = render(subject)
 
-            subject.isRevealed = true
+            subject.reveal(token: subject.presentationID)
             let shown = subject.layout.panelSize
             _ = render(subject)
+            #expect(subject.isRevealed)
 
             #expect(hidden == shown, "\(style) with \(count) windows resized as cards arrived")
             #expect(shown.width > 0)
@@ -228,9 +232,10 @@ struct OverlayRenderingTests {
     func hitTestingIsUnaffectedByTheEntrance(style: OverlayLayoutStyle) {
         let subject = state(style: style, count: 9, selected: 3)
 
-        subject.isRevealed = false
+        subject.isVisible = true
+        subject.beginPresentation()
         let duringEntrance = subject.layout.positionedCards()
-        subject.isRevealed = true
+        subject.reveal(token: subject.presentationID)
         let after = subject.layout.positionedCards()
 
         #expect(duringEntrance == after)
@@ -239,7 +244,7 @@ struct OverlayRenderingTests {
     @Test("Icon View renders mid-entrance", arguments: OverlayLayoutStyle.allCases)
     func iconViewRendersMidEntrance(style: OverlayLayoutStyle) {
         let subject = state(style: style, count: 9, viewMode: .icon)
-        subject.isRevealed = false
+        subject.beginPresentation()
         _ = render(subject, hovered: 2)
         #expect(!subject.isRevealed)
     }

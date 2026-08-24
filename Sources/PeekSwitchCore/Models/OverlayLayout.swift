@@ -500,7 +500,22 @@ struct OverlayLayout: Equatable {
                 width: size,
                 height: size
             )
-        case .strip, .grid, .circular, .spiral:
+        case .circular, .spiral:
+            // Not the content box's corner. That box holds the icon, so a button on its corner
+            // sits on the icon — directly under the cursor that just hovered the wedge to select
+            // it, which makes closing the window the easiest thing to do by accident.
+            //
+            // The wedge's own outer-trailing corner instead: the emptiest part of the seat, and
+            // the analogue of a card's top-right corner. For the wedge at the top of the ring it
+            // is literally that.
+            return radialCloseButtonFrame(forCardIndex: card.index) ?? CGRect(
+                x: drawn.maxX - CloseButton.inset - size,
+                y: drawn.minY + CloseButton.inset,
+                width: size,
+                height: size
+            )
+
+        case .strip, .grid:
             return CGRect(
                 x: drawn.maxX - CloseButton.inset - size,
                 y: drawn.minY + CloseButton.inset,
@@ -508,6 +523,37 @@ struct OverlayLayout: Equatable {
                 height: size
             )
         }
+    }
+
+    /// The close affordance on a wedge, tucked inside its outer-trailing corner.
+    ///
+    /// Positioned in polar terms because the wedge is: back from the clockwise edge by an arc's
+    /// worth of inset, and in from the outer arc by the same. The radius is clamped so the button
+    /// stays within the annulus however far the arrangement has been scaled down — on a crowded
+    /// ring the wedge can be shallower than the button is tall, and poking outside the shape it
+    /// belongs to would look like a detached dot.
+    private func radialCloseButtonFrame(forCardIndex index: Int) -> CGRect? {
+        guard let seat = radialSeats.first(where: { $0.index == index })?.seat else { return nil }
+
+        let size = CloseButton.size
+        let half = size / 2
+        let inset = CloseButton.inset + half
+
+        let radius = min(
+            max(seat.innerRadius + half, seat.outerRadius - inset),
+            seat.outerRadius - half
+        )
+        // Arc length converted to angle at the radius the button actually sits at, so the inset
+        // looks the same on the inner turn as on the outer one.
+        let angle = seat.endAngle - Double(inset / max(1, radius))
+        let centre = radialCentre
+
+        return CGRect(
+            x: centre.x + radius * CGFloat(cos(angle)) - half,
+            y: centre.y + radius * CGFloat(sin(angle)) - half,
+            width: size,
+            height: size
+        )
     }
 
     /// The frame a card is actually drawn at, including the selection scale-up.

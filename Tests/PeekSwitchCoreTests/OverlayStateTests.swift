@@ -189,3 +189,123 @@ struct OverlayStateTests {
         return context.makeImage()
     }
 }
+
+/// The cards' entrance, and the two ways it used to fail.
+///
+/// The symptom was intermittent: sometimes the cards animated in, sometimes they were simply
+/// there, and sometimes they appeared and *then* animated. All of it came from the entrance
+/// depending on a state transition nothing enforced the ordering of.
+@Suite("Overlay entrance")
+@MainActor
+struct OverlayRevealSequencingTests {
+
+    private func presented(count: Int = 6) -> OverlayState {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        state.load(entries: Fixture.entries(count: count), selectedIndex: 0)
+        state.isVisible = true
+        return state
+    }
+
+    @Test("Beginning a presentation hides the cards and takes a new identity")
+    func beginningAPresentationHidesTheCards() {
+        let subject = presented()
+        let before = subject.presentationID
+
+        subject.beginPresentation()
+
+        #expect(!subject.isRevealed)
+        #expect(subject.presentationID != before)
+    }
+
+    @Test("Revealing with the current token lets the cards in")
+    func revealingWithTheCurrentTokenWorks() {
+        let subject = presented()
+        subject.beginPresentation()
+
+        #expect(subject.reveal(token: subject.presentationID))
+        #expect(subject.isRevealed)
+    }
+
+    /// The defect that made the entrance skip entirely. Trigger twice quickly and the first
+    /// presentation's deferred reveal used to land on the second, which had just hidden itself —
+    /// so the second presentation's cards snapped straight in.
+    @Test("A reveal from an earlier presentation cannot fire during a later one")
+    func staleRevealIsIgnored() {
+        let subject = presented()
+
+        subject.beginPresentation()
+        let firstToken = subject.presentationID
+
+        // The first presentation ends and a second begins before its reveal was delivered.
+        subject.beginPresentation()
+
+        #expect(!subject.reveal(token: firstToken), "a stale token revealed the new presentation")
+        #expect(!subject.isRevealed, "the second presentation lost its entrance")
+
+        // The second presentation's own token still works.
+        #expect(subject.reveal(token: subject.presentationID))
+        #expect(subject.isRevealed)
+    }
+
+    /// A reveal delivered after dismissal must not quietly mark a hidden overlay revealed, or the
+    /// next presentation would start from the wrong state.
+    @Test("A reveal after dismissal is ignored")
+    func revealAfterDismissalIsIgnored() {
+        let subject = presented()
+        subject.beginPresentation()
+        let token = subject.presentationID
+
+        subject.isVisible = false
+
+        #expect(!subject.reveal(token: token))
+        #expect(!subject.isRevealed)
+    }
+
+    /// Only a new presentation may replay the entrance. Filtering as the user types changes the
+    /// card list constantly, and re-running the animation on every keystroke would be unusable.
+    @Test("Searching does not start a new presentation")
+    func searchingDoesNotReplayTheEntrance() {
+        let subject = presented(count: 8)
+        subject.beginPresentation()
+        subject.reveal(token: subject.presentationID)
+        let identity = subject.presentationID
+
+        subject.appendToSearch("app")
+        #expect(subject.presentationID == identity)
+        #expect(subject.isRevealed)
+
+        subject.backspaceSearch()
+        #expect(subject.presentationID == identity)
+        #expect(subject.isRevealed)
+    }
+
+    /// Closing a window from the overlay is the other mid-presentation mutation, and it must not
+    /// restart the entrance either.
+    @Test("Closing a window does not replay the entrance")
+    func closingDoesNotReplayTheEntrance() {
+        let subject = presented(count: 5)
+        subject.beginPresentation()
+        subject.reveal(token: subject.presentationID)
+        let identity = subject.presentationID
+
+        #expect(subject.remove(windowID: 2))
+        #expect(subject.presentationID == identity)
+        #expect(subject.isRevealed)
+    }
+
+    /// Each presentation gets a distinct identity, which is what the view keys the arrangement on
+    /// so that a fresh subtree reads the hidden state directly.
+    @Test("Every presentation has its own identity")
+    func identitiesAreDistinct() {
+        let subject = presented()
+        var seen: Set<Int> = [subject.presentationID]
+
+        for _ in 0..<25 {
+            subject.beginPresentation()
+            #expect(seen.insert(subject.presentationID).inserted, "identity was reused")
+            subject.reveal(token: subject.presentationID)
+        }
+    }
+}

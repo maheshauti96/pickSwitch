@@ -34,18 +34,38 @@ final class OverlayState: ObservableObject {
     private var tabEntries: [WindowEntry] = []
 
     /// True once tabs have been fetched for this presentation.
-    private(set) var hasLoadedTabs = false
+    @Published private(set) var hasLoadedTabs = false
+
+    /// Installed applications, searched only as a fallback after windows and tabs miss.
+    ///
+    /// This catalog is session-wide rather than presentation-wide, so it remains populated
+    /// when `load` replaces the current window list.
+    private var applicationEntries: [WindowEntry] = []
+    @Published private(set) var hasLoadedApplications = false
 
     /// What the user has typed. Empty means no filtering.
     @Published private(set) var searchQuery: String = ""
 
     var isSearching: Bool { !searchQuery.isEmpty }
 
-    /// True when a query is active but matches nothing, so the overlay can say so rather
-    /// than showing an empty box that looks like a failure to enumerate.
+    /// True whenever a query is active but no selectable result is currently visible.
+    /// This intentionally includes the brief period while secondary sources are resolving;
+    /// callers deciding whether web search is safe must use `canOfferWebSearch` instead.
     var hasNoSearchMatches: Bool { isSearching && entries.isEmpty }
+
+    /// Whether tabs or the installed-application catalog could still replace an apparent miss.
+    var isResolvingSearch: Bool {
+        hasNoSearchMatches && (!hasLoadedTabs || !hasLoadedApplications)
+    }
+
+    /// Web search is the final fallback, only after every local source has settled empty.
+    var canOfferWebSearch: Bool { hasNoSearchMatches && !isResolvingSearch }
     @Published var selectedIndex: Int?
     @Published var thumbnails: [CGWindowID: CGImage] = [:]
+    /// Site icons that arrived after presentation, associated with native browser windows.
+    /// `WindowEntry.applicationIcon` remains the immutable fallback and is always used for
+    /// incognito windows and non-window search targets.
+    @Published private(set) var browserIconsByWindowID: [CGWindowID: NSImage] = [:]
     /// The strip's pixel scroll offset.
     @Published var scrollOffset: CGFloat = 0
     /// First card on screen for the styles that page by whole items.
@@ -76,7 +96,7 @@ final class OverlayState: ObservableObject {
 
     /// Whether this entry is a private browsing window.
     func isIncognito(_ entry: WindowEntry) -> Bool {
-        !entry.isTab && incognitoWindowIDs.contains(entry.windowID)
+        entry.isWindow && incognitoWindowIDs.contains(entry.windowID)
     }
 
     /// Whether the cards have been let in yet.
@@ -86,6 +106,40 @@ final class OverlayState: ObservableObject {
     /// `SwitcherController` clears it, and only for a fresh presentation — a re-fit while the
     /// overlay is already open must not replay the entrance.
     @Published var isRevealed: Bool = true
+
+    /// Counts presentations, and identifies the current one.
+    ///
+    /// Two jobs, both about the entrance.
+    ///
+    /// It is the view identity of the arrangement, which is what makes the entrance reliable.
+    /// Animating a card in requires SwiftUI to have rendered the hidden state *before* the
+    /// revealed one, and simply setting a published flag does not guarantee that: `@Published`
+    /// notifies subscribers before the value changes, so whether a forced layout pass picks up
+    /// the new value is a matter of internal scheduling. Changing the identity sidesteps the
+    /// question — the subtree is rebuilt from scratch and reads whatever `isRevealed` says at
+    /// that moment, which the controller has already set to `false`.
+    ///
+    /// It also stamps the deferred reveal, so a reveal scheduled by one presentation cannot fire
+    /// during the next. That was a real defect: trigger twice in quick succession and the first
+    /// presentation's pending reveal would land on the second, which had just set itself hidden,
+    /// and the second's cards would snap in with no entrance at all.
+    @Published private(set) var presentationID: Int = 0
+
+    /// Start a fresh presentation: new identity, cards held back.
+    func beginPresentation() {
+        presentationID &+= 1
+        isRevealed = false
+    }
+
+    /// Let the cards in, if `token` is still the current presentation.
+    ///
+    /// - Returns: `false` when the token is stale, so a caller can tell its work was dropped.
+    @discardableResult
+    func reveal(token: Int) -> Bool {
+        guard token == presentationID, isVisible else { return false }
+        isRevealed = true
+        return true
+    }
 
     /// Metrics for one card, given the current arrangement and view mode.
     var cardMetrics: OverlayCardMetrics { layoutStyle.cardMetrics(for: viewMode) }
@@ -175,19 +229,49 @@ final class OverlayState: ObservableObject {
         tabEntries = tabs
         hasLoadedTabs = true
         guard isSearching else { return false }
-        return applySearch(searchQuery, force: true)
+        return applySearch(searchQuery)
+    }
+
+    /// Supply the process-wide installed-application catalog.
+    ///
+    /// Applications are never listed without a query and never compete with a matching window
+    /// or tab. Once this source and tabs have both settled, they become the local fallback.
+    @discardableResult
+    func setApplications(_ applications: [WindowEntry]) -> Bool {
+        applicationEntries = applications
+        hasLoadedApplications = true
+        guard isSearching else { return false }
+        return applySearch(searchQuery)
+    }
+
+    /// Forget an application whose bundle disappeared or failed to launch.
+    func removeApplication(id: String) {
+        applicationEntries.removeAll { $0.launchableApplication?.id == id }
+        guard isSearching else { return }
+        _ = applySearch(searchQuery)
     }
 
     @discardableResult
-    private func applySearch(_ query: String, force: Bool = false) -> Bool {
+    private func applySearch(_ query: String) -> Bool {
         searchQuery = query
 
-        // Windows first, then tabs, so a real window always outranks a tab that scored the
-        // same — switching to a window is the primary job, and a tab is the deeper cut.
-        let searchable = query.isEmpty ? allEntries : allEntries + tabEntries
-        let matches = WindowSearch.filter(searchable, query: query)
+        let matches: [WindowEntry]
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            matches = allEntries
+        } else {
+            // Switching remains primary. Apps are offered only after both the real-window list
+            // and the asynchronously fetched browser tabs have definitely missed.
+            let primaryMatches = WindowSearch.filter(allEntries + tabEntries, query: query)
+            if !primaryMatches.isEmpty {
+                matches = primaryMatches
+            } else if hasLoadedTabs, hasLoadedApplications {
+                matches = WindowSearch.filter(applicationEntries, query: query)
+            } else {
+                matches = []
+            }
+        }
 
-        guard force || matches.map(\.id) != entries.map(\.id) else { return false }
+        guard matches.map(\.id) != entries.map(\.id) else { return false }
 
         // The previous selection may have been filtered out, and after typing the best
         // match is what the user means — so selection returns to the top of the results.
@@ -200,7 +284,16 @@ final class OverlayState: ObservableObject {
         tabEntries = []
         hasLoadedTabs = false
         searchQuery = ""
+        // A native window id can be reused, and its active tab can change between invocations.
+        // Never carry a per-window favicon across presentations without rematching it.
+        browserIconsByWindowID.removeAll(keepingCapacity: true)
         reload(entries: entries, selectedIndex: selectedIndex)
+    }
+
+    /// Real windows from the unfiltered presentation, used for browser matching after a search
+    /// may have narrowed `entries` to only a subset.
+    var allWindowEntries: [WindowEntry] {
+        allEntries.filter(\.isWindow)
     }
 
     /// Rebuild the derived state for a given visible list.
@@ -209,7 +302,7 @@ final class OverlayState: ObservableObject {
         self.selectedIndex = selectedIndex
         var counts: [String: Int] = [:]
         var displays: [CGWindowID: DisplayInfo] = [:]
-        for entry in entries {
+        for entry in entries where entry.isWindow {
             counts[entry.applicationName, default: 0] += 1
             if let display = displayLayout.display(for: entry.frame) {
                 displays[entry.windowID] = display
@@ -235,6 +328,59 @@ final class OverlayState: ObservableObject {
 
     func setThumbnail(_ image: CGImage, for windowID: CGWindowID) {
         thumbnails[windowID] = image
+    }
+
+    /// The one icon policy used by every layout.
+    ///
+    /// Private windows deliberately retain the browser icon: even a cookie-free favicon request
+    /// would create network traffic for a private destination. Tabs and installed applications
+    /// have no native window id and likewise keep their own supplied icon.
+    func displayIcon(for entry: WindowEntry) -> NSImage? {
+        guard entry.isWindow, !isIncognito(entry) else { return entry.applicationIcon }
+        return browserIconsByWindowID[entry.windowID] ?? entry.applicationIcon
+    }
+
+    /// Publish a browser-window icon only if it still belongs to the visible presentation and
+    /// window.
+    ///
+    /// - Parameter isComposed: `true` when the caller supplies an icon that already carries both
+    ///   identities, which is the case for one restored from an earlier verification. A freshly
+    ///   downloaded favicon is composed here instead.
+    /// - Returns: the icon actually published, so a caller can remember exactly what was shown, or
+    ///   `nil` when the update was rejected as stale.
+    @discardableResult
+    func setBrowserIcon(
+        _ image: NSImage,
+        for windowID: CGWindowID,
+        presentationID expectedPresentationID: Int,
+        isComposed: Bool = false
+    ) -> NSImage? {
+        guard isVisible,
+              presentationID == expectedPresentationID,
+              let entry = allEntries.first(where: {
+                  $0.isWindow && $0.windowID == windowID
+              }),
+              !incognitoWindowIDs.contains(windowID)
+        else { return nil }
+
+        // A browser window has two useful identities: the application that owns it and the active
+        // site. Keep both visible as one scalable composition, browser in front, instead of
+        // replacing the browser icon with the favicon. When AppKit could not supply the browser
+        // icon, the verified site icon alone still beats an empty placeholder.
+        let published: NSImage
+        if isComposed {
+            published = image
+        } else if let applicationIcon = entry.applicationIcon {
+            published = BrowserWindowIcon.layered(
+                siteIcon: image,
+                browserIcon: applicationIcon
+            )
+        } else {
+            published = image
+        }
+
+        browserIconsByWindowID[windowID] = published
+        return published
     }
 
     /// Drop a window that has just been closed, keeping the overlay usable.
@@ -265,6 +411,7 @@ final class OverlayState: ObservableObject {
         }
 
         thumbnails.removeValue(forKey: windowID)
+        browserIconsByWindowID.removeValue(forKey: windowID)
         // Reload so the per-application counts, display badges and scroll offset all
         // reflect the shorter list rather than going stale. Deliberately not `load`,
         // which would also clear an active search.
@@ -286,6 +433,7 @@ final class OverlayState: ObservableObject {
     /// still go.
     func releaseThumbnails() {
         thumbnails.removeAll(keepingCapacity: false)
+        browserIconsByWindowID.removeAll(keepingCapacity: false)
     }
 
     /// Whether to offer a close affordance for this window.
@@ -294,19 +442,21 @@ final class OverlayState: ObservableObject {
     /// without an AX element there is no button to press — in both cases drawing the
     /// glyph would promise something that cannot happen.
     func canClose(_ entry: WindowEntry) -> Bool {
-        canCloseWindows && entry.axElement != nil
+        entry.isWindow && canCloseWindows && entry.axElement != nil
     }
 
     /// Which display to label a window with, or `nil` when labelling would tell the
-    /// user nothing — a single-display setup, or a window whose position matches no
-    /// active display.
+    /// user nothing — a single-display setup, a non-window target, or a window whose
+    /// position matches no active display.
     func display(for entry: WindowEntry) -> DisplayInfo? {
-        guard displayLayout.isMultiDisplay else { return nil }
+        guard entry.isWindow, displayLayout.isMultiDisplay else { return nil }
         return displaysByWindowID[entry.windowID]
     }
 
     func badgeCount(for entry: WindowEntry) -> Int? {
-        guard let count = windowCountsByApplication[entry.applicationName], count > 1 else {
+        guard entry.isWindow,
+              let count = windowCountsByApplication[entry.applicationName],
+              count > 1 else {
             return nil
         }
         return count

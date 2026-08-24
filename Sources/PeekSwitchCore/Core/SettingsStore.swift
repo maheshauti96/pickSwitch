@@ -17,6 +17,7 @@ final class SettingsStore {
         static let overlayLayoutStyle = "overlayLayoutStyle"
         static let pinnedApplications = "pinnedApplications"
         static let overlayViewMode = "overlayViewMode"
+        static let includeOverlayInScreenshots = "includeOverlayInScreenshots"
     }
 
     /// Applications whose windows are always offered first.
@@ -48,6 +49,9 @@ final class SettingsStore {
     /// Window View stays the default: it is the shipped behaviour, and changing what existing
     /// users see on upgrade is not something a new option should do on their behalf.
     static let defaultOverlayViewMode: OverlayViewMode = .window
+    /// Visible to screen capture by default. Anything on screen that cannot be screenshotted is
+    /// surprising, and impossible to file a bug about.
+    static let defaultIncludeOverlayInScreenshots = true
 
     private let defaults: UserDefaults
 
@@ -101,6 +105,20 @@ final class SettingsStore {
                 ?? Self.defaultActivationMode
         }
         set { defaults.set(newValue.rawValue, forKey: Key.activationMode) }
+    }
+
+    /// Whether the overlay appears in screenshots, recordings and screen shares.
+    ///
+    /// Worth turning off for a screen recording, where the switcher lists the title of every
+    /// window you have open.
+    var includeOverlayInScreenshots: Bool {
+        get {
+            guard defaults.object(forKey: Key.includeOverlayInScreenshots) != nil else {
+                return Self.defaultIncludeOverlayInScreenshots
+            }
+            return defaults.bool(forKey: Key.includeOverlayInScreenshots)
+        }
+        set { defaults.set(newValue, forKey: Key.includeOverlayInScreenshots) }
     }
 
     var overlayViewMode: OverlayViewMode {

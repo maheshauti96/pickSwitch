@@ -43,28 +43,55 @@ public final class SwitcherController {
     private let thumbnails: ThumbnailService
     private let activation: ActivationService
     private let browserTabs = BrowserTabService()
+    private let browserFavicons = BrowserFaviconService()
+    private let applicationCatalog = ApplicationCatalog()
 
-    /// Private browsing windows identified at any point this session.
+    /// Private browsing windows identified during this session.
     ///
-    /// A window's browsing mode never changes, so this only grows, and it is what lets the badge
-    /// show up with the overlay rather than a moment after it on every presentation but the
-    /// first. Ids of closed windows linger harmlessly: the set is always intersected with the
-    /// windows actually on screen before it is used.
+    /// Usually stable for a window's lifetime. An explicitly normal browser result may remove an
+    /// id because the window server can recycle `CGWindowID`s after a window closes.
     private var knownIncognitoWindowIDs: Set<CGWindowID> = []
 
     /// Windows whose mode has been settled either way, so a browser is not re-interrogated every
     /// time the overlay closes just because none of its windows turned out to be private.
     private var incognitoResolvedWindowIDs: Set<CGWindowID> = []
+
+    /// A verified browser-window icon, remembered with the window title it was verified against.
+    ///
+    /// Asking a browser for its windows costs an Apple Event, and a busy browser can take seconds
+    /// to answer — far longer than a switch. Without this, a favicon only ever appeared when the
+    /// user happened to hold the overlay open long enough for that round trip plus a network
+    /// request, so the composed icon looked intermittent.
+    ///
+    /// The title is the revalidation key, and it is exact rather than heuristic: a Chromium window
+    /// takes its title from its active tab, so an identical title means the same tab is still in
+    /// front and the previously verified site icon still describes it. A changed title means the
+    /// tab moved on, and the entry is ignored until fresh metadata arrives. Nothing here is
+    /// persisted, and private windows are never entered.
+    private struct CachedBrowserIcon {
+        let title: String
+        let icon: NSImage
+    }
+
+    private var browserIconsByWindowID: [CGWindowID: CachedBrowserIcon] = [:]
+    private var browserIconOrder: [CGWindowID] = []
+    private static let maximumRememberedBrowserIcons = 64
     private let triggerMonitor: TriggerMonitor
     private let hotKeyMonitor: HotKeyMonitor
 
     private let state = OverlayState()
     private var panel: OverlayPanel?
 
-    /// Enumeration happens here, never on main.
+    /// Window enumeration happens here, never on main.
     private let workQueue = DispatchQueue(
         label: "dev.peekswitch.enumeration",
         qos: .userInteractive
+    )
+
+    /// Installed-app discovery walks the file system and must never queue ahead of a trigger.
+    private let applicationCatalogQueue = DispatchQueue(
+        label: "dev.peekswitch.application-catalog",
+        qos: .utility
     )
 
     // MARK: - Presentation state
@@ -80,6 +107,31 @@ public final class SwitcherController {
 
     private var onButtonCaptured: ((TriggerButton?) -> Void)?
     private var isLoadingBrowserTabs = false
+    private var browserTabRequestID: UInt64 = 0
+    private static let browserTabSearchTimeoutNanoseconds: UInt64 = 750_000_000
+
+    /// Supersedes browser-window inspections before they can mutate mode caches or publish icons.
+    private var browserInspectionGeneration: UInt64 = 0
+    /// The only inspection allowed to request first-time Automation access. It waits briefly after
+    /// dismissal so a rapid reopen can cancel it before an Apple Event is sent.
+    private var browserAuthorizationTask: Task<Void, Never>?
+    private var isBrowserAuthorizationInFlight = false
+    private static let browserAuthorizationDelayNanoseconds: UInt64 = 250_000_000
+
+    private enum ConfirmationIntent {
+        case selection
+        case returnKey
+    }
+
+    private struct PendingSearchConfirmation {
+        let presentationID: Int
+        let query: String
+        let intent: ConfirmationIntent
+    }
+
+    /// Confirmation pressed while tabs/apps are resolving. Consumed once the same query settles.
+    private var pendingSearchConfirmation: PendingSearchConfirmation?
+
     /// Held only while the switch animation is on screen, so the panel outlives the call that
     /// started it.
     private var activeTransition: TransitionPanel?
@@ -110,6 +162,9 @@ public final class SwitcherController {
         self.activation = ActivationService(registry: registry, tabs: browserTabs)
         self.triggerMonitor = triggerMonitor
         self.hotKeyMonitor = hotKeyMonitor
+        self.activation.onApplicationLaunchFailure = { [weak self] application, error in
+            self?.handleApplicationLaunchFailure(application, error: error)
+        }
     }
 
     // MARK: - Lifecycle
@@ -141,6 +196,26 @@ public final class SwitcherController {
             // first time anything is remembered, and a user who switches Space before
             // ever opening the switcher would find that Space's windows missing.
             registry.learnCurrentSpace()
+        }
+
+        // Discover installed applications in parallel with the window pre-warm, but on its
+        // own utility queue. A file-system walk must never sit ahead of a user-triggered window
+        // enumeration on the latency-critical serial queue.
+        let applicationCatalog = self.applicationCatalog
+        applicationCatalogQueue.async { [weak self] in
+            let applications = applicationCatalog.applications().map(WindowEntry.applicationEntry)
+
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    Log.registry.info("indexed \(applications.count) installed applications")
+                    let changed = self.state.setApplications(applications)
+                    if changed, self.state.isVisible {
+                        self.afterSearchChanged()
+                    }
+                    self.resolvePendingSearchConfirmationIfReady()
+                }
+            }
         }
 
         // Drop cached state for applications that quit, so a recycled pid can never
@@ -292,7 +367,18 @@ public final class SwitcherController {
             return
         }
 
+        // Cancel a dismissal-time request that is still in its grace period. Once its synchronous
+        // Apple Event has begun it cannot be cancelled safely; in that short interval, do not put
+        // the overlay underneath a possible Automation sheet.
+        invalidateBrowserInspections()
+        guard !isBrowserAuthorizationInFlight else {
+            Log.registry.debug("browser authorization is in flight; deferring overlay presentation")
+            return
+        }
+
         isPresenting = true
+        invalidateBrowserTabLoad()
+        pendingSearchConfirmation = nil
         presentationMode = mode
         // The hotkey path is persistent from the outset. The button path starts as a
         // hold and is promoted on release if it turns out to have been a tap.
@@ -417,9 +503,15 @@ public final class SwitcherController {
         // The empty-state message always gets a plate, whatever the style, so it also
         // always gets the panel shadow that goes with one.
         let hasPlate = ordered.isEmpty || layoutStyle.drawsBackdrop
-        // Hold the cards back so the synchronous layout pass below renders them hidden, and
-        // the first visible frame is an empty panel for them to arrive into.
-        state.isRevealed = false
+        // Read per presentation rather than at launch, so toggling it takes effect on the next
+        // trigger instead of needing a restart.
+        panel.setIncludedInScreenshots(settings.includeOverlayInScreenshots)
+        // Hold the cards back, and give the arrangement a new identity, so the synchronous layout
+        // pass below rebuilds it and reads the hidden state rather than relying on change
+        // notification to have landed. The first visible frame is then an empty panel for the
+        // cards to arrive into.
+        state.beginPresentation()
+        let revealToken = state.presentationID
         panel.present(at: origin, size: size, afterLayout: true, castsShadow: hasPlate)
         state.isVisible = true
         Log.overlay.info("presenting \(ordered.count) cards")
@@ -432,18 +524,27 @@ public final class SwitcherController {
         startHoverTracking()
         installClickMonitors()
 
-        // Let the cards in. Deferred by one run loop pass on purpose: setting this inline
-        // would land in the same SwiftUI update as the state above, which would resolve to
-        // "already visible" and there would be nothing to animate.
+        // Let the cards in, on the next run loop pass so the hidden frame the layout above drew
+        // has been composited before they start arriving.
+        //
+        // Stamped with the presentation it belongs to. Without that, triggering twice quickly
+        // meant the first presentation's pending reveal fired during the second — which had just
+        // set itself hidden — and the second got no entrance at all.
         //
         // Input is already live at this point — hit-testing is arithmetic and does not care
         // whether a card has finished fading in — so the entrance costs no responsiveness.
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.state.isVisible else { return }
-            self.state.isRevealed = true
+            self?.state.reveal(token: revealToken)
         }
 
         applyKnownIncognitoWindows(to: ordered)
+        // Costs nothing and needs no browser: any window still showing the tab its icon was
+        // verified against gets that icon in the first frame instead of waiting for an Apple
+        // Event that may take seconds.
+        applyRememberedBrowserIcons(to: ordered, presentationID: revealToken)
+        // This starts only after the panel is on screen. It is restricted to browsers that have
+        // already answered an Apple Event this session, so no Automation prompt can steal focus.
+        refreshBrowserWindows(for: ordered, presentationID: revealToken)
 
         guard !ordered.isEmpty else { return }
         startCaptures(for: ordered, backingScale: backingScale)
@@ -466,60 +567,299 @@ public final class SwitcherController {
         state.incognitoWindowIDs = resolved
     }
 
-    /// Ask the running browsers which of their windows are private, and remember the answer.
+    /// Restore already-verified browser icons for windows whose active tab has not changed.
     ///
-    /// ## Why this runs on dismissal rather than on presentation
+    /// A cache read only, so it is safe on the presentation path: no Apple Event, no network, and
+    /// no consent dialog. The title check is what keeps it honest — see `CachedBrowserIcon`.
+    private func applyRememberedBrowserIcons(to entries: [WindowEntry], presentationID: Int) {
+        guard !browserIconsByWindowID.isEmpty else { return }
+
+        var restored = 0
+        for entry in browserWindowCandidates(in: entries) {
+            guard let remembered = browserIconsByWindowID[entry.windowID],
+                  remembered.title == entry.title,
+                  !knownIncognitoWindowIDs.contains(entry.windowID)
+            else { continue }
+
+            if state.setBrowserIcon(
+                remembered.icon,
+                for: entry.windowID,
+                presentationID: presentationID,
+                isComposed: true
+            ) != nil {
+                restored += 1
+            }
+        }
+
+        if restored > 0 {
+            Log.registry.info("restored \(restored) verified browser icons without asking a browser")
+        }
+    }
+
+    private func rememberBrowserIcon(_ icon: NSImage, for windowID: CGWindowID, title: String) {
+        browserIconsByWindowID[windowID] = CachedBrowserIcon(title: title, icon: icon)
+        browserIconOrder.removeAll { $0 == windowID }
+        browserIconOrder.append(windowID)
+
+        while browserIconsByWindowID.count > Self.maximumRememberedBrowserIcons,
+              let oldest = browserIconOrder.first {
+            browserIconOrder.removeFirst()
+            browserIconsByWindowID.removeValue(forKey: oldest)
+        }
+    }
+
+    private func forgetBrowserIcon(for windowID: CGWindowID) {
+        browserIconsByWindowID.removeValue(forKey: windowID)
+        browserIconOrder.removeAll { $0 == windowID }
+    }
+
+    /// Refresh active-tab URLs for browsers whose Automation access has already succeeded.
     ///
-    /// Asking costs an Apple Event, and the first one aimed at a given application makes macOS put
-    /// up an Automation consent dialog. That dialog takes focus — which would tear down the
-    /// overlay mid-presentation, the first time a user ever triggered it, for a badge. Running
-    /// after the overlay has gone means the prompt arrives with nothing to interrupt.
+    /// Called only after the panel is visible. `allowPermissionPrompt: false` makes this a no-op
+    /// for a browser that has not been inspected before, so a consent dialog can never interrupt
+    /// the presentation. Favicons arrive as fixed-size image replacements and do not relayout it.
+    private func refreshBrowserWindows(for entries: [WindowEntry], presentationID: Int) {
+        inspectBrowserWindows(
+            entries,
+            allowPermissionPrompt: false,
+            presentationID: presentationID
+        )
+    }
+
+    /// Ask newly encountered browsers about their windows after the overlay has gone away.
     ///
-    /// It costs nothing to defer, because a window's browsing mode is fixed for its lifetime: an
-    /// incognito window is never anything else. So the answer stays true indefinitely, and
-    /// `applyKnownIncognitoWindows(to:)` can badge from the cache the instant the overlay opens.
-    /// The only presentation without badges is the first one after launch that has a browser
-    /// window in it.
-    private func learnIncognitoWindows(for entries: [WindowEntry]) {
-        // Nothing to ask if no candidate browser window was listed.
+    /// The first Apple Event to a browser may show macOS's Automation consent dialog. A short
+    /// grace period lets a rapid reopen cancel this task before that event is sent. Successful
+    /// normal-window favicon requests also prewarm the memory cache for the next presentation;
+    /// private and unknown browser modes are never sent to the favicon service.
+    private func learnBrowserWindows(for entries: [WindowEntry]) {
+        let candidates = browserWindowCandidates(in: entries)
+        guard !candidates.isEmpty else { return }
+
+        // Browsing mode never changes for a window. Once every candidate has been settled, the
+        // post-presentation refresh owns dynamic URL updates and this prompt-capable path can stop.
+        guard candidates.contains(where: {
+            !incognitoResolvedWindowIDs.contains($0.windowID)
+        }) else { return }
+
+        inspectBrowserWindows(
+            candidates,
+            allowPermissionPrompt: true,
+            presentationID: nil
+        )
+    }
+
+    private func browserWindowCandidates(in entries: [WindowEntry]) -> [WindowEntry] {
         let browsers = Set(
             BrowserTab.Browser.allCases.filter(\.reportsWindowMode).map(\.bundleIdentifier)
         )
-        let candidates = entries.filter { entry in
-            !entry.isTab && entry.bundleIdentifier.map(browsers.contains) == true
+        return entries.filter { entry in
+            entry.isWindow && entry.bundleIdentifier.map(browsers.contains) == true
         }
+    }
+
+    private func invalidateBrowserInspections() {
+        browserInspectionGeneration &+= 1
+        browserAuthorizationTask?.cancel()
+        browserAuthorizationTask = nil
+    }
+
+    /// Match the browser and window-server descriptions once, then derive both static private
+    /// mode and dynamic favicon work from those exact pairs.
+    private func inspectBrowserWindows(
+        _ entries: [WindowEntry],
+        allowPermissionPrompt: Bool,
+        presentationID: Int?
+    ) {
+        let candidates = browserWindowCandidates(in: entries)
         guard !candidates.isEmpty else { return }
 
-        // Skip the round trip when every candidate is already accounted for. Common: one browser
-        // whose windows have all been seen before.
-        guard !candidates.allSatisfy({ knownIncognitoWindowIDs.contains($0.windowID) }),
-              candidates.contains(where: { !incognitoResolvedWindowIDs.contains($0.windowID) })
-        else { return }
+        browserInspectionGeneration &+= 1
+        let generation = browserInspectionGeneration
+        let delay = allowPermissionPrompt ? Self.browserAuthorizationDelayNanoseconds : 0
+        // Visible refreshes are allowed two short retries. They repair transient AppleScript,
+        // title/frame matching and active-URL misses without carrying an unverified favicon from
+        // an earlier presentation. The prompt-capable dismissal path remains single-shot.
+        let retryDelays: [UInt64] = allowPermissionPrompt
+            ? []
+            : [180_000_000, 420_000_000]
 
-        Task { [weak self, browserTabs] in
-            let scripted = await browserTabs.windows()
-            guard !scripted.isEmpty else { return }
-
-            await MainActor.run {
-                guard let self else { return }
-                let incognito = IncognitoMatcher.incognitoWindowIDs(
-                    entries: candidates,
-                    scripted: scripted
-                )
-
-                // The cache only ever learns. A window that failed to match this time round must
-                // not lose a badge it was correctly given earlier.
-                self.knownIncognitoWindowIDs.formUnion(incognito)
-                self.incognitoResolvedWindowIDs.formUnion(candidates.map(\.windowID))
-                Log.registry.info("""
-                    inspected \(scripted.count) browser windows, \
-                    \(incognito.count) incognito
-                    """)
+        let task = Task { [weak self, browserTabs, browserFavicons] in
+            if delay > 0 {
+                do {
+                    try await Task.sleep(nanoseconds: delay)
+                } catch {
+                    return
+                }
             }
+
+            guard let self,
+                  self.browserInspectionGeneration == generation,
+                  !allowPermissionPrompt || !self.state.isVisible
+            else { return }
+
+            var pending = candidates
+
+            for attempt in 0...retryDelays.count {
+                guard self.browserInspectionGeneration == generation,
+                      !allowPermissionPrompt || !self.state.isVisible
+                else { return }
+
+                if allowPermissionPrompt {
+                    self.isBrowserAuthorizationInFlight = true
+                }
+                let scripted = await browserTabs.windows(
+                    allowPermissionPrompt: allowPermissionPrompt
+                )
+                if allowPermissionPrompt {
+                    self.isBrowserAuthorizationInFlight = false
+                    if self.browserInspectionGeneration == generation {
+                        self.browserAuthorizationTask = nil
+                    }
+                }
+
+                // NSAppleScript is synchronous once it starts, so cancellation is enforced here,
+                // before stale work can alter mode caches or launch network requests.
+                guard self.browserInspectionGeneration == generation else { return }
+
+                let currentWindowIDs = Set(self.state.allWindowEntries.map(\.windowID))
+                let matched = IncognitoMatcher.matchedWindows(
+                    entries: pending,
+                    scripted: scripted
+                ).filter { currentWindowIDs.contains($0.key) }
+
+                if !matched.isEmpty {
+                    let incognito = Set(
+                        matched.compactMap { windowID, window in
+                            window.isIncognito ? windowID : nil
+                        }
+                    )
+                    let explicitlyNormal = Set(
+                        matched.compactMap { windowID, window in
+                            window.allowsFaviconRequest ? windowID : nil
+                        }
+                    )
+                    // A CGWindowID may be recycled. An explicit current normal result clears an
+                    // older private classification; unknown modes fail closed and clear nothing.
+                    self.knownIncognitoWindowIDs.subtract(explicitlyNormal)
+                    self.knownIncognitoWindowIDs.formUnion(incognito)
+                    self.incognitoResolvedWindowIDs.formUnion(matched.keys)
+                    // A window that turns out to be private must not keep a remembered site icon,
+                    // whether it was recycled or reclassified.
+                    for windowID in incognito {
+                        self.forgetBrowserIcon(for: windowID)
+                    }
+
+                    if let presentationID,
+                       self.state.isVisible,
+                       self.state.presentationID == presentationID {
+                        let visibleIDs = Set(self.state.allWindowEntries.map(\.windowID))
+                        self.state.incognitoWindowIDs = self.knownIncognitoWindowIDs
+                            .intersection(visibleIDs)
+                    }
+
+                    Log.registry.info("""
+                        inspected \(matched.count) matched browser windows, \
+                        \(incognito.count) incognito
+                        """)
+
+                    var completedWindowIDs: Set<CGWindowID> = []
+                    for (windowID, browserWindow) in matched {
+                        // Private and unknown modes are complete app-icon-only results. A normal
+                        // record with no URL stays pending because that read can fail transiently.
+                        guard browserWindow.allowsFaviconRequest else {
+                            completedWindowIDs.insert(windowID)
+                            continue
+                        }
+                        guard !self.knownIncognitoWindowIDs.contains(windowID),
+                              let activeTabURL = browserWindow.activeTabURL
+                        else { continue }
+
+                        completedWindowIDs.insert(windowID)
+                        Task { [weak self, browserFavicons] in
+                            guard let self,
+                                  self.browserInspectionGeneration == generation
+                            else { return }
+
+                            guard let favicon = await browserFavicons.favicon(
+                                for: activeTabURL,
+                                prefetch: presentationID == nil
+                            ) else {
+                                Log.registry.info("""
+                                    no site icon resolved for a browser window; \
+                                    keeping its application icon
+                                    """)
+                                return
+                            }
+
+                            // Deliberately not gated on the inspection generation. A generation
+                            // change means "do not touch the current presentation", not "this
+                            // window's active tab was wrong": dismissing the overlay or opening it
+                            // again both bump it, and discarding a resolved icon there is what made
+                            // the composed icon come and go. Publication below is still gated, and
+                            // reuse is revalidated by title, so recording it cannot show a stale
+                            // site for a tab that has since changed.
+
+                            let image = NSImage(
+                                cgImage: favicon,
+                                size: NSSize(width: favicon.width, height: favicon.height)
+                            )
+                            image.isTemplate = false
+
+                            // Recorded before any publication decision, for the same reason: an
+                            // Apple Event can take seconds, by which time a quick switch has
+                            // already closed the overlay.
+                            guard let entry = self.state.allWindowEntries.first(where: {
+                                $0.windowID == windowID
+                            }),
+                            !self.knownIncognitoWindowIDs.contains(windowID)
+                            else { return }
+
+                            let composed = entry.applicationIcon.map {
+                                BrowserWindowIcon.layered(siteIcon: image, browserIcon: $0)
+                            } ?? image
+                            self.rememberBrowserIcon(composed, for: windowID, title: entry.title)
+
+                            // A dismissal-time lookup exists only to warm the caches.
+                            guard let presentationID else { return }
+
+                            if self.state.setBrowserIcon(
+                                composed,
+                                for: windowID,
+                                presentationID: presentationID,
+                                isComposed: true
+                            ) != nil {
+                                Log.registry.info("published a layered site icon for a browser window")
+                            } else {
+                                Log.registry.info("""
+                                    a site icon arrived after its presentation ended; \
+                                    it will show on the next one
+                                    """)
+                            }
+                        }
+                    }
+                    pending.removeAll { completedWindowIDs.contains($0.windowID) }
+                }
+
+                guard !pending.isEmpty, attempt < retryDelays.count else { return }
+                do {
+                    try await Task.sleep(nanoseconds: retryDelays[attempt])
+                } catch {
+                    return
+                }
+            }
+        }
+
+        if allowPermissionPrompt {
+            browserAuthorizationTask?.cancel()
+            browserAuthorizationTask = task
         }
     }
 
     private func startCaptures(for entries: [WindowEntry], backingScale: CGFloat) {
+        let windows = entries.filter(\.isWindow)
+        guard !windows.isEmpty else { return }
+
         // Two ways to end up with no use for a screenshot: Icon View draws application icons
         // by choice, and the spiral cannot show a screenshot at all because its seats are
         // wedges. Either way capturing is work whose result is thrown away — and between them
@@ -534,7 +874,7 @@ public final class SwitcherController {
             await MainActor.run { self?.captureToken = token }
 
             await thumbnails.captureStills(
-                for: entries,
+                for: windows,
                 scale: backingScale,
                 token: token
             ) { windowID, image in
@@ -549,7 +889,9 @@ public final class SwitcherController {
     /// selected card, then a bounded live refresh of just that card.
     private func refreshSelectedPreview(backingScale: CGFloat) {
         guard state.viewMode.usesThumbnails, state.layoutStyle.canShowThumbnails else { return }
-        guard permissions.screenRecordingGranted, let entry = state.selectedEntry else { return }
+        guard permissions.screenRecordingGranted,
+              let entry = state.selectedEntry,
+              entry.isWindow else { return }
         let token = captureToken
 
         Task { [weak self, thumbnails] in
@@ -588,6 +930,8 @@ public final class SwitcherController {
         stopHoverTracking()
         removeClickMonitors()
         hoveredIndex = nil
+        invalidateBrowserTabLoad()
+        pendingSearchConfirmation = nil
         activateAsSoonAsReady = false
         state.isPersistent = false
         // Reset so a stray press starts a fresh presentation rather than being read as
@@ -607,9 +951,10 @@ public final class SwitcherController {
         }
 
         // Before the entries are released: asked now, with the overlay gone, so the Automation
-        // consent dialog cannot take focus away from a presentation. See the method comment.
+        // consent dialog cannot take focus away from a presentation. Use the unfiltered window
+        // snapshot rather than an active search's subset.
         if wasVisible {
-            learnIncognitoWindows(for: state.entries)
+            learnBrowserWindows(for: state.allWindowEntries)
         }
         state.releaseThumbnails()
 
@@ -622,7 +967,7 @@ public final class SwitcherController {
         // Stamped now rather than with the raise, so MRU ordering is already correct if the user
         // re-triggers during the delay. Requirement 2.2's reason for stamping eagerly applies
         // just as much when the raise itself is deferred.
-        if !entry.isTab {
+        if entry.isWindow {
             mruTracker.recordActivation(windowID: entry.windowID)
         }
 
@@ -651,12 +996,74 @@ public final class SwitcherController {
             // Requirement 7.7, 7.8.
             Log.activation.info("target window vanished before activation; leaving focus alone")
             mruTracker.forget(windowID: entry.windowID)
+        } catch ActivationService.Failure.applicationGone {
+            if let application = entry.launchableApplication {
+                discardUnavailableApplication(application)
+                NSSound.beep()
+                Log.activation.info("installed application is no longer available at its indexed path")
+            } else {
+                Log.activation.info("target application quit before activation; leaving focus alone")
+                if entry.isWindow {
+                    mruTracker.forget(windowID: entry.windowID)
+                }
+            }
         } catch {
             Log.activation.error("activation failed: \(String(describing: error), privacy: .public)")
         }
     }
 
-    private func commitSelection() {
+    private func handleApplicationLaunchFailure(
+        _ application: LaunchableApplication,
+        error: Error
+    ) {
+        discardUnavailableApplication(application)
+        NSSound.beep()
+        Log.activation.error(
+            "removed unlaunchable application \(application.name, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+    }
+
+    private func discardUnavailableApplication(_ application: LaunchableApplication) {
+        applicationCatalog.remove(application)
+        state.removeApplication(id: application.id)
+    }
+
+    private func resolvePendingSearchConfirmationIfReady() {
+        guard let pending = pendingSearchConfirmation else { return }
+        guard state.isVisible,
+              state.presentationID == pending.presentationID,
+              state.searchQuery == pending.query else {
+            pendingSearchConfirmation = nil
+            return
+        }
+        guard !state.isResolvingSearch else { return }
+
+        pendingSearchConfirmation = nil
+        commitSelection(intent: pending.intent)
+    }
+
+    private func commitSelection(intent: ConfirmationIntent = .selection) {
+        if state.isResolvingSearch {
+            pendingSearchConfirmation = PendingSearchConfirmation(
+                presentationID: state.presentationID,
+                query: state.searchQuery,
+                intent: intent
+            )
+            Log.overlay.debug("queued confirmation until local search sources settle")
+            return
+        }
+        pendingSearchConfirmation = nil
+
+        // Return owns the final web fallback. Mouse/trigger confirmation still means a selected
+        // local target, so if there is none it retains the established dismiss-without-action
+        // behaviour rather than unexpectedly opening a browser.
+        if case .returnKey = intent,
+           state.canOfferWebSearch,
+           let destination = WebSearch.destination(for: state.searchQuery) {
+            openInDefaultBrowser(destination)
+            return
+        }
+
         guard let entry = state.selectedEntry else {
             dismiss(activating: nil)
             return
@@ -665,13 +1072,14 @@ public final class SwitcherController {
         // on screen, and the thumbnail before `releaseThumbnails` drops it.
         let transition = planTransition(for: entry)
         let ghostImage = state.thumbnails[entry.windowID]
+        let ghostIcon = state.displayIcon(for: entry)
 
         // The overlay still goes away at once (Requirement 7.1); only the raise waits, and only
         // when there is an animation to see.
         dismiss(activating: entry, activationDelay: transition?.activationDelay ?? 0)
 
         if let transition {
-            runTransition(transition, for: entry, image: ghostImage)
+            runTransition(transition, for: entry, image: ghostImage, icon: ghostIcon)
         }
     }
 
@@ -688,7 +1096,7 @@ public final class SwitcherController {
     ///   across a desktop change looks like a glitch.
     /// - **Reduce Motion**, handled inside `WindowTransition.plan`.
     private func planTransition(for entry: WindowEntry) -> WindowTransition? {
-        guard !entry.isTab, !entry.isMinimized, entry.isOnActiveSpace else { return nil }
+        guard entry.isWindow, !entry.isMinimized, entry.isOnActiveSpace else { return nil }
         guard let panel, state.isVisible else { return nil }
         guard let index = state.entries.firstIndex(where: { $0.id == entry.id }) else { return nil }
 
@@ -724,11 +1132,12 @@ public final class SwitcherController {
     private func runTransition(
         _ transition: WindowTransition,
         for entry: WindowEntry,
-        image: CGImage?
+        image: CGImage?,
+        icon: NSImage?
     ) {
         let ghost = TransitionPanel(
             image: image,
-            icon: entry.applicationIcon,
+            icon: icon,
             startFrame: transition.start
         )
         // Held so the panel is not deallocated mid-animation, and released when it finishes.
@@ -953,6 +1362,12 @@ public final class SwitcherController {
             return
         }
 
+        invalidateBrowserInspections()
+        knownIncognitoWindowIDs.remove(entry.windowID)
+        incognitoResolvedWindowIDs.remove(entry.windowID)
+        // The id can be handed to a different window later, so the icon verified for this one
+        // must not outlive it.
+        forgetBrowserIcon(for: entry.windowID)
         mruTracker.forget(windowID: entry.windowID)
         Task { [thumbnails] in
             await thumbnails.stopLiveStream()
@@ -1145,6 +1560,7 @@ extension SwitcherController: TriggerMonitorDelegate {
         // With a search active, Escape backs out of the search first. Closing the whole
         // overlay on a mistyped letter would be a harsh way to learn that.
         if state.clearSearch() {
+            pendingSearchConfirmation = nil
             Log.overlay.debug("search cleared")
             afterSearchChanged()
             return
@@ -1154,6 +1570,7 @@ extension SwitcherController: TriggerMonitorDelegate {
 
     func searchCharactersTyped(_ characters: String) {
         guard state.isVisible else { return }
+        pendingSearchConfirmation = nil
         let changed = state.appendToSearch(characters)
         loadBrowserTabsIfNeeded()
         guard changed else { return }
@@ -1166,9 +1583,22 @@ extension SwitcherController: TriggerMonitorDelegate {
     /// per browser window, around 0.3 s in total, against a 150 ms budget for showing the
     /// overlay (Requirement 14.1). Typing is the moment the user is looking for something
     /// by name, and is the only moment tabs are worth that cost.
+    /// Relinquish ownership of an AppleScript request without waiting for its synchronous work
+    /// to return. The request-id check drops its eventual callback, and a reopened presentation
+    /// can start its own 750 ms deadline immediately even if the browser actor is still busy.
+    private func invalidateBrowserTabLoad() {
+        browserTabRequestID &+= 1
+        isLoadingBrowserTabs = false
+    }
+
     private func loadBrowserTabsIfNeeded() {
         guard !state.hasLoadedTabs, !isLoadingBrowserTabs else { return }
         isLoadingBrowserTabs = true
+        browserTabRequestID &+= 1
+
+        let requestID = browserTabRequestID
+        let presentationID = state.presentationID
+        let timeoutNanoseconds = Self.browserTabSearchTimeoutNanoseconds
 
         Task { [weak self, browserTabs] in
             let tabs = await browserTabs.tabs()
@@ -1179,30 +1609,88 @@ extension SwitcherController: TriggerMonitorDelegate {
                     uniquingKeysWith: { first, _ in first }
                 )
             }
+            let entries = tabs.map { tab in
+                WindowEntry.tabEntry(
+                    tab,
+                    application: applications[tab.browser.bundleIdentifier]
+                )
+            }
 
             await MainActor.run {
-                guard let self else { return }
-                self.isLoadingBrowserTabs = false
-                // The overlay may have been dismissed while the browsers were answering.
-                guard self.state.isVisible else { return }
+                self?.finishBrowserTabLoad(
+                    entries,
+                    requestID: requestID,
+                    presentationID: presentationID
+                )
+            }
+        }
 
-                let entries = tabs.map { tab in
-                    WindowEntry.tabEntry(
-                        tab,
-                        application: applications[tab.browser.bundleIdentifier]
-                    )
-                }
-                Log.registry.info("found \(entries.count) browser tabs to search")
-
-                if self.state.setTabs(entries) {
-                    self.afterSearchChanged()
-                }
+        // AppleScript is synchronous inside the browser service and cannot be cancelled while
+        // an Automation prompt or an unresponsive browser is holding it. Bound how long it may
+        // gate local application results; a late answer is deliberately ignored for this query
+        // so the selected app cannot suddenly be replaced under the user.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+            await MainActor.run {
+                self?.timeOutBrowserTabLoad(
+                    requestID: requestID,
+                    presentationID: presentationID
+                )
             }
         }
     }
 
+    private func finishBrowserTabLoad(
+        _ entries: [WindowEntry],
+        requestID: UInt64,
+        presentationID: Int
+    ) {
+        guard requestID == browserTabRequestID else { return }
+        isLoadingBrowserTabs = false
+
+        guard state.isVisible,
+              state.presentationID == presentationID,
+              !state.hasLoadedTabs else {
+            // If this result belonged to a dismissed presentation, free the slot and begin the
+            // currently visible search's own request rather than injecting stale tabs into it.
+            if state.isVisible, state.isSearching, state.presentationID != presentationID {
+                loadBrowserTabsIfNeeded()
+            }
+            return
+        }
+
+        Log.registry.info("found \(entries.count) browser tabs to search")
+        settleBrowserTabs(entries)
+    }
+
+    private func timeOutBrowserTabLoad(requestID: UInt64, presentationID: Int) {
+        guard requestID == browserTabRequestID else { return }
+        isLoadingBrowserTabs = false
+
+        guard state.isVisible,
+              state.presentationID == presentationID,
+              !state.hasLoadedTabs else {
+            if state.isVisible, state.isSearching, state.presentationID != presentationID {
+                loadBrowserTabsIfNeeded()
+            }
+            return
+        }
+
+        Log.registry.info("browser tab search exceeded 750 ms; continuing with applications")
+        settleBrowserTabs([])
+    }
+
+    private func settleBrowserTabs(_ entries: [WindowEntry]) {
+        let changed = state.setTabs(entries)
+        if changed {
+            afterSearchChanged()
+        }
+        resolvePendingSearchConfirmationIfReady()
+    }
+
     func searchBackspacePressed() {
         guard state.isVisible else { return }
+        pendingSearchConfirmation = nil
         guard state.backspaceSearch() else { return }
         afterSearchChanged()
     }
@@ -1216,26 +1704,17 @@ extension SwitcherController: TriggerMonitorDelegate {
         // because capture is scoped to what was on screen. Tabs are skipped: they have no
         // window to capture, and a browser screenshot would show whichever tab is currently
         // frontmost rather than the one being offered.
-        let capturable = state.entries.filter { !$0.isTab }
+        let capturable = state.entries.filter(\.isWindow)
         guard !capturable.isEmpty else { return }
         let scale = panel?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         startCaptures(for: capturable, backingScale: scale)
     }
 
     func confirmPressed() {
-        // Requirement 6.4.
+        // Requirement 6.4. The shared commit path queues this intent if tabs or applications
+        // are still resolving, then preserves Return's final web-search fallback once settled.
         guard state.isVisible else { return }
-
-        // A query that matched nothing is not a failure to act on, it is a different request:
-        // the window does not exist yet, so make one. Only when there is genuinely nothing to
-        // select — with any match at all, Return means "switch to it", as it always has.
-        if state.hasNoSearchMatches,
-           let destination = WebSearch.destination(for: state.searchQuery) {
-            openInDefaultBrowser(destination)
-            return
-        }
-
-        commitSelection()
+        commitSelection(intent: .returnKey)
     }
 
     /// Hand a destination to whichever browser the user has set as their default.

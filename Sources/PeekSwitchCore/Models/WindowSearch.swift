@@ -1,6 +1,7 @@
 import Foundation
+import Foundation
 
-/// Filtering the window list by a typed query.
+/// Filtering switchable windows, browser tabs and installed applications by a typed query.
 ///
 /// Pure and total, so the ranking can be tested without a running desktop.
 ///
@@ -14,7 +15,7 @@ import Foundation
 /// letters and commit without looking.
 enum WindowSearch {
 
-    /// How well one window matches, higher being better. `nil` means no match.
+    /// How well one result matches, higher being better. `nil` means no match.
     ///
     /// The ranking exists so that typing "saf" puts Safari's windows above a Notes window
     /// that happens to mention Safari in its title.
@@ -34,6 +35,14 @@ enum WindowSearch {
         }
 
         if application.hasPrefix(needle) { return 4 }
+
+        // "Open application" is presentation copy, not searchable application metadata.
+        // An installed app result therefore matches only its real name; otherwise typing
+        // "open" would offer every application on the machine.
+        if entry.isApplication {
+            return application.contains(needle) ? 2 : nil
+        }
+
         if title.hasPrefix(needle) { return 3 }
         if application.contains(needle) { return 2 }
         if title.contains(needle) { return 1 }

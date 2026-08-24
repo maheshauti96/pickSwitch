@@ -29,6 +29,9 @@ final class ActivationService {
     private let registry: WindowRegistry
     private let tabs: BrowserTabService
 
+    /// Called on the main actor when Launch Services rejects an indexed application.
+    var onApplicationLaunchFailure: ((LaunchableApplication, Error) -> Void)?
+
     init(registry: WindowRegistry, tabs: BrowserTabService) {
         self.registry = registry
         self.tabs = tabs
@@ -40,6 +43,31 @@ final class ActivationService {
     func activate(_ entry: WindowEntry, canUseAccessibility: Bool) throws -> Bool {
         let stopwatch = Stopwatch("activation", logger: Log.activation)
         defer { stopwatch.log() }
+
+        // An installed-application result is opened by bundle URL. It may not be running yet,
+        // which is precisely why resolving it through `NSRunningApplication` would be wrong.
+        if let application = entry.launchableApplication {
+            guard FileManager.default.fileExists(atPath: application.bundleURL.path) else {
+                throw Failure.applicationGone
+            }
+
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            let launchFailure = onApplicationLaunchFailure
+            NSWorkspace.shared.openApplication(
+                at: application.bundleURL,
+                configuration: configuration
+            ) { _, error in
+                guard let error else { return }
+                Log.activation.error(
+                    "could not open \(application.name, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
+                Task { @MainActor in
+                    launchFailure?(application, error)
+                }
+            }
+            return true
+        }
 
         // A tab is switched to through its browser, not by raising a window: the tab the
         // user picked may not be the one the browser is currently showing, so selecting it
@@ -117,9 +145,9 @@ final class ActivationService {
     /// Applications may still refuse — a document with unsaved changes typically raises
     /// its own save sheet instead, which is correct behaviour and not an error here.
     func close(_ entry: WindowEntry, canUseAccessibility: Bool) throws {
-        // Closing a tab would need the browser's scripting interface, and the affordance is
-        // not offered for tabs, so this should never be reached with one.
-        guard entry.tab == nil else { throw Failure.notClosable }
+        // Tabs and installed-app search results are not windows and never receive this
+        // affordance, so reaching either target kind here is always a programming error.
+        guard entry.isWindow else { throw Failure.notClosable }
         guard canUseAccessibility, let axWindow = entry.axElement else {
             throw Failure.notClosable
         }
@@ -144,6 +172,6 @@ final class ActivationService {
     /// one are rare, and the failure is handled: the press throws `notClosable` and the
     /// card stays put.
     func canAttemptClose(_ entry: WindowEntry, canUseAccessibility: Bool) -> Bool {
-        canUseAccessibility && entry.axElement != nil
+        entry.isWindow && canUseAccessibility && entry.axElement != nil
     }
 }

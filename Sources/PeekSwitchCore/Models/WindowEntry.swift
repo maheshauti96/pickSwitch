@@ -49,18 +49,28 @@ struct WindowEntry: Identifiable {
     /// Set when this entry is a browser tab rather than a window.
     ///
     /// A tab is reached through its browser's scripting interface, so it has no
-    /// `CGWindowID`, no Accessibility element and no z-order — `windowID` is zero and the
-    /// window-shaped machinery (thumbnail capture, display badges, the close button, MRU)
-    /// all skip it naturally rather than needing to be special-cased.
-    var tab: BrowserTab?
+    /// `CGWindowID`, Accessibility element or z-order.
+    private(set) var tab: BrowserTab?
 
-    /// A `CGWindowID` is not unique across tabs — every tab in a browser window would
-    /// share one — so identity is a string that distinguishes them.
+    /// Set when search is offering an installed application that has no matching window.
+    ///
+    /// Its bundle URL is the thing activation opens. Keeping this distinct from both windows
+    /// and tabs makes every window-only operation opt in through `isWindow` rather than
+    /// accidentally accepting a synthetic entry because it happens not to be a tab.
+    private(set) var launchableApplication: LaunchableApplication?
+
+    /// A `CGWindowID` is not unique across tabs, and launchable applications have no window id
+    /// at all, so each target kind owns a stable namespace. Application takes precedence in the
+    /// impossible malformed case where both optional payloads are supplied, matching activation.
     var id: String {
-        tab.map { "tab:\($0.identity)" } ?? "window:\(windowID)"
+        if let launchableApplication { return "application:\(launchableApplication.id)" }
+        if let tab { return "tab:\(tab.identity)" }
+        return "window:\(windowID)"
     }
 
-    var isTab: Bool { tab != nil }
+    var isApplication: Bool { launchableApplication != nil }
+    var isTab: Bool { launchableApplication == nil && tab != nil }
+    var isWindow: Bool { tab == nil && launchableApplication == nil }
 
     /// What the card shows on its title line. Some windows genuinely have no
     /// title (utility panels, freshly opened documents).
@@ -69,6 +79,7 @@ struct WindowEntry: Identifiable {
             let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return title.isEmpty ? tab.host : title
         }
+        if isApplication { return "Open application" }
         return title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? applicationName : title
     }
 
@@ -85,7 +96,26 @@ struct WindowEntry: Identifiable {
             isMinimized: false,
             zOrder: Int.max,
             axElement: nil,
-            tab: tab
+            tab: tab,
+            launchableApplication: nil
+        )
+    }
+
+    /// A selectable result that opens an installed application instead of raising a window.
+    static func applicationEntry(_ application: LaunchableApplication) -> WindowEntry {
+        WindowEntry(
+            windowID: 0,
+            processID: 0,
+            applicationName: application.name,
+            applicationIcon: application.icon,
+            bundleIdentifier: application.bundleIdentifier,
+            title: "",
+            frame: .zero,
+            isMinimized: false,
+            zOrder: Int.max,
+            axElement: nil,
+            tab: nil,
+            launchableApplication: application
         )
     }
 }
@@ -98,5 +128,6 @@ extension WindowEntry: Equatable {
             && lhs.frame == rhs.frame
             && lhs.zOrder == rhs.zOrder
             && lhs.tab == rhs.tab
+            && lhs.launchableApplication == rhs.launchableApplication
     }
 }

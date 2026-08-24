@@ -217,9 +217,17 @@ struct OverlayLayoutTests {
 
     // MARK: - Close affordance
 
-    /// The button must be inside the card it belongs to, or it would look like it
+    /// The button must be inside the item it belongs to, or it would look like it
     /// belongs to a neighbour.
-    @Test("The close button sits within its own card", arguments: OverlayLayoutStyle.allCases)
+    ///
+    /// Excludes the round styles, where `PositionedCard.frame` is the wedge's *content* box
+    /// rather than the item itself. Their button deliberately sits outside that box — on it, it
+    /// would be on top of the icon — and the equivalent containment check for them is
+    /// `closeAffordanceStaysInsideItsWedge`, which tests it against the wedge.
+    @Test(
+        "The close button sits within its own card",
+        arguments: OverlayLayoutStyle.allCases.filter { $0.radialWinding == nil }
+    )
     func closeButtonSitsWithinItsCard(style: OverlayLayoutStyle) {
         let subject = layout(style, count: 6, selected: 2)
 
@@ -230,6 +238,20 @@ struct OverlayLayoutTests {
             #expect(drawn.contains(button), "\(style): close button escapes card \(card.index)")
             #expect(isClose(button.width, OverlayLayout.CloseButton.size))
             #expect(isClose(button.height, OverlayLayout.CloseButton.size))
+        }
+    }
+
+    /// The size check still applies everywhere: the button never scales, so it stays a
+    /// comfortably clickable target whatever the arrangement has done to everything else.
+    @Test("The close button is a constant size", arguments: OverlayLayoutStyle.allCases)
+    func closeButtonIsAConstantSize(style: OverlayLayoutStyle) {
+        for count in [6, 25] {
+            let subject = layout(style, count: count, selected: 2)
+            for card in subject.positionedCards() {
+                let button = subject.closeButtonFrame(for: card, selectedScale: style.selectedScale)
+                #expect(isClose(button.width, OverlayLayout.CloseButton.size))
+                #expect(isClose(button.height, OverlayLayout.CloseButton.size))
+            }
         }
     }
 
@@ -941,6 +963,152 @@ struct OverlayLayoutTests {
                 y: geometry.centre.y + beyond * CGFloat(sin(angle))
             )
             #expect(hit(subject, atTopLeft: point) == nil)
+        }
+    }
+
+    // MARK: - The close affordance on a wedge
+
+    /// The bug this fixes: the button used to sit on the content box's corner, which is where the
+    /// icon is — so the cursor that had just hovered a wedge to select it was already on top of
+    /// "close this window". Aiming at the icon must select, never close.
+    @Test("Aiming at a wedge's icon selects it rather than closing it", arguments: radialStyles)
+    func aimingAtTheIconSelects(style: OverlayLayoutStyle) {
+        for selected in [0, 3, 7, 11] {
+            let subject = layout(style, count: 12, selected: selected)
+            guard let geometry = subject.radial else {
+                Issue.record("\(style) should have radial geometry")
+                return
+            }
+            let seat = geometry.seat(at: selected)
+
+            // Dead centre of the wedge, which is where the icon is drawn.
+            let icon = CGPoint(
+                x: geometry.centre.x + seat.midRadius * CGFloat(cos(seat.midAngle)),
+                y: geometry.centre.y + seat.midRadius * CGFloat(sin(seat.midAngle))
+            )
+            #expect(
+                subject.target(
+                    atPanelPoint: appKitPoint(icon, in: subject),
+                    scrollOffset: 0,
+                    selectedScale: style.selectedScale
+                ) == .card(selected),
+                "\(style): the icon of seat \(selected) was a close target"
+            )
+        }
+    }
+
+    /// It still has to be clickable where it is drawn, or the affordance is decorative.
+    @Test("The close affordance is clickable at its own frame", arguments: radialStyles)
+    func closeAffordanceIsClickable(style: OverlayLayoutStyle) {
+        for selected in [0, 5, 9] {
+            let subject = layout(style, count: 12, selected: selected)
+            guard
+                let card = subject.positionedCards().first(where: { $0.index == selected })
+            else {
+                Issue.record("selected card was not placed")
+                return
+            }
+            let button = subject.closeButtonFrame(for: card, selectedScale: style.selectedScale)
+            let centre = CGPoint(x: button.midX, y: button.midY)
+
+            #expect(
+                subject.target(
+                    atPanelPoint: appKitPoint(centre, in: subject),
+                    scrollOffset: 0,
+                    selectedScale: style.selectedScale
+                ) == .close(selected)
+            )
+        }
+    }
+
+    /// Drawn inside the wedge it belongs to, at every scale. A button hanging off the outer arc
+    /// would read as a detached dot rather than as part of the seat.
+    @Test("The close affordance stays inside its wedge", arguments: radialStyles)
+    func closeAffordanceStaysInsideItsWedge(style: OverlayLayoutStyle) {
+        // Includes counts that force the arrangement well down its scale range, where the wedge
+        // can be shallower than the button is tall.
+        for count in [3, 8, 16, 25] {
+            for selected in [0, count - 1] {
+                let subject = layout(
+                    style,
+                    count: count,
+                    selected: selected,
+                    available: CGSize(width: 1300, height: 805)
+                )
+                guard
+                    let geometry = subject.radial,
+                    let card = subject.positionedCards().first(where: { $0.index == selected })
+                else {
+                    Issue.record("\(style) with \(count) windows placed nothing")
+                    return
+                }
+
+                let button = subject.closeButtonFrame(for: card, selectedScale: style.selectedScale)
+                #expect(
+                    geometry.seatOffset(atContentPoint: CGPoint(x: button.midX, y: button.midY))
+                        == selected,
+                    "\(style)/\(count): the button left seat \(selected)"
+                )
+            }
+        }
+    }
+
+    /// Out at the wedge's trailing edge rather than over its middle, which is the whole point of
+    /// moving it. Measured as distance from the icon: the button has to be further out than the
+    /// icon's own edge.
+    @Test("The close affordance sits clear of the icon", arguments: radialStyles)
+    func closeAffordanceSitsClearOfTheIcon(style: OverlayLayoutStyle) {
+        // Every count from a roomy ring to the tightest the arrangement will draw, because the
+        // clearance shrinks with the scale and the crowded end is where it could close up.
+        for count in [3, 8, 16, 20, 25] {
+            let subject = layout(
+                style,
+                count: count,
+                selected: 0,
+                available: CGSize(width: 1300, height: 805)
+            )
+            guard
+                let geometry = subject.radial,
+                let card = subject.positionedCards().first(where: { $0.index == 0 })
+            else {
+                Issue.record("nothing placed for \(count)")
+                return
+            }
+
+            let seat = geometry.seat(at: 0)
+            let button = subject.closeButtonFrame(for: card, selectedScale: style.selectedScale)
+
+            // Further out than the middle of the wedge, where the icon is.
+            let buttonRadius = hypot(
+                button.midX - geometry.centre.x,
+                button.midY - geometry.centre.y
+            )
+            #expect(buttonRadius > seat.midRadius, "\(style)/\(count)")
+
+            // And towards the clockwise edge rather than centred on the wedge.
+            let buttonAngle = atan2(
+                Double(button.midY - geometry.centre.y),
+                Double(button.midX - geometry.centre.x)
+            )
+            #expect(buttonAngle > seat.midAngle, "\(style)/\(count)")
+            #expect(buttonAngle < seat.endAngle, "\(style)/\(count)")
+
+            // The claim that matters: no overlap with the icon as actually drawn — a square of
+            // the metric's icon side, centred in the content box's artwork band.
+            let metrics = OverlayLayoutStyle.circular
+                .cardMetrics(for: .icon)
+                .scaled(by: geometry.scale)
+            let side = min(metrics.artworkIconSize, metrics.size.height)
+            let icon = CGRect(
+                x: seat.contentFrame.midX - side / 2,
+                y: seat.contentFrame.midY - side / 2,
+                width: side,
+                height: side
+            )
+            #expect(
+                !button.intersects(icon),
+                "\(style)/\(count): the close affordance overlaps the icon"
+            )
         }
     }
 

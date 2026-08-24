@@ -10,6 +10,8 @@ import SwiftUI
 struct WindowRowView: View {
 
     let entry: WindowEntry
+    /// Favicon for a matched browser window, otherwise the application's own icon.
+    let displayIcon: NSImage?
     let isSelected: Bool
     let isHovered: Bool
     let badgeCount: Int?
@@ -41,7 +43,7 @@ struct WindowRowView: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            if let icon = entry.applicationIcon {
+            if let icon = displayIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: Self.iconSize, height: Self.iconSize)
@@ -70,6 +72,10 @@ struct WindowRowView: View {
 
             if entry.isTab {
                 TabBadge(isOnAccent: isSelected)
+            }
+
+            if entry.isApplication {
+                ApplicationBadge(isOnAccent: isSelected)
             }
 
             if isIncognito {
@@ -107,6 +113,7 @@ struct WindowRowView: View {
     private var accessibilityLabel: String {
         var parts = [entry.applicationName, entry.displayTitle]
         if let tab = entry.tab { parts.append("tab, \(tab.host)") }
+        if entry.isApplication { parts.append("installed application") }
         if isIncognito { parts.append("incognito") }
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }

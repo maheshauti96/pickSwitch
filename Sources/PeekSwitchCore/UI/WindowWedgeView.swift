@@ -23,6 +23,8 @@ import SwiftUI
 struct WindowWedgeView: View {
 
     let entry: WindowEntry
+    /// Favicon for a matched browser window, otherwise the application's own icon.
+    let displayIcon: NSImage?
     let seat: RadialLayout.Seat
     /// Centre of the arrangement in panel coordinates.
     let centre: CGPoint
@@ -113,21 +115,27 @@ struct WindowWedgeView: View {
 
     // MARK: - Contents
 
-    /// Whether the metadata block still has room for a legible name.
+    /// Whether the content box can hold both a two-line name and a useful icon.
     ///
-    /// The arrangement shrinks to seat every window, and past a point the name's block is
-    /// shorter than the smallest type worth setting in it. A cramped, clipped label is worse
-    /// than none: the icon is the faster identifier anyway, and the hub still spells out
-    /// whatever is under the pointer. So below the threshold the icon takes the whole box
-    /// rather than sharing it with something unreadable.
+    /// A radial label never degrades to one truncated line: it either gets enough room to wrap
+    /// or, once the arrangement is too small, disappears and leaves identification to the icon
+    /// and hub caption.
+    private var labelBandHeight: CGFloat {
+        metrics.titleFontSize * 2 + 6
+    }
+
+    private var contentSpacing: CGFloat { 2 }
+
     private var showsLabel: Bool {
-        metrics.metadataHeight >= metrics.titleFontSize + 4
+        let minimumLabeledIconHeight: CGFloat = 24
+        return metrics.size.height
+            >= labelBandHeight + contentSpacing + minimumLabeledIconHeight
     }
 
     @ViewBuilder
     private var content: some View {
         if showsLabel {
-            VStack(spacing: 3) {
+            VStack(spacing: contentSpacing) {
                 icon
                 label
             }
@@ -136,10 +144,12 @@ struct WindowWedgeView: View {
         }
     }
 
-    /// Without a label the icon may use the whole box, which is what keeps a heavily shrunken
-    /// arrangement identifiable at all.
+    /// Reserve the label's full two-line band first, then give the remaining height to the icon.
+    /// Without a label the icon may use the whole box, keeping a shrunken arrangement legible.
     private var iconBandHeight: CGFloat {
-        showsLabel ? metrics.artworkHeight : metrics.size.height
+        showsLabel
+            ? max(0, metrics.size.height - labelBandHeight - contentSpacing)
+            : metrics.size.height
     }
 
     private var iconSide: CGFloat {
@@ -148,9 +158,9 @@ struct WindowWedgeView: View {
 
     private var icon: some View {
         ZStack {
-            if let applicationIcon = entry.applicationIcon {
+            if let applicationIcon = displayIcon {
                 // `.interpolation(.high)`: a macOS icon arrives at 512pt and draws here at
-                // 46, and the default filter makes that downscale visibly mushy.
+                // roughly 44pt, and the default filter makes that downscale visibly mushy.
                 Image(nsImage: applicationIcon)
                     .resizable()
                     .interpolation(.high)
@@ -173,9 +183,9 @@ struct WindowWedgeView: View {
 
     /// The application name, plus whichever markers apply.
     ///
-    /// One line only. A wedge has about 76pt of arc at the hub radius, which is roughly ten
-    /// characters — enough to tell Slack from Safari, and not enough for a window title. The
-    /// hub spells the selected window out in full.
+    /// Every visible name may use two lines, so multi-word names such as “Google Chrome” wrap at
+    /// their word boundary rather than becoming “Googl…”. At scales too small for two legible
+    /// lines, `showsLabel` removes the label instead of bringing the truncation back.
     private var label: some View {
         HStack(spacing: 3) {
             if entry.isTab {
@@ -184,15 +194,20 @@ struct WindowWedgeView: View {
                     .foregroundStyle(isSelected ? palette.onAccentSecondaryText : palette.secondaryText)
             }
 
+            if entry.isApplication {
+                Image(systemName: "arrow.up.forward.app")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(isSelected ? palette.onAccentSecondaryText : palette.secondaryText)
+                    .help("Open installed application")
+            }
+
             Text(entry.applicationName)
                 .font(.system(size: metrics.titleFontSize, weight: .medium))
-                .lineLimit(1)
-                // Shrink a little before resorting to an ellipsis. "Google Chrome" is one
-                // point too wide for a wedge, and a ring of "Googl…" is most of what made the
-                // arrangement look untidy — a name that is 15% smaller reads fine, a name
-                // that is cut off does not.
-                .minimumScaleFactor(0.82)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
                 .truncationMode(.tail)
+                .layoutPriority(1)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(textColor)
 
             // The glyph alone, without the screen number that `DisplayBadge` also carries.
@@ -216,6 +231,7 @@ struct WindowWedgeView: View {
             }
         }
         .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
     }
 
     private var minimizedBadge: some View {
@@ -235,6 +251,7 @@ struct WindowWedgeView: View {
     private var accessibilityLabel: String {
         var parts = [entry.applicationName, entry.displayTitle]
         if let tab = entry.tab { parts.append("tab, \(tab.host)") }
+        if entry.isApplication { parts.append("installed application") }
         if isIncognito { parts.append("incognito") }
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }

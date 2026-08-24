@@ -166,6 +166,9 @@ public enum Diagnostics {
         // above read differently. Same for the arrangement, which decides the panel's shape.
         print("  each window shows: \(settings.overlayViewMode.displayName)")
         print("  arrangement: \(settings.overlayLayoutStyle.displayName)")
+        // Worth reporting because it is invisible until you try to screenshot and get a desktop
+        // with a hole in it.
+        print("  in screenshots: \(settings.includeOverlayInScreenshots ? "yes" : "no, hidden from capture")")
 
         if let warning = settings.triggerButton.conflictWarning {
             print("\n  Note on the current trigger button:")

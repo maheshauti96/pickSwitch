@@ -44,7 +44,15 @@ struct OverlayView: View {
             if state.entries.isEmpty {
                 emptyState
             } else {
+                // Rebuilt per presentation, which is what makes the entrance reliable rather
+                // than intermittent. A fresh subtree reads `isRevealed` as it stands — already
+                // false — instead of depending on a published change having been applied before
+                // the forced layout pass. See `OverlayState.presentationID`.
+                //
+                // Deliberately not keyed on the entry list: filtering a search must not replay
+                // the entrance, only a new presentation may.
                 arrangement
+                    .id(state.presentationID)
             }
 
             if state.isSearching {
@@ -136,6 +144,7 @@ struct OverlayView: View {
 
         return WindowCardView(
             entry: entry,
+            displayIcon: state.displayIcon(for: entry),
             thumbnail: state.thumbnails[entry.windowID],
             isSelected: isSelected,
             isHovered: card.index == hoveredIndex && !isSelected,
@@ -166,6 +175,7 @@ struct OverlayView: View {
 
         return WindowRowView(
             entry: entry,
+            displayIcon: state.displayIcon(for: entry),
             isSelected: isSelected,
             isHovered: card.index == hoveredIndex && !isSelected,
             badgeCount: state.badgeCount(for: entry),
@@ -254,10 +264,12 @@ struct OverlayView: View {
 
             WindowPreviewView(
                 entry: state.selectedEntry,
+                displayIcon: selectedDisplayIcon,
                 thumbnail: selectedThumbnail,
                 overlaysCaption: false,
                 showsLiveBadge: state.viewMode.usesThumbnails,
-                showsIconInsteadOfThumbnail: !state.viewMode.usesThumbnails,
+                showsIconInsteadOfThumbnail: !state.viewMode.usesThumbnails
+                    || state.selectedEntry?.isApplication == true,
                 display: selectedDisplay,
                 isIncognito: state.selectedEntry.map(state.isIncognito) ?? false
             )
@@ -291,6 +303,7 @@ struct OverlayView: View {
 
         return WindowWedgeView(
             entry: entry,
+            displayIcon: state.displayIcon(for: entry),
             seat: positioned.seat,
             centre: layout.radialCentre,
             panelSize: layout.panelSize,
@@ -352,8 +365,11 @@ struct OverlayView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(palette.text)
 
-                if selectedDisplay != nil || entry.isMinimized || state.isIncognito(entry) {
+                if entry.isApplication || selectedDisplay != nil || entry.isMinimized || state.isIncognito(entry) {
                     HStack(spacing: 4) {
+                        if entry.isApplication {
+                            ApplicationBadge()
+                        }
                         if state.isIncognito(entry) {
                             IncognitoBadge(size: max(9, 10 * scale))
                         }
@@ -381,6 +397,11 @@ struct OverlayView: View {
     }
 
     // MARK: - Selected window
+
+    private var selectedDisplayIcon: NSImage? {
+        guard let entry = state.selectedEntry else { return nil }
+        return state.displayIcon(for: entry)
+    }
 
     private var selectedThumbnail: CGImage? {
         guard let entry = state.selectedEntry else { return nil }
@@ -464,51 +485,70 @@ struct OverlayView: View {
         .padding(.top, layout.searchChrome)
     }
 
-    /// What a query that matched nothing says.
+    /// What an unresolved or final search miss says.
     ///
-    /// An offer rather than a dead end. The keystrokes meant "get me to this thing", and the
-    /// window not existing yet is a weak reason to refuse — so Return opens it instead, and the
-    /// wording says which of the two things it will do, since a query that looks like an address
-    /// goes straight there rather than through a search engine.
+    /// Browser tabs and the application catalog arrive asynchronously. Until both have settled,
+    /// this must read as progress rather than a dead end and must not advertise Return: the
+    /// controller intentionally ignores Return during the same interval. Once local sources have
+    /// all missed, the existing web fallback becomes the final offer.
     @ViewBuilder
     private var searchMissView: some View {
-        let destination = WebSearch.destination(for: state.searchQuery)
+        if state.isResolvingSearch {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(palette.secondaryText)
 
-        Image(systemName: destination == nil ? "magnifyingglass" : "arrow.up.forward.app")
-            .font(.system(size: 26, weight: .light))
-            .foregroundStyle(palette.secondaryText)
+            Text("Looking for matches…")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.text)
 
-        Text("No windows match")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(palette.text)
+            Text("Checking browser tabs and installed applications")
+                .font(.system(size: 10))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(palette.secondaryText)
 
-        if let destination {
-            // Stacked rather than one line, and wrapping: the empty-state panel is 320pt wide
-            // and a query plus its preamble does not fit beside the key chip.
-            VStack(spacing: 4) {
-                Text("Return")
-                    .font(.system(size: 10, weight: .semibold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(palette.accentFill)
-                    )
-                    .foregroundStyle(palette.onAccentText)
+            Text("Esc to clear")
+                .font(.system(size: 10))
+                .foregroundStyle(palette.secondaryText)
+        } else {
+            let destination = WebSearch.destination(for: state.searchQuery)
 
-                Text(promptText(for: destination))
-                    .font(.system(size: 10))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .foregroundStyle(palette.secondaryText)
+            Image(systemName: destination == nil ? "magnifyingglass" : "arrow.up.forward.app")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(palette.secondaryText)
+
+            Text("No windows or applications match")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.text)
+
+            if let destination {
+                // Stacked rather than one line, and wrapping: the empty-state panel is 320pt wide
+                // and a query plus its preamble does not fit beside the key chip.
+                VStack(spacing: 4) {
+                    Text("Return")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(palette.accentFill)
+                        )
+                        .foregroundStyle(palette.onAccentText)
+
+                    Text(promptText(for: destination))
+                        .font(.system(size: 10))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(palette.secondaryText)
+                }
+                .padding(.top, 2)
             }
-            .padding(.top, 2)
-        }
 
-        Text("Esc to clear")
-            .font(.system(size: 10))
-            .foregroundStyle(palette.secondaryText)
+            Text("Esc to clear")
+                .font(.system(size: 10))
+                .foregroundStyle(palette.secondaryText)
+        }
     }
 
     private func promptText(for destination: WebSearch.Destination) -> String {
