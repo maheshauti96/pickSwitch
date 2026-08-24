@@ -126,33 +126,45 @@ struct WindowWedgeView: View {
     /// A radial label never degrades to one truncated line: it either gets enough room to wrap
     /// or, once the arrangement is too small, disappears and leaves identification to the icon
     /// and hub caption.
+    /// Two lines of name plus the leading between them, and no more.
+    ///
+    /// Every point reserved here is a point the icon does not get, and the icon is what identifies
+    /// a window from across the ring. Two lines at 11pt need 26pt; the label was given 28.
     private var nameBandHeight: CGFloat {
-        metrics.titleFontSize * 2 + 6
+        metrics.titleFontSize * 2 + 4
     }
 
-    private var badgeRowHeight: CGFloat { badgeSize + 3 }
+    private var badgeRowHeight: CGFloat { badgeSize + 1 }
 
     /// Everything below the icon: the name, and the badge row when one is drawn.
     private var labelBandHeight: CGFloat {
         nameBandHeight + (showsBadges ? badgeRowHeight : 0)
     }
 
-    private var contentSpacing: CGFloat { 2 }
+    private var contentSpacing: CGFloat { 1 }
 
     /// The icon is the faster identifier and must stay usable, so the label only appears while
     /// this much of the box is still left for it.
     private var minimumLabeledIconHeight: CGFloat { 24 }
 
+    /// The icon a badge row is allowed to leave behind, which is deliberately more generous than
+    /// the floor for the name.
+    ///
+    /// Without the wider margin, enlarging the box made things worse rather than better on a busy
+    /// ring: at 80% scale the badge row began to fit where it previously had not, and paying for it
+    /// left a *smaller* icon than before. A marker is worth less than the icon it shrinks.
+    private var minimumBadgedIconHeight: CGFloat { 34 }
+
     private var showsLabel: Bool {
         metrics.size.height >= nameBandHeight + contentSpacing + minimumLabeledIconHeight
     }
 
-    /// Badges are the first thing to go: they now occupy a row of their own, and that row is worth
-    /// less than the icon it would otherwise shrink.
+    /// Badges are the first thing to go: they occupy a row of their own, and that row is worth less
+    /// than the icon it would otherwise shrink.
     private var showsBadges: Bool {
         guard hasBadges, showsLabel else { return false }
         return metrics.size.height
-            >= nameBandHeight + badgeRowHeight + contentSpacing + minimumLabeledIconHeight
+            >= nameBandHeight + badgeRowHeight + contentSpacing + minimumBadgedIconHeight
     }
 
     @ViewBuilder

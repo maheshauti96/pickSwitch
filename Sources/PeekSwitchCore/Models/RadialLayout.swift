@@ -66,7 +66,13 @@ struct RadialLayout: Equatable, Sendable {
     static let baseContentMargin: CGFloat = 4
 
     /// Height a seat's contents want: an icon with a name under it.
-    static let basePreferredContentHeight: CGFloat = 72
+    ///
+    /// Pushed close to what the wedge can geometrically hold — `contentSize` caps it at 72% of the
+    /// inscribed diagonal, about 78pt — because the icon gets whatever the name does not, and the
+    /// icon is the thing that identifies a window at ring distance. The few points this takes from
+    /// the box's width cost the label nothing: it needs room for "Google", not for the whole name
+    /// on one line.
+    static let basePreferredContentHeight: CGFloat = 76
 
     /// Seats in a full turn. Eight gives each one 45°.
     ///

@@ -223,7 +223,7 @@ struct OverlayCardMetrics: Equatable, Sendable {
         // The application icon is the fastest thing to recognise on a card — faster than
         // reading a title — so it is worth the extra points. Bounded by the footer height,
         // which is 48pt on a strip card.
-        iconSize: 24,
+        iconSize: 28,
         titleFontSize: 12,
         // The application name is the part people scan for, so it is no longer the
         // afterthought size it was.
@@ -241,7 +241,7 @@ struct OverlayCardMetrics: Equatable, Sendable {
         artworkHeight: 124,
         cornerRadius: 10,
         // A grid card's footer is 34pt, so this is close to the practical ceiling.
-        iconSize: 22,
+        iconSize: 26,
         titleFontSize: 12,
         subtitleFontSize: 11,
         showsSubtitle: false,
@@ -268,7 +268,7 @@ struct OverlayCardMetrics: Equatable, Sendable {
         showsSubtitle: true,
         usesApplicationNameAsPrimary: false,
         contentLayout: .metadataThenArtwork,
-        artworkIconSize: 72
+        artworkIconSize: 80
     )
 
     /// 232 × 158: the roomiest card, so the largest icon.
@@ -282,7 +282,7 @@ struct OverlayCardMetrics: Equatable, Sendable {
         showsSubtitle: true,
         usesApplicationNameAsPrimary: false,
         contentLayout: .metadataThenArtwork,
-        artworkIconSize: 76
+        artworkIconSize: 84
     )
 
     // MARK: - Spiral
@@ -297,7 +297,7 @@ struct OverlayCardMetrics: Equatable, Sendable {
     // positioned and shaped by `SpiralLayout`, which owns the angles and radii; these
     // metrics only describe what is drawn inside it.
 
-    /// The content box of a wedge: a 46pt icon over up to two lines naming the application.
+    /// The content box of a wedge: a 52pt icon over up to two lines naming the application.
     ///
     /// Short names remain on one line. Longer names wrap at a word boundary rather than turning
     /// "Google Chrome" into "Googl…"; the hollow middle still carries the selected window title.
@@ -307,7 +307,7 @@ struct OverlayCardMetrics: Equatable, Sendable {
     /// arrangement has had to shrink.
     static let spiral = OverlayCardMetrics(
         size: RadialLayout.baseContentSize,
-        artworkHeight: 46,
+        artworkHeight: 52,
         // Generous, to match a wedge 120pt deep. At 9 the corners read as square against
         // arcs that long.
         cornerRadius: 13,
@@ -319,13 +319,15 @@ struct OverlayCardMetrics: Equatable, Sendable {
         showsSubtitle: false,
         usesApplicationNameAsPrimary: true,
         contentLayout: .artworkThenMetadata,
-        artworkIconSize: 46
+        // A ceiling rather than the drawn size: the wedge gives the icon whatever the name and any
+        // badges leave, so this only has to be large enough not to cap it first.
+        artworkIconSize: 52
     )
 
     /// Identical to `spiral` by design. See the note above.
     static let iconSpiral = OverlayCardMetrics(
         size: RadialLayout.baseContentSize,
-        artworkHeight: 46,
+        artworkHeight: 52,
         cornerRadius: 13,
         iconSize: 0,
         titleFontSize: 11,
@@ -333,6 +335,6 @@ struct OverlayCardMetrics: Equatable, Sendable {
         showsSubtitle: false,
         usesApplicationNameAsPrimary: true,
         contentLayout: .artworkThenMetadata,
-        artworkIconSize: 46
+        artworkIconSize: 52
     )
 }
