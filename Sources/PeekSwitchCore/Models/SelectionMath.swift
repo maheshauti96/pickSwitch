@@ -49,7 +49,7 @@ enum SelectionMath {
 
     /// Collapse a continuous scroll delta into whole card steps (Requirement 4.2).
     ///
-    /// A Magic Mouse or an MX Master free-spinning wheel emits a stream of small
+    /// A trackpad or a free-spinning wheel emits a stream of small
     /// fractional deltas; a notched wheel emits one large one. Accumulating into a
     /// threshold gives both the same "one notch, one card" feel.
     struct ScrollAccumulator {

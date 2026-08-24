@@ -342,7 +342,7 @@ final class SettingsViewModel: ObservableObject {
                 self.captureState = .captured(captured)
             } else {
                 self.captureState = .failed(
-                    "That button can't be used — the left and right buttons are off limits. If nothing was detected at all, check the button isn't set to \"Do Nothing\" in Logi Options+, and see the note below."
+                    "That button can't be used — the left and right buttons are off limits. If nothing was detected at all, check the button isn't set to \"Do Nothing\" in your mouse's own software, and see the note below."
                 )
             }
         }

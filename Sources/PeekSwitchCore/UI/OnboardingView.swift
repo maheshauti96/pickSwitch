@@ -52,17 +52,20 @@ struct OnboardingView: View {
 
     /// Requirement 10.7.
     ///
-    /// The advice here is the opposite of what seems obvious, and getting it wrong
-    /// costs the user a long time: Logi Options+ intercepts the MX Master's extra
-    /// buttons inside its driver, so a thumb or Gesture button set to "Do Nothing"
-    /// reaches nothing at all — not PeekSwitch, not any event tap. Mapping it to a
-    /// keyboard shortcut is the only route.
+    /// The advice here is the opposite of what seems obvious, and getting it wrong costs the
+    /// user a long time. "Do Nothing" sounds like the setting that gets out of the way, and it
+    /// is the one that guarantees nothing arrives: a mouse holding a button inside its own
+    /// firmware swallows the press rather than passing it on, so no event tap at any level ever
+    /// sees it.
+    ///
+    /// Written without naming a vendor. Any mouse can be set up here, and the two failure modes
+    /// — the button reaches macOS, or it does not — are the same whoever made it.
     private var mouseSetup: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Label("Logitech MX Master setup", systemImage: "computermouse")
+            Label("Choosing a mouse button", systemImage: "computermouse")
                 .font(.system(size: 13, weight: .semibold))
 
-            Text("The wheel click works straight away. For a thumb or Gesture button, open Settings and use \u{201C}Detect Button\u{201D}, then press it.")
+            Text("The wheel click works straight away. For a side or thumb button, open Settings and use \u{201C}Detect Button\u{201D}, then press it.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -71,13 +74,13 @@ struct OnboardingView: View {
                 .font(.system(size: 11, weight: .semibold))
 
             VStack(alignment: .leading, spacing: 4) {
-                bullet("Make sure the button is not set to \u{201C}Do Nothing\u{201D} in Logi Options+; that discards the press.")
-                bullet("Otherwise, assign the button to \u{201C}Keyboard shortcut\u{201D} in Options+.")
-                bullet("Record F13. No Mac keyboard uses F13 by default.")
-                bullet("In PeekSwitch Settings, set the keyboard shortcut to F13.")
+                bullet("Open the configuration app that came with your mouse, if it has one.")
+                bullet("Check the button is not set to \u{201C}Do Nothing\u{201D}; that swallows the press.")
+                bullet("Assign it to Forward or Back, then try Detect Button again.")
+                bullet("Or assign it to a keyboard shortcut, and pick the same one in PeekSwitch Settings.")
             }
 
-            Text("PeekSwitch watches for mouse buttons ahead of tools like Logi Options+, so most extra buttons are reachable directly. A button that Options+ has remapped inside the mouse firmware never reaches the Mac at all, and the keyboard shortcut route covers that case \u{2014} it behaves exactly like a mouse button, tap to keep the switcher open, hold and release to switch.")
+            Text("PeekSwitch watches for mouse buttons earlier in the pipeline than mouse utilities do, so most extra buttons are reachable directly. A button the mouse keeps to itself never reaches the Mac at all, and the keyboard shortcut route covers that \u{2014} PeekSwitch handles the press and the release, so it behaves exactly like a mouse button: tap to keep the switcher open, hold and release to switch.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

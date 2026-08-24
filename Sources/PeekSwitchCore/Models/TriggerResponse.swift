@@ -3,9 +3,9 @@ import Foundation
 /// Where a trigger press came from.
 ///
 /// The two are not interchangeable, and that is the whole reason this type exists. A mouse button
-/// and a keyboard shortcut are both routed through one press/release path on purpose — an MX Master
-/// thumb button cannot reach an event tap at all, so the only way to use one is to map it to a
-/// shortcut in Logi Options+, and it should then behave exactly like a button. But a *real*
+/// and a keyboard shortcut are both routed through one press/release path on purpose — a button a
+/// mouse keeps inside its own firmware cannot reach an event tap at all, so the only way to use it
+/// is to assign it to a shortcut, and it should then behave exactly like a button. But a *real*
 /// keyboard shortcut carries an expectation that a button does not: the combination that opened
 /// something closes it again. Every switcher and spotlight on the system works that way.
 enum TriggerSource: Equatable, Sendable {

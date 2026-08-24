@@ -46,12 +46,12 @@ final class HotKeyMonitor {
 
     /// Register the shortcut, handling both press and release.
     ///
-    /// Release matters more than it looks. Logi Options+ intercepts an MX Master's
-    /// extra buttons at the driver level, so a thumb or Gesture button set to "Do
-    /// Nothing" never reaches an event tap at all — the only way to use it is to map
-    /// it to a keyboard shortcut in Options+. Handling `kEventHotKeyReleased` as well
-    /// as pressed means such a button then behaves exactly like a real mouse button:
-    /// tap to keep the strip open, hold and release to switch.
+    /// Release matters more than it looks. Some mice hold their extra buttons inside
+    /// the mouse itself, so the press never reaches an event tap at any level and the
+    /// only route to using that button is to assign it to a keyboard shortcut.
+    /// Handling `kEventHotKeyReleased` as well as pressed means a button routed that
+    /// way behaves exactly like a real mouse button: tap to keep the strip open, hold
+    /// and release to switch.
     ///
     /// - Returns: `false` only when registration itself failed. A `true` return does
     ///   **not** guarantee the shortcut will fire; see the type comment.

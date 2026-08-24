@@ -4,9 +4,9 @@ import Foundation
 /// The mouse button that opens the overlay (Requirement 12.2).
 ///
 /// Originally a three-case enum, now an arbitrary button number. The fixed list was
-/// wrong in practice: an MX Master 3's Gesture button, and the extra buttons on other
-/// mice, report numbers outside the middle/back/forward trio, so a closed set made
-/// them unusable. Settings pairs this with a capture control that reads whatever
+/// wrong in practice: plenty of mice put buttons outside the middle/back/forward trio
+/// and report numbers a closed set would never include, which made those buttons
+/// unusable. Settings pairs this with a capture control that reads whatever
 /// button the user actually presses, which beats asking them to guess a number.
 ///
 /// `number` is the `buttonNumber` macOS reports on `otherMouseDown` / `otherMouseUp`.
@@ -37,9 +37,10 @@ struct TriggerButton: Equatable, Hashable, Codable, Sendable {
 
     /// Wheel click.
     static let middle = TriggerButton(unchecked: 2)
-    /// The rear thumb button on an MX Master, "Back" in Logi Options+.
+    /// The rear side button found on most mice with more than three buttons, usually
+    /// labelled "Back".
     static let thumbBack = TriggerButton(unchecked: 3)
-    /// The forward thumb button, "Forward" in Logi Options+.
+    /// The front side button, usually labelled "Forward".
     static let thumbForward = TriggerButton(unchecked: 4)
 
     /// Offered in the Settings picker. Any other button reaches the setting through

@@ -102,11 +102,10 @@ final class TriggerMonitor {
     /// While true, the next button press is reported through
     /// `TriggerMonitorDelegate.buttonCaptured(number:)` instead of opening the overlay.
     ///
-    /// This exists because a fixed list of button numbers cannot cover real mice. The
-    /// MX Master 3's Gesture button, and the extra buttons on other models, report
-    /// numbers that no preset list would guess. Letting the user press the button they
-    /// want removes the guesswork, and also makes it obvious when a button never
-    /// arrives at all because Logi Options+ is consuming it.
+    /// This exists because a fixed list of button numbers cannot cover real mice: extra
+    /// buttons report numbers no preset list would guess. Letting the user press the
+    /// button they want removes the guesswork, and also makes it obvious when a button
+    /// never arrives at all because the mouse is keeping it to itself.
     var isCapturingButton = false
 
     // Requirement 5.13: three disables inside 60 s raises the warning.
@@ -312,13 +311,12 @@ final class TriggerMonitor {
 
     /// Tap locations to try, earliest in the event pipeline first.
     ///
-    /// `.cghidEventTap` is the crucial one. Mouse-remapping software — Logi Options+
-    /// especially — installs its own event tap at the *session* level and consumes the
-    /// extra mouse buttons there. A tap created at `.cgSessionEventTap` sits alongside
-    /// those consumers and simply never sees the button, which is exactly why an
-    /// MX Master thumb button appeared undetectable while other apps could clearly use
-    /// it. `.cghidEventTap` sits ahead of session-level taps, so the button arrives
-    /// before Options+ has a chance to swallow it.
+    /// `.cghidEventTap` is the crucial one. Mouse-remapping utilities install their own
+    /// event tap at the *session* level and consume the extra mouse buttons there. A tap
+    /// created at `.cgSessionEventTap` sits alongside those consumers and simply never
+    /// sees the button, which is exactly why a side button could appear undetectable here
+    /// while other applications used it perfectly well. `.cghidEventTap` sits ahead of
+    /// session-level taps, so the button arrives before anything else can swallow it.
     ///
     /// Creating a HID-level tap needs Input Monitoring, which PeekSwitch already
     /// requires. Session level is kept as a fallback for the case where the HID tap
@@ -509,16 +507,16 @@ final class TriggerMonitor {
         return String(utf16CodeUnits: buffer, count: length)
     }
 
-    /// Prefer the pixel-precision delta, which is what a free-spinning MX Master
-    /// wheel and a trackpad report. Notched wheels report only line deltas, so those
-    /// are scaled into comparable units.
+    /// Prefer the pixel-precision delta, which is what a trackpad and a free-spinning
+    /// wheel report. Notched wheels report only line deltas, so those are scaled into
+    /// comparable units.
     private static func scrollDelta(from event: CGEvent) -> Double {
         let pointDelta = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
         if pointDelta != 0 { return -pointDelta }
         let lineDelta = event.getDoubleValueField(.scrollWheelEventDeltaAxis1)
         if lineDelta != 0 { return -lineDelta * 10 }
 
-        // Horizontal wheels (the MX Master thumb wheel) report on axis 2.
+        // Horizontal wheels, where a mouse has one, report on axis 2.
         let horizontalPoint = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
         if horizontalPoint != 0 { return horizontalPoint }
         let horizontalLine = event.getDoubleValueField(.scrollWheelEventDeltaAxis2)

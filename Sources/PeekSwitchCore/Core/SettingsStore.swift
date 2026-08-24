@@ -35,8 +35,8 @@ final class SettingsStore {
     /// Requirement 12.8: defaults applied on a fresh install.
     ///
     /// The default trigger stays the middle button because it is the one button every
-    /// mouse has and it needs no Logi Options+ setup. Settings warns about the
-    /// browser middle-click cost and points at the thumb buttons.
+    /// mouse has and it needs no setting up anywhere else. Settings warns about the
+    /// browser middle-click cost and points at the side buttons.
     static let defaultTriggerButton: TriggerButton = .middle
     static let defaultHistoryDepth = 10
     /// Requirement 12.4.

@@ -59,42 +59,44 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            logitechNote
+            undetectedButtonNote
         }
     }
 
-    /// Placed right next to the Detect control, because this is where a Logitech user
-    /// discovers that their thumb button cannot be detected at all and needs to know
+    /// Placed right next to the Detect control, because this is where someone discovers that
+    /// a button they can plainly feel under their thumb cannot be detected, and needs to know
     /// why before concluding PeekSwitch is broken.
-    /// Placed next to Detect because this is where a Logitech user discovers their thumb
-    /// button cannot be seen, and needs to know why before concluding PeekSwitch is broken.
     ///
-    /// The order of the two routes is deliberate. Remapping to Back or Forward keeps
-    /// everything inside the mouse-button path that Detect already handles, and needs no
-    /// spare key on the keyboard. The keyboard route is the fallback, not the headline —
-    /// it was previously recommended with F13, which no laptop keyboard has.
-    private var logitechNote: some View {
+    /// Deliberately names no vendor. Every mouse maker ships a configuration app, several of
+    /// them capture the extra buttons the same way, and naming one would date the advice while
+    /// implying the others are fine. What matters to the user is the shape of the problem —
+    /// the button is being taken before macOS sees it — and that is the same everywhere.
+    ///
+    /// The order of the two routes is deliberate. Reassigning to Back or Forward keeps
+    /// everything inside the mouse-button path that Detect already handles, and needs no spare
+    /// key on the keyboard. The keyboard route is the fallback, not the headline.
+    private var undetectedButtonNote: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("Thumb or Gesture button not detected?")
+            Text("Extra button not detected?")
                 .font(.system(size: 11, weight: .semibold))
-            Text("Logi Options+ takes those buttons inside the mouse firmware, so no application can see them \u{2014} not PeekSwitch, and not Karabiner or BetterTouchTool either. Setting the button to \u{201C}Do Nothing\u{201D} does not help; that still discards the press.")
+            Text("Some mice hold their extra buttons inside the mouse itself, using the configuration app that came with it. A button held that way never reaches macOS, so no application can see it \u{2014} PeekSwitch included. Setting it to \u{201C}Do Nothing\u{201D} does not help; that still swallows the press.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Easiest fix: in Options+, assign the button to Forward (or Back). macOS then reports it as an ordinary mouse button \u{2014} click Detect Button above and press it.")
+            Text("Easiest fix: in your mouse's own software, assign the button to Forward or Back. macOS then reports it as an ordinary mouse button \u{2014} click Detect Button above and press it.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Alternative: assign it to a Keyboard shortcut in Options+, record a combination you can actually type such as \u{2318}\u{2325}\u{2303}Space, and pick the same one under Keyboard shortcut below.")
+            Text("Alternative: assign it to a keyboard shortcut there, record a combination you can actually type such as \u{2318}\u{2325}\u{2303}Space, and pick the same one under Keyboard shortcut below. PeekSwitch treats it exactly like a mouse button.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// The capture flow. A preset list cannot name every button on every mouse — an
-    /// MX Master's Gesture button reports a number no list would guess — so the
-    /// reliable way to configure it is to let the user press the button they mean.
+    /// The capture flow. No preset list can name every button on every mouse — plenty report
+    /// numbers a list would never guess — so the reliable way to configure it is to let the
+    /// user press the button they mean.
     @ViewBuilder
     private var captureRow: some View {
         switch model.captureState {

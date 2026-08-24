@@ -65,8 +65,8 @@ public enum Diagnostics {
 
     /// Where in the event pipeline the trigger tap can be installed.
     ///
-    /// Decides whether a remapped mouse button is reachable at all: software like Logi
-    /// Options+ consumes extra buttons with a session-level tap, so only a HID-level tap
+    /// Decides whether a remapped mouse button is reachable at all: mouse utilities
+    /// typically consume extra buttons with a session-level tap, so only a HID-level tap
     /// sees them.
     private static func reportTapLocation() {
         print("\nEvent tap placement")
@@ -82,7 +82,7 @@ public enum Diagnostics {
             print("  raw HID button monitor: \(monitor.isHIDMonitorRunning ? "running" : "NOT running")")
             if monitor.isHIDMonitorRunning {
                 print("  this reaches buttons macOS does not report as mouse events,")
-                print("  such as an MX Master thumb or Gesture button")
+                print("  such as the extra side or thumb buttons on many mice")
             }
         } else {
             print("  could not create an event tap; Input Monitoring is probably not granted")

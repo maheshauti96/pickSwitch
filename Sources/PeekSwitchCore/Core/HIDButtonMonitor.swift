@@ -8,9 +8,9 @@ import IOKit.hid
 /// A `CGEventTap` only sees buttons that macOS has turned into `otherMouseDown` /
 /// `otherMouseUp` events. Several buttons on real mice never become one:
 ///
-/// - The MX Master's thumb (Gesture) button reports a HID button usage that macOS does
-///   not translate into a numbered mouse button, so no tap at any level sees it.
-/// - Logitech Options+ can consume or rewrite buttons before they reach the event
+/// - Some report a HID button usage that macOS does not translate into a numbered mouse
+///   button at all, so no tap at any level sees it.
+/// - Mouse utilities can consume or rewrite buttons before they reach the event
 ///   stream. Observed directly: pressing the thumb button produced an event for
 ///   *button 2*, the wheel click, rather than a distinct number.
 ///
@@ -47,7 +47,7 @@ final class HIDButtonMonitor {
     /// This exists because a button can fail to appear for reasons that are invisible
     /// from the outside: it may be reported on a vendor-specific page rather than the
     /// standard Button page, or on a separate HID interface of the same physical mouse.
-    /// Logitech's HID++ protocol does exactly this. Guessing which is expensive;
+    /// Vendor protocols layered over HID do exactly this. Guessing which is expensive;
     /// watching the raw stream while the user presses the button is definitive.
     ///
     /// It cannot be a command-line flag: run from a terminal, macOS attributes Input
@@ -58,9 +58,9 @@ final class HIDButtonMonitor {
     /// buttons their mouse actually exposes.
     private(set) var highestObservedButton: Int = 0
 
-    /// Logitech's HID++ vendor usage page, as reported by an MX Master 3 over Bluetooth
+    /// A vendor HID++ usage page, measured on one mouse over Bluetooth
     /// alongside its Mouse and Pointer collections.
-    private static let logitechHIDPPUsagePage: UInt32 = 0xFF43
+    private static let vendorHIDPPUsagePage: UInt32 = 0xFF43
 
 
     deinit {
@@ -111,15 +111,17 @@ final class HIDButtonMonitor {
             // a core, and a switcher has no business spending any of it on pointer
             // motion.
             //
-            // Vendor pages are matched too. That is not speculative: an MX Master 3 on
-            // Bluetooth reports the usage pairs 0x1/0x6, 0x1/0x2, 0x1/0x1 *and*
-            // 0xff43/0x202, the last being Logitech's HID++ interface. Buttons that
-            // Options+ has diverted are announced there rather than on the Button page,
-            // so a filter limited to Button and Consumer can never see them.
+            // A vendor page is matched too, and that is measurement rather than
+            // speculation: one mouse on Bluetooth reported the usage pairs 0x1/0x6,
+            // 0x1/0x2, 0x1/0x1 *and* 0xff43/0x202, the last being its own HID++
+            // interface. Buttons its software had diverted were announced there rather
+            // than on the Button page, so a filter limited to Button and Consumer could
+            // never see them. Other makers use other pages; this one is included because
+            // it was verified, not because the mouse is special.
             let valueCriteria: [[String: Any]] = [
                 [kIOHIDElementUsagePageKey: kHIDPage_Button],
                 [kIOHIDElementUsagePageKey: kHIDPage_Consumer],
-                [kIOHIDElementUsagePageKey: Int(Self.logitechHIDPPUsagePage)],
+                [kIOHIDElementUsagePageKey: Int(Self.vendorHIDPPUsagePage)],
             ]
             IOHIDManagerSetInputValueMatchingMultiple(manager, valueCriteria as CFArray)
         }
@@ -210,7 +212,7 @@ final class HIDButtonMonitor {
     ///   0x01 Generic Desktop (non-motion usages)
     ///   0x09 Button
     ///   0x0C Consumer (some mice map extra buttons to Back/Forward here)
-    ///   0xFF00 and above, vendor-specific (Logitech HID++ lives here)
+    ///   0xFF00 and above, vendor-specific (where vendor button protocols live)
     ///
     /// Keyboard pages can never be logged, verbose mode or not.
     private static func isLoggableUsagePage(_ usagePage: UInt32) -> Bool {
@@ -251,7 +253,7 @@ final class HIDButtonMonitor {
             if motionUsages.contains(usage) { return }
         }
 
-        // The MX Master's horizontal thumb wheel reports as Consumer AC Pan, and it does
+        // A horizontal thumb wheel reports as Consumer AC Pan, and it does
         // so continuously: a single nudge produced 1830 log lines and buried the button
         // presses the log existed to find. Scrolling is never a trigger button, so it is
         // filtered out rather than merely tolerated.

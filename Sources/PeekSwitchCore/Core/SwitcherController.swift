@@ -1502,11 +1502,11 @@ public final class SwitcherController {
 
     /// The keyboard shortcut goes through exactly the same path as the mouse button.
     ///
-    /// This is deliberate rather than incidental. An MX Master thumb or Gesture button
-    /// cannot reach an event tap at all — Logi Options+ swallows those buttons in its
-    /// driver, even when they are set to "Do Nothing" — so the only way to use one is
-    /// to map it to a keyboard shortcut in Options+. Routing the shortcut through the
-    /// same press/release logic means such a button gets identical behaviour: tap to
+    /// This is deliberate rather than incidental. A button a mouse holds inside its own
+    /// firmware cannot reach an event tap at all — not even when it is set to "Do
+    /// Nothing", which swallows the press rather than passing it on — so the only way to
+    /// use such a button is to assign it to a keyboard shortcut. Routing the shortcut
+    /// through the same press/release logic means it then behaves identically: tap to
     /// keep the strip open, hold and release to switch.
     private func handleHotKeyPressed() {
         handlePress(from: .keyboardShortcut)
