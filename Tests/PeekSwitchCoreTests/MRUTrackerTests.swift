@@ -330,6 +330,48 @@ extension MRUTrackerTests {
         let order = ids(tracker.ordered(entries, historyDepth: 10))
         #expect(order == ids(tracker.ordered(entries.shuffled(), historyDepth: 10)))
     }
+
+    /// The tie is broken front-to-back, and that decides almost the whole list rather than a
+    /// detail of it: `WindowRegistry` stamps every window on the active Space with one shared
+    /// `seenAt`, so until something has been observed activating, this comparison *is* the order.
+    ///
+    /// It used to be broken by window id, which is creation order. The visible cost was an
+    /// application used moments earlier sitting ninth in the ring for no reason other than having
+    /// been opened late, while windows nobody had touched sat ahead of it.
+    @Test("Windows tied on a seen stamp are ordered front to back")
+    func simultaneouslySeenWindowsUseZOrder() {
+        let (tracker, _) = makeTracker()
+        // Window ids deliberately disagree with the stack: by id this is 3, 5, 7.
+        let entries = [
+            seen(id: 7, at: 500, zOrder: 2),
+            seen(id: 3, at: 500, zOrder: 1),
+            seen(id: 5, at: 500, zOrder: 3),
+        ]
+
+        #expect(ids(tracker.ordered(entries, historyDepth: 10)) == [3, 7, 5])
+    }
+
+    /// The case the user hit: nothing observed yet, because the app had just been relaunched, and
+    /// the window they had been using a moment ago must still come second.
+    ///
+    /// Second rather than first because slot zero is the window they are in now — that is what
+    /// makes hold-and-release mean "the other window".
+    @Test("The previously focused window ranks second with nothing observed")
+    func recentlyFrontWindowRanksSecondWhenNothingIsObserved() {
+        let (tracker, _) = makeTracker()
+        // The recently used window has the *highest* id here on purpose. Ordered by id it would
+        // land last, behind seven windows the user has not looked at, which is exactly the failure
+        // this reproduces.
+        let current = seen(id: 40, at: 500, zOrder: 0, app: "Wispr Flow")
+        let previous = seen(id: 900, at: 500, zOrder: 1, app: "Warp")
+        let older = (2...8).map { index in
+            seen(id: CGWindowID(100 + index), at: 500, zOrder: index, app: "Other \(index)")
+        }
+
+        let order = ids(tracker.ordered([current, previous] + older, historyDepth: 25))
+        #expect(order.first == 40)
+        #expect(order.dropFirst().first == 900, "got \(order)")
+    }
 }
 
 // MARK: - Pinned applications

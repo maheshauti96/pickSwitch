@@ -123,8 +123,20 @@ final class MRUTracker {
                 // That is the point of pinning it.
                 if lhs.pinned != rhs.pinned { return lhs.pinned }
                 if lhs.stamp != rhs.stamp { return lhs.stamp > rhs.stamp }
-                // Deterministic tiebreak; avoids the strip reshuffling between
-                // presentations when two windows share a timestamp.
+                // Front-to-back, and this tiebreak carries far more weight than it looks.
+                //
+                // Every window on the active Space is stamped with the *same* seen time — one
+                // `seenAt` for the whole enumeration — so the entire active-Space set ties here and
+                // this comparison alone decides its order. Breaking it by window id ordered them by
+                // creation, which is arbitrary: an app used moments ago could sit ninth simply for
+                // having been opened late. Z-order is the front-to-back stack, which Requirement 2.6
+                // already names as a good recency proxy, so a window that was recently in front
+                // ranks accordingly even with nothing observed about it.
+                if lhs.entry.zOrder != rhs.entry.zOrder {
+                    return lhs.entry.zOrder < rhs.entry.zOrder
+                }
+                // Deterministic last resort, so the arrangement cannot reshuffle between
+                // presentations.
                 return lhs.entry.windowID < rhs.entry.windowID
             }
             .map(\.entry)
@@ -200,13 +212,45 @@ final class MRUTracker {
 
     /// Stamp whichever window is focused in `app` right now.
     private func stampFocusedWindow(of app: NSRunningApplication) {
-        let element = AXUIElementCreateApplication(app.processIdentifier)
+        let pid = app.processIdentifier
+        let element = AXUIElementCreateApplication(pid)
         AXBridge.applyMessagingTimeout(element)
-        guard
-            let focused = AXBridge.element(element, kAXFocusedWindowAttribute as String),
-            let windowID = AXBridge.windowID(for: focused)
-        else { return }
-        recordActivation(windowID: windowID)
+
+        if let focused = AXBridge.element(element, kAXFocusedWindowAttribute as String),
+           let windowID = AXBridge.windowID(for: focused) {
+            recordActivation(windowID: windowID)
+            return
+        }
+
+        // Accessibility does not always answer for a window that plainly exists — some
+        // applications report no focused window, and the attribute can be refused outright.
+        // Silently recording nothing was the expensive outcome: an app the user genuinely just
+        // switched to kept no activation of its own and fell back to being ordered among the
+        // windows nobody has touched. The window server's own front-to-back list needs no
+        // permission and cannot decline.
+        if let windowID = Self.frontmostWindowID(ofProcess: pid) {
+            recordActivation(windowID: windowID)
+        }
+    }
+
+    /// The frontmost normal window belonging to `pid`, according to the window server.
+    private static func frontmostWindowID(ofProcess pid: pid_t) -> CGWindowID? {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else { return nil }
+
+        // The list arrives front to back, so the first match is the one in front.
+        for window in windows {
+            guard window[kCGWindowOwnerPID as String] as? pid_t == pid,
+                  // Layer zero excludes panels, menus and other chrome, which are not windows a
+                  // user thinks of switching to.
+                  window[kCGWindowLayer as String] as? Int == 0,
+                  let number = window[kCGWindowNumber as String] as? UInt32
+            else { continue }
+            return CGWindowID(number)
+        }
+        return nil
     }
 
     private func attachAXObserver(to app: NSRunningApplication) {
@@ -221,7 +265,18 @@ final class MRUTracker {
         let callback: AXObserverCallback = { _, element, _, refcon in
             guard let refcon else { return }
             let tracker = Unmanaged<MRUTracker>.fromOpaque(refcon).takeUnretainedValue()
-            guard let windowID = AXBridge.windowID(for: element) else { return }
+
+            if let windowID = AXBridge.windowID(for: element) {
+                tracker.recordActivation(windowID: windowID)
+                return
+            }
+            // The notification fired for an element that will not name a window — an application
+            // element rather than a window one, typically. The window server still knows which of
+            // that process's windows is in front, and losing the stamp entirely is worse.
+            var pid: pid_t = 0
+            guard AXUIElementGetPid(element, &pid) == .success,
+                  let windowID = MRUTracker.frontmostWindowID(ofProcess: pid)
+            else { return }
             tracker.recordActivation(windowID: windowID)
         }
 
