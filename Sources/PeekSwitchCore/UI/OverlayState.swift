@@ -316,12 +316,36 @@ final class OverlayState: ObservableObject {
             }
         }
 
-        guard matches.map(\.id) != entries.map(\.id) else { return false }
+        let results = matches + webSearchResults(for: query, alongside: matches)
+        guard results.map(\.id) != entries.map(\.id) else { return false }
 
         // The previous selection may have been filtered out, and after typing the best
         // match is what the user means — so selection returns to the top of the results.
-        reload(entries: matches, selectedIndex: matches.isEmpty ? nil : 0)
+        reload(entries: results, selectedIndex: results.isEmpty ? nil : 0)
         return true
+    }
+
+    /// The web-search result to offer after the local ones, if any.
+    ///
+    /// Offered only when something local matched. With nothing matching, the empty state already
+    /// makes the same offer as a full sentence, and it reads better there than a single card would —
+    /// so this exists to close the opposite gap, where one local match used to remove the option
+    /// entirely. Typing "grok" with Grok Bot installed had no way to reach the web at all.
+    ///
+    /// Last, never first. Switching is what the switcher is for, so a local window or application
+    /// always holds the default selection and Return keeps meaning "go to the thing I found".
+    private func webSearchResults(
+        for query: String,
+        alongside matches: [WindowEntry]
+    ) -> [WindowEntry] {
+        guard !matches.isEmpty,
+              !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let destination = WebSearch.destination(for: query)
+        else { return [] }
+
+        return [
+            .webSearchEntry(WebSearchTarget(query: query, destination: destination))
+        ]
     }
 
     func load(entries: [WindowEntry], selectedIndex: Int?) {

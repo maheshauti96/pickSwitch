@@ -17,8 +17,26 @@ import Foundation
 /// attaches to it. Auto-repeat makes it worse: hold ⌥Space, release Option a fraction before Space,
 /// and the repeats that follow genuinely have no Option flag at all.
 ///
-/// So the decision is made from the key code, which is always present, and it lives here where
-/// every branch can be enumerated in a test.
+/// The first fix for that passed the shortcut's key code straight through whenever it appeared, on
+/// the grounds that the key could not be trusted to be typing. It closed the overlay, and it cost
+/// more than expected: under ⌥Space a literal space could no longer be typed into the search filter
+/// at all. That was a bad trade. A search field that silently refuses one of the most common
+/// characters is not a small compromise, and it was reported as a bug within a day.
+///
+/// So the modifier state is consulted after all — just not the copy attached to the event. The
+/// caller queries the *live* keyboard state, which is a hardware question rather than event
+/// metadata, and is therefore not subject to whatever the window server had attached by the time
+/// this tap saw the key. With that available the two cases separate cleanly:
+///
+/// - The shortcut's key with the shortcut's modifiers actually held: the user is toggling. Answered
+///   with `dismiss` and consumed here, rather than passed through in the hope that the Carbon hotkey
+///   picks it up — this layer already knows what it means, and consuming it is what guarantees no
+///   space is typed.
+/// - The same key with those modifiers released: the user is typing. A space is a space.
+///
+/// The auto-repeat case that defeated the flags now resolves correctly for the same reason: if
+/// Option has genuinely been let go, the repeats that follow really are bare spaces, and typing them
+/// is the honest reading of what the keyboard is doing.
 enum ArrowDirection: Equatable, Sendable {
     case left
     case right
@@ -28,6 +46,14 @@ enum ArrowDirection: Equatable, Sendable {
 enum KeyResponse: Equatable, Sendable {
 
     case dismiss
+    /// The registered shortcut, pressed while its own overlay is up.
+    ///
+    /// Deliberately not `dismiss`. Escape backs out of an active search before it closes anything,
+    /// which is right for Escape and wrong for the shortcut: the combination that opened the overlay
+    /// closes it, and having it eat a query instead would be a different bug wearing the same
+    /// clothes. This routes to the same press handling the global hotkey uses, so the tap and the
+    /// hotkey cannot drift apart.
+    case triggerShortcut
     case confirm
     case deleteSearchCharacter
     case typeIntoSearch(String)
@@ -55,15 +81,20 @@ enum KeyResponse: Equatable, Sendable {
     ///
     /// - Parameters:
     ///   - keyCode: the virtual key code.
-    ///   - flags: the event's modifier flags. Treated as a hint only, for the reason above.
+    ///   - activeModifiers: the modifiers physically held at this moment, queried from the keyboard
+    ///     rather than read off the event. See the note above for why the event's own flags are not
+    ///     usable at this tap location.
     ///   - characters: what the key would type on the active layout, or `nil` for keys that type
     ///     nothing.
     ///   - shortcutKeyCode: the key code of the registered global shortcut, when there is one.
+    ///   - shortcutModifiers: the modifiers that shortcut requires. Empty for a shortcut that needs
+    ///     none, such as F13.
     static func forKeyDown(
         keyCode: Int64,
-        flags: CGEventFlags,
+        activeModifiers: CGEventFlags,
         characters: String?,
-        shortcutKeyCode: Int64?
+        shortcutKeyCode: Int64?,
+        shortcutModifiers: CGEventFlags = []
     ) -> KeyResponse {
         switch keyCode {
         case escapeKeyCode:
@@ -84,23 +115,23 @@ enum KeyResponse: Equatable, Sendable {
             break
         }
 
-        // The shortcut's own key is never typing while the overlay is up, whatever the flags say.
-        // Passing it through is what lets the hotkey receive it and close the overlay.
-        //
-        // The cost is deliberate and small: with ⌥Space as the shortcut, a literal space cannot be
-        // typed into the search filter. Search matches within titles and application names, so a
-        // space is rarely the character that finds a window — and a shortcut that cannot close the
-        // thing it opened is a far worse trade.
-        if let shortcutKeyCode, keyCode == shortcutKeyCode {
-            return .passThrough
+        // The shortcut pressed in full, while its own overlay is up, means close it. Handled here
+        // and consumed, rather than passed through for the Carbon hotkey to notice: this layer
+        // already knows what the combination means, and consuming it is what guarantees the key
+        // cannot also be typed.
+        if let shortcutKeyCode,
+           keyCode == shortcutKeyCode,
+           activeModifiers.isSuperset(of: shortcutModifiers) {
+            return .triggerShortcut
         }
 
         // A command or control chord is a shortcut, not typing — passing those through is what
         // keeps ⌘Tab and the like working while the overlay is up. Option is included because a
-        // chord is not text, even though it cannot be relied on to *appear* here.
-        guard !flags.contains(.maskCommand),
-              !flags.contains(.maskControl),
-              !flags.contains(.maskAlternate)
+        // chord is not text. Read from the live state, so a chord cannot slip through as text just
+        // because the event arrived here without its flags attached.
+        guard !activeModifiers.contains(.maskCommand),
+              !activeModifiers.contains(.maskControl),
+              !activeModifiers.contains(.maskAlternate)
         else { return .passThrough }
 
         guard let characters, WindowSearch.isSearchable(characters) else { return .passThrough }

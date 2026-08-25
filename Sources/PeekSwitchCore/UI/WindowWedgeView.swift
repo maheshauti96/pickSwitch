@@ -308,6 +308,9 @@ struct WindowWedgeView: View {
         var parts = [entry.applicationName, entry.displayTitle]
         if let tab = entry.tab { parts.append("tab, \(tab.host)") }
         if entry.isApplication { parts.append("installed application") }
+        // The one result that leaves the switcher entirely, so it says so: every other result
+        // raises something already open, and a screen reader user has no other way to tell.
+        if entry.isWebSearch { parts.append("opens in your browser") }
         if isIncognito { parts.append("incognito") }
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }

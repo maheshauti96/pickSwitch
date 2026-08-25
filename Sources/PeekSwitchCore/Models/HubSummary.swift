@@ -29,10 +29,16 @@ import Foundation
 /// fetched until the user starts typing and so would be missing at the moment the hub is read.
 struct HubSummary: Equatable {
 
-    /// The active site, for a browser window or tab whose destination is known.
-    let siteHost: String?
+    /// A label that identifies this result rather than repeating what the wedge already shows.
+    ///
+    /// Two things qualify. The active site of a browser window or tab, because a Chrome window whose
+    /// title never mentions GitHub is identified by `github.com` and by nothing else on screen. And
+    /// the action of a web-search result, because that is the one result which leaves the machine and
+    /// the title alone — the query — does not say so.
+    let identifyingSource: String?
 
-    /// The owning application, used only when there is no site and something else earns the line.
+    /// The owning application, used only when there is no identifying source and something else
+    /// earns the line.
     let applicationName: String
 
     /// Which of its application's windows this is, as "2 of 3". `nil` when the application has only
@@ -60,9 +66,9 @@ struct HubSummary: Equatable {
     /// it is qualifying something — "Warp · 2 of 3" answers a question that four copies of "Warp"
     /// cannot. A site host always earns the line, because nothing else on screen spells it out.
     var sourceLine: String? {
-        switch (siteHost, position) {
-        case let (host?, position?): return "\(host) · \(position)"
-        case let (host?, nil): return host
+        switch (identifyingSource, position) {
+        case let (source?, position?): return "\(source) · \(position)"
+        case let (source?, nil): return source
         case let (nil, position?): return "\(applicationName) · \(position)"
         case (nil, nil): return nil
         }
@@ -97,7 +103,10 @@ struct HubSummary: Equatable {
         windowCount: Int?,
         now: TimeInterval
     ) -> HubSummary {
-        let host: String? = {
+        let source: String? = {
+            // A web-search result names its action here. Its title is the query, which says what
+            // was typed but not that confirming it opens a browser.
+            if entry.isWebSearch { return entry.sourceLabel }
             guard let siteHost, !siteHost.isEmpty else { return nil }
             return siteHost
         }()
@@ -125,7 +134,7 @@ struct HubSummary: Equatable {
         }()
 
         return HubSummary(
-            siteHost: host,
+            identifyingSource: source,
             applicationName: entry.applicationName,
             position: position,
             isOnAnotherDesktop: isOnAnotherDesktop,

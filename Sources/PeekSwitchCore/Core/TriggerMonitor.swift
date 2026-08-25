@@ -15,6 +15,9 @@ protocol TriggerMonitorDelegate: AnyObject {
     func leftMousePressed(atScreenPoint point: CGPoint)
     func scrollReceived(delta: Double)
     func escapePressed()
+    /// The registered shortcut pressed again while the overlay is up. Distinct from
+    /// `escapePressed()`, which backs out of a search first.
+    func keyboardShortcutPressed()
     func confirmPressed()
     /// An arrow key pressed while the overlay is up, for moving the selection without the mouse.
     func arrowPressed(_ direction: ArrowDirection)
@@ -465,12 +468,21 @@ final class TriggerMonitor {
             // have reached.
             switch KeyResponse.forKeyDown(
                 keyCode: event.getIntegerValueField(.keyboardEventKeycode),
-                flags: event.flags,
+                // Queried from the keyboard rather than taken from `event.flags`. At
+                // `.cghidEventTap` the event's own flags are unreliable — see `KeyResponse` — and
+                // getting this wrong is what made a space untypeable under an ⌥Space shortcut.
+                activeModifiers: CGEventSource.flagsState(.combinedSessionState),
                 characters: Self.characters(from: event),
-                shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) }
+                shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) },
+                shortcutModifiers: monitor.keyboardShortcut?.eventFlags ?? []
             ) {
             case .dismiss:
                 monitor.dispatch { $0.escapePressed() }
+                return nil
+            case .triggerShortcut:
+                // Consumed, which is the point: the Carbon hotkey behind this would otherwise
+                // receive the same keystroke and act on it twice.
+                monitor.dispatch { $0.keyboardShortcutPressed() }
                 return nil
             case .confirm:
                 monitor.dispatch { $0.confirmPressed() }

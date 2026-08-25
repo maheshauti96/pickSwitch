@@ -1,4 +1,5 @@
 import Carbon.HIToolbox
+import CoreGraphics
 import Foundation
 
 /// A global keyboard shortcut for opening the overlay (Requirement 6).
@@ -20,6 +21,24 @@ struct HotKeyShortcut: Equatable, Hashable, Codable, Sendable, Identifiable {
     let displayName: String
 
     var id: String { "\(carbonModifiers)-\(keyCode)" }
+
+    /// The same modifiers expressed as `CGEventFlags`.
+    ///
+    /// Carbon's mask is what `RegisterEventHotKey` wants; this is what a live keyboard-state query
+    /// returns. The overlay's key handling needs to compare the two — to tell "the shortcut is being
+    /// pressed" from "that key is being typed" — and the translation belongs next to the value it
+    /// translates rather than in the event tap.
+    ///
+    /// Caps Lock is deliberately not carried across. It is a lock rather than a held modifier, and a
+    /// shortcut is never conditional on it.
+    var eventFlags: CGEventFlags {
+        var flags: CGEventFlags = []
+        if carbonModifiers & UInt32(cmdKey) != 0 { flags.insert(.maskCommand) }
+        if carbonModifiers & UInt32(optionKey) != 0 { flags.insert(.maskAlternate) }
+        if carbonModifiers & UInt32(controlKey) != 0 { flags.insert(.maskControl) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { flags.insert(.maskShift) }
+        return flags
+    }
 
     // MARK: - Presets
 

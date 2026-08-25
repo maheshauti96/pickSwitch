@@ -45,3 +45,15 @@ enum Fixture {
 func isClose(_ lhs: CGFloat, _ rhs: CGFloat, tolerance: CGFloat = 0.001) -> Bool {
     abs(lhs - rhs) <= tolerance
 }
+
+@MainActor
+extension OverlayState {
+
+    /// The visible results that are somewhere on this machine, excluding the web-search offer that
+    /// every non-empty query now appends.
+    ///
+    /// Most search assertions are about matching — which windows, tabs and applications a query
+    /// finds — and the web offer is not a match, it is the fallback that is always available. Naming
+    /// the distinction keeps those tests measuring what they were written to measure.
+    var localEntries: [WindowEntry] { entries.filter { !$0.isWebSearch } }
+}

@@ -1193,6 +1193,16 @@ public final class SwitcherController {
             dismiss(activating: nil)
             return
         }
+
+        // A web-search result leaves the machine rather than raising anything on it, so it is
+        // handled before the activation path that assumes a target to bring forward. Unlike the
+        // empty-state offer above, this one is reachable whatever else matched — which is the whole
+        // point of it being a result — so it is not restricted to Return.
+        if let webSearch = entry.webSearch {
+            openInDefaultBrowser(webSearch.destination)
+            return
+        }
+
         // Planned before dismissal, because it needs the card's frame while the panel is still
         // on screen, and the thumbnail before `releaseThumbnails` drops it.
         let transition = planTransition(for: entry)
@@ -1726,6 +1736,16 @@ extension SwitcherController: TriggerMonitorDelegate {
         onSelectionChanged()
     }
 
+    /// The shortcut pressed again while the overlay is up.
+    ///
+    /// Routed into the same press handling as the global hotkey rather than into `escapePressed()`.
+    /// The overlay's own event tap consumes the keystroke — it has to, or a space would be typed as
+    /// well — which means the Carbon hotkey never sees it, so this has to reproduce the hotkey's
+    /// behaviour exactly rather than approximate it with a dismissal.
+    func keyboardShortcutPressed() {
+        handlePress(from: .keyboardShortcut)
+    }
+
     func escapePressed() {
         // Requirement 8.1.
         guard state.isVisible else { return }
@@ -1942,11 +1962,14 @@ extension SwitcherController: TriggerMonitorDelegate {
 
     /// Hand a destination to whichever browser the user has set as their default.
     private func openInDefaultBrowser(_ destination: WebSearch.Destination) {
+        // Deliberately not phrased as "no window matched" any more. This is reached both from the
+        // empty state and from a web-search result the user picked while local matches were on
+        // screen, and a log line that asserted the first would be wrong half the time.
         switch destination {
         case .address:
-            Log.overlay.info("no window matched; opening the query as an address")
+            Log.overlay.info("opening the query as an address")
         case .search:
-            Log.overlay.info("no window matched; searching the web for the query")
+            Log.overlay.info("searching the web for the query")
         }
 
         // Dismissed first, so the overlay is gone before the browser comes forward rather than

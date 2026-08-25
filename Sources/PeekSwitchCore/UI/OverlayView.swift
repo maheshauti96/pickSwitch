@@ -96,13 +96,19 @@ struct OverlayView: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 10, weight: .semibold))
-                Text(state.searchQuery)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                // A caret, so an empty-looking field still reads as one being typed into.
-                Rectangle()
-                    .fill(palette.accent)
-                    .frame(width: 1.5, height: 13)
+                // The caret is grouped with the text at its own tighter spacing. Sharing the
+                // magnifier's 6pt put a visible gap between the last character and the caret, which
+                // read as a trailing space that had been typed — the one thing a search field must
+                // never lie about, since it is the only feedback that a keystroke landed.
+                HStack(spacing: 2) {
+                    Text(state.searchQuery)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    // A caret, so an empty-looking field still reads as one being typed into.
+                    Rectangle()
+                        .fill(palette.accent)
+                        .frame(width: 1.5, height: 13)
+                }
             }
             .foregroundStyle(palette.text)
             .padding(.horizontal, 11)

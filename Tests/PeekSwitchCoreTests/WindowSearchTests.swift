@@ -115,7 +115,7 @@ struct WindowSearchTests {
         #expect(state.appendToSearch("saf"))
         #expect(state.isSearching)
         #expect(state.searchQuery == "saf")
-        #expect(state.entries.count == 2)
+        #expect(state.localEntries.count == 2)
         // Selection returns to the top, because after typing the best match is the intent.
         #expect(state.selectedIndex == 0)
         #expect(state.selectedEntry?.applicationName == "Safari")
@@ -128,13 +128,13 @@ struct WindowSearchTests {
         state.load(entries: Self.windows, selectedIndex: 0)
 
         state.appendToSearch("cur")
-        #expect(state.entries.count == 1)
+        #expect(state.localEntries.count == 1)
 
         // "cu" is a looser query, so it matches more: Cursor by application prefix, and
         // Warp because its title contains "do(cu)ments".
         #expect(state.backspaceSearch())
         #expect(state.searchQuery == "cu")
-        #expect(state.entries.count == 2)
+        #expect(state.localEntries.count == 2)
         #expect(state.entries.first?.applicationName == "Cursor")
 
         state.backspaceSearch()
@@ -150,7 +150,7 @@ struct WindowSearchTests {
         let state = OverlayState()
         state.load(entries: Self.windows, selectedIndex: 0)
         state.appendToSearch("warp")
-        #expect(state.entries.count == 1)
+        #expect(state.localEntries.count == 1)
 
         #expect(state.clearSearch())
         #expect(state.entries.count == Self.windows.count)
@@ -190,10 +190,10 @@ struct WindowSearchTests {
         let state = OverlayState()
         state.load(entries: Self.windows, selectedIndex: 0)
         state.appendToSearch("safari")
-        #expect(state.entries.count == 2)
+        #expect(state.localEntries.count == 2)
 
         #expect(state.remove(windowID: 1))
-        #expect(state.entries.count == 1)
+        #expect(state.localEntries.count == 1)
 
         state.clearSearch()
         #expect(state.entries.count == Self.windows.count - 1)

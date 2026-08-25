@@ -59,18 +59,34 @@ struct WindowEntry: Identifiable {
     /// accidentally accepting a synthetic entry because it happens not to be a tab.
     private(set) var launchableApplication: LaunchableApplication?
 
+    /// Set when search is offering to take the query to the web.
+    ///
+    /// Web search used to be reachable only from the empty state: type something that matches
+    /// nothing, and Return would offer it. That left a real gap. Typing "grok" with Grok Bot
+    /// installed matched the application, so the offer never appeared and there was no way to
+    /// search for the word — the presence of one local match removed the option entirely, which is
+    /// not what "no matches" was supposed to mean.
+    ///
+    /// Making it an entry rather than another special case is what fixes that: it sits at the end of
+    /// the results, it is selected and confirmed like anything else, and every arrangement already
+    /// knows how to draw a list of entries. The empty state keeps its own prompt, because with
+    /// nothing else on screen a full sentence reads better than a lone card.
+    private(set) var webSearch: WebSearchTarget?
+
     /// A `CGWindowID` is not unique across tabs, and launchable applications have no window id
     /// at all, so each target kind owns a stable namespace. Application takes precedence in the
     /// impossible malformed case where both optional payloads are supplied, matching activation.
     var id: String {
+        if let webSearch { return "web:\(webSearch.query)" }
         if let launchableApplication { return "application:\(launchableApplication.id)" }
         if let tab { return "tab:\(tab.identity)" }
         return "window:\(windowID)"
     }
 
-    var isApplication: Bool { launchableApplication != nil }
-    var isTab: Bool { launchableApplication == nil && tab != nil }
-    var isWindow: Bool { tab == nil && launchableApplication == nil }
+    var isWebSearch: Bool { webSearch != nil }
+    var isApplication: Bool { webSearch == nil && launchableApplication != nil }
+    var isTab: Bool { webSearch == nil && launchableApplication == nil && tab != nil }
+    var isWindow: Bool { webSearch == nil && tab == nil && launchableApplication == nil }
 
     /// What a card shows where it names the *source* of an entry rather than the entry itself.
     ///
@@ -83,6 +99,7 @@ struct WindowEntry: Identifiable {
     /// what groups windows per application, what search matches against, and what the tint is keyed
     /// on, and none of those should start treating one browser as many applications.
     var sourceLabel: String {
+        if let webSearch { return webSearch.sourceLabel }
         if let tab, !tab.host.isEmpty { return tab.host }
         return applicationName
     }
@@ -90,6 +107,7 @@ struct WindowEntry: Identifiable {
     /// What the card shows on its title line. Some windows genuinely have no
     /// title (utility panels, freshly opened documents).
     var displayTitle: String {
+        if let webSearch { return webSearch.query }
         if let tab {
             let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return title.isEmpty ? tab.host : title
@@ -113,6 +131,30 @@ struct WindowEntry: Identifiable {
             axElement: nil,
             tab: tab,
             launchableApplication: nil
+        )
+    }
+
+    /// A selectable result that takes the query to the web.
+    ///
+    /// Named from the destination rather than generically, because "Search the web" and "Go to
+    /// grok.com" are different promises and the query alone does not say which one Return will keep.
+    static func webSearchEntry(_ target: WebSearchTarget) -> WindowEntry {
+        WindowEntry(
+            windowID: 0,
+            processID: 0,
+            // Never a real application name. This value is the key for per-application window
+            // counts, for grouping and for icon tints, and a synthetic result must not join any of
+            // those — a web search is not a fourth window of some application.
+            applicationName: target.sourceLabel,
+            applicationIcon: target.icon,
+            title: target.query,
+            frame: .zero,
+            isMinimized: false,
+            zOrder: Int.max,
+            axElement: nil,
+            tab: nil,
+            launchableApplication: nil,
+            webSearch: target
         )
     }
 
@@ -144,5 +186,46 @@ extension WindowEntry: Equatable {
             && lhs.zOrder == rhs.zOrder
             && lhs.tab == rhs.tab
             && lhs.launchableApplication == rhs.launchableApplication
+            && lhs.webSearch == rhs.webSearch
+    }
+}
+
+/// A web search offered as a selectable result.
+struct WebSearchTarget: Equatable {
+
+    /// Exactly what the user typed, which is what the result shows and what the destination encodes.
+    let query: String
+    let destination: WebSearch.Destination
+
+    /// The line naming what confirming this will do.
+    ///
+    /// Distinguishes the two destinations, because they are different promises: one opens a site the
+    /// user named, the other asks a search engine about a phrase. A single label for both would make
+    /// Return unpredictable in the one place where the switcher leaves the machine entirely.
+    var sourceLabel: String {
+        switch destination {
+        case .address(let url): return url.host.map { "Go to \($0)" } ?? "Go to site"
+        case .search: return "Search the web"
+        }
+    }
+
+    /// A template symbol, so it takes the palette's own text colour in either theme rather than
+    /// carrying a fixed one that would be wrong in one of them.
+    var icon: NSImage? {
+        let name: String
+        switch destination {
+        case .address: name = "arrow.up.forward.square"
+        case .search: name = "magnifyingglass"
+        }
+        guard let symbol = NSImage(
+            systemSymbolName: name,
+            accessibilityDescription: sourceLabel
+        ) else { return nil }
+
+        let configured = symbol.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: 96, weight: .regular)
+        ) ?? symbol
+        configured.isTemplate = true
+        return configured
     }
 }

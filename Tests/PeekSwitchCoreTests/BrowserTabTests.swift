@@ -144,7 +144,7 @@ struct BrowserTabTests {
         state.setTabs(chromeTabs)
 
         #expect(state.appendToSearch("grok"))
-        #expect(state.entries.count == 1)
+        #expect(state.localEntries.count == 1)
         #expect(state.entries.first?.isTab == true)
         #expect(state.selectedIndex == 0)
         #expect(state.selectedEntry?.tab?.host == "grok.com")
@@ -163,7 +163,7 @@ struct BrowserTabTests {
 
         // The browsers answer a moment later.
         #expect(state.setTabs(chromeTabs))
-        #expect(state.entries.count == 1)
+        #expect(state.localEntries.count == 1)
         #expect(state.entries.first?.tab?.host == "grok.com")
     }
 
@@ -176,9 +176,9 @@ struct BrowserTabTests {
         state.setTabs(chromeTabs)
 
         state.appendToSearch("grok")
-        #expect(state.entries.count == 2)
+        #expect(state.localEntries.count == 2)
         #expect(state.entries.first?.isTab == false)
-        #expect(state.entries.last?.isTab == true)
+        #expect(state.localEntries.last?.isTab == true)
     }
 
     @Test("Clearing the search puts the tabs away again")

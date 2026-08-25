@@ -352,7 +352,7 @@ struct HubFactsTests {
 
         #expect(subject.siteHost(for: windows[1]) == nil)
         let summary = subject.hubSummary(for: windows[1])
-        #expect(summary.siteHost == nil)
+        #expect(summary.identifyingSource == nil)
         #expect(summary.sourceLine == "Google Chrome \u{00B7} 2 of 3")
     }
 
