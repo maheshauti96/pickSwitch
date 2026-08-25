@@ -356,22 +356,15 @@ struct OverlayView: View {
         if let entry = state.selectedEntry {
             let frame = layout.radialHubFrame
 
-            // Scaled with the arrangement, since the hub shrinks along with everything else.
-            // Floored at 10pt, and the title gives up lines rather than shrinking past that:
-            // four lines of illegible type says less than two lines of readable type.
+            // Sizes, line counts and how far each line may shrink all come from `HubTypography`,
+            // which owns the one thing worth getting right here: every line shrinks to fit before it
+            // truncates, but only as far as the overlay's own legibility floors.
             let scale = layout.radialScale
-            let titleSize = max(10, 15 * scale)
-            // Three lines rather than the four this had before the source and status lines were
-            // added. That is the trade: two facts gained for one line of title. The disc is 192
-            // points across and a circle's usable area is its inscribed square, so there is no
-            // version of this where everything fits and nothing is given up.
-            let titleLines = scale > 0.8 ? 3 : 2
-            let detailSize = max(9, 11 * scale)
-            let statusSize = max(9, 10 * scale)
+            let type = HubTypography(radialScale: scale)
             let summary = state.hubSummary(for: entry)
             // Same threshold the title uses to give up a line: below it the disc is too narrow for
             // the age as well as the warning, and a half-truncated age is worse than none.
-            let statusLine = summary.statusLine(includingAge: scale > 0.8)
+            let statusLine = summary.statusLine(includingAge: type.isRoomy)
 
             VStack(spacing: 3 * scale) {
                 // What this window belongs to. For a browser window that is the site rather than
@@ -380,8 +373,11 @@ struct OverlayView: View {
                 // Absent entirely when it would only repeat the wedge — see `HubSummary.sourceLine`.
                 if let sourceLine = summary.sourceLine {
                     Text(sourceLine)
-                        .font(.system(size: detailSize, weight: .medium))
+                        .font(.system(size: type.sourceSize, weight: .medium))
                         .lineLimit(1)
+                        // A clipped host reads as a different host. Shrinking first means
+                        // "github.com" stays "github.com" rather than becoming "githu…".
+                        .minimumScaleFactor(type.sourceMinimumScale)
                         .truncationMode(.tail)
                         .foregroundStyle(palette.secondaryText)
                         .contentTransition(.opacity)
@@ -390,8 +386,12 @@ struct OverlayView: View {
                 // The title is the one thing a wedge has no room for, so the hub still spends most
                 // of what it has on this.
                 Text(entry.displayTitle)
-                    .font(.system(size: titleSize, weight: .semibold))
-                    .lineLimit(titleLines)
+                    .font(.system(size: type.titleSize, weight: .semibold))
+                    .lineLimit(type.titleLines)
+                    // The end of a title is often what tells it from its neighbours — two Slack
+                    // channels differ in their last few words — so it shrinks to fit before it
+                    // gives that end up, down to the floor and no further.
+                    .minimumScaleFactor(type.titleMinimumScale)
                     .multilineTextAlignment(.center)
                     // Cross-faded rather than replaced. Without this the title hard-cuts on every
                     // selection change, and unlike the entrance that happens continuously — once
@@ -419,8 +419,9 @@ struct OverlayView: View {
                         // rather than just raising a window, and how stale it is if it does.
                         if let statusLine {
                             Text(statusLine)
-                                .font(.system(size: statusSize, weight: .medium))
+                                .font(.system(size: type.statusSize, weight: .medium))
                                 .lineLimit(1)
+                                .minimumScaleFactor(type.statusMinimumScale)
                                 .truncationMode(.tail)
                                 .foregroundStyle(palette.secondaryText)
                                 .contentTransition(.opacity)
