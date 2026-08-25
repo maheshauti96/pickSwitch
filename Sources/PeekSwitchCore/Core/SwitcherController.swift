@@ -1623,6 +1623,33 @@ extension SwitcherController: TriggerMonitorDelegate {
         onSelectionChanged()
     }
 
+    /// Move the selection with the arrow keys.
+    ///
+    /// Shares everything below the step itself with scrolling — the same wrapping, the same
+    /// hover override, the same follow-up work — because they are the same gesture arriving from
+    /// a different device, and two paths would drift.
+    func arrowPressed(_ direction: ArrowDirection) {
+        guard state.isVisible, !state.entries.isEmpty else { return }
+
+        // The arrangement decides what the key means; a grid crosses a row where the others move
+        // one card.
+        let step = state.layout.selectionStep(for: direction)
+        guard step != 0 else { return }
+
+        let next = SelectionMath.advance(
+            current: state.selectedIndex,
+            by: step,
+            count: state.entries.count
+        )
+        guard next != state.selectedIndex else { return }
+
+        state.setSelection(next)
+        // The keyboard has taken over; a highlight left under a stationary pointer would now be
+        // claiming a selection that has moved on.
+        hoveredIndex = nil
+        onSelectionChanged()
+    }
+
     func escapePressed() {
         // Requirement 8.1.
         guard state.isVisible else { return }

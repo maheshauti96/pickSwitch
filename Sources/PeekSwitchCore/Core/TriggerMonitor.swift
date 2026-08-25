@@ -16,6 +16,8 @@ protocol TriggerMonitorDelegate: AnyObject {
     func scrollReceived(delta: Double)
     func escapePressed()
     func confirmPressed()
+    /// An arrow key pressed while the overlay is up, for moving the selection without the mouse.
+    func arrowPressed(_ direction: ArrowDirection)
     /// Printable characters typed while the overlay is up, for the search field.
     func searchCharactersTyped(_ characters: String)
     /// Backspace or forward delete, to shorten the search query.
@@ -475,6 +477,12 @@ final class TriggerMonitor {
                 return nil
             case .deleteSearchCharacter:
                 monitor.dispatch { $0.searchBackspacePressed() }
+                return nil
+            case .moveSelection(let direction):
+                // Consumed, like a typed character. The overlay is in front and the arrow is
+                // steering it; letting the same press also reach the window underneath would
+                // scroll the user's document while they were choosing which window to go to.
+                monitor.dispatch { $0.arrowPressed(direction) }
                 return nil
             case .typeIntoSearch(let characters):
                 // Consumed rather than passed through. The overlay is visibly in front and the

@@ -107,6 +107,65 @@ struct KeyResponseTests {
         )
     }
 
+    // MARK: - Arrow keys
+
+    /// All four arrows steer the overlay. They report a direction rather than a change of
+    /// selection, because what "up" means depends on the arrangement on screen.
+    @Test("Each arrow key reports its own direction")
+    func arrowsReportTheirDirection() {
+        let expected: [(Int64, ArrowDirection)] = [
+            (KeyResponse.leftArrowKeyCode, .left),
+            (KeyResponse.rightArrowKeyCode, .right),
+            (KeyResponse.upArrowKeyCode, .up),
+            (KeyResponse.downArrowKeyCode, .down),
+        ]
+
+        for (keyCode, direction) in expected {
+            #expect(
+                KeyResponse.forKeyDown(
+                    keyCode: keyCode,
+                    flags: Self.noModifiers,
+                    characters: nil,
+                    shortcutKeyCode: nil
+                ) == .moveSelection(direction)
+            )
+        }
+    }
+
+    /// An arrow must not also reach the window underneath. It is consumed, like a typed
+    /// character — otherwise choosing a window would scroll the document behind it.
+    @Test("Arrows are never passed through")
+    func arrowsAreConsumed() {
+        for keyCode in [
+            KeyResponse.leftArrowKeyCode,
+            KeyResponse.rightArrowKeyCode,
+            KeyResponse.upArrowKeyCode,
+            KeyResponse.downArrowKeyCode,
+        ] {
+            let response = KeyResponse.forKeyDown(
+                keyCode: keyCode,
+                flags: Self.noModifiers,
+                characters: nil,
+                shortcutKeyCode: nil
+            )
+            #expect(response != .passThrough, "key \(keyCode) reached the app underneath")
+        }
+    }
+
+    /// Arrows keep working while a search is being typed, and they outrank the shortcut check:
+    /// an arrow is never text, so there is nothing for the search field to gain from it.
+    @Test("An arrow still steers when it is also the shortcut's key")
+    func arrowWinsOverTheShortcutCheck() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: KeyResponse.downArrowKeyCode,
+                flags: Self.noModifiers,
+                characters: nil,
+                shortcutKeyCode: KeyResponse.downArrowKeyCode
+            ) == .moveSelection(.down)
+        )
+    }
+
     @Test("Both delete keys shorten the query", arguments: [
         KeyResponse.deleteKeyCode, KeyResponse.forwardDeleteKeyCode,
     ])

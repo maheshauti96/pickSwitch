@@ -163,8 +163,13 @@ card, or tap again, to switch.
 | Tap again while open | Switch to the selected window |
 | Click a card | Switch to it |
 | Keyboard shortcut | Open it, and press again to close it |
+| Arrow keys | Move the selection — a grid moves by a row, everything else by one window |
+| Return | Switch to the selected window |
 | Start typing | Filter by app, title, browser tab or installed app |
 | Escape, or click outside | Close without switching |
+
+Once it is open you can finish the job entirely from the keyboard — arrows to choose,
+Return to switch — or entirely from the mouse. Neither is the "real" way.
 
 ---
 

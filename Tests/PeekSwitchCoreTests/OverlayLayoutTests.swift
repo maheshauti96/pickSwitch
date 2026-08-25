@@ -37,6 +37,57 @@ struct OverlayLayoutTests {
         )
     }
 
+    // MARK: - Keyboard navigation
+
+    /// Every arrangement answers all four arrows. An arrow that did nothing would teach the user
+    /// that the keyboard is unreliable here, and the cost of accepting it is nothing.
+    @Test("Every arrangement moves for every arrow", arguments: OverlayLayoutStyle.allCases)
+    func everyArrowMovesTheSelection(style: OverlayLayoutStyle) {
+        let subject = layout(style, count: 12)
+
+        for direction in [ArrowDirection.left, .right, .up, .down] {
+            #expect(
+                subject.selectionStep(for: direction) != 0,
+                "\(style) ignores \(direction)"
+            )
+        }
+    }
+
+    /// Left goes back and right goes forward, in every arrangement. On the ring styles that reads
+    /// as anticlockwise and clockwise, since the seats run clockwise from the top.
+    @Test("Left goes back and right goes forward", arguments: OverlayLayoutStyle.allCases)
+    func horizontalArrowsAreOpposites(style: OverlayLayoutStyle) {
+        let subject = layout(style, count: 12)
+
+        #expect(subject.selectionStep(for: .left) == -1)
+        #expect(subject.selectionStep(for: .right) == 1)
+    }
+
+    /// The one arrangement where vertical is not simply "the next window": a grid has to cross a
+    /// whole row, so the selection stays in the column it was in. Only the layout knows how wide
+    /// a row currently is, which is why this decision lives here.
+    @Test("A grid moves by a row vertically")
+    func gridArrowsCrossARow() {
+        let subject = layout(.grid, count: 12)
+        let columns = subject.gridColumns
+
+        #expect(columns > 1, "the fixture needs more than one column to be meaningful")
+        #expect(subject.selectionStep(for: .down) == columns)
+        #expect(subject.selectionStep(for: .up) == -columns)
+    }
+
+    /// Everything that is not a grid treats up and down as the previous and next window.
+    @Test(
+        "Vertical arrows move one card outside a grid",
+        arguments: OverlayLayoutStyle.allCases.filter { $0 != .grid }
+    )
+    func verticalArrowsMoveOneCard(style: OverlayLayoutStyle) {
+        let subject = layout(style, count: 12)
+
+        #expect(subject.selectionStep(for: .up) == -1)
+        #expect(subject.selectionStep(for: .down) == 1)
+    }
+
     /// Convert a point in panel top-left coordinates to the AppKit bottom-left
     /// coordinates that hit-testing consumes, exactly as the panel does.
     private func appKitPoint(_ point: CGPoint, in layout: OverlayLayout) -> CGPoint {

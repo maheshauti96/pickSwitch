@@ -19,12 +19,24 @@ import Foundation
 ///
 /// So the decision is made from the key code, which is always present, and it lives here where
 /// every branch can be enumerated in a test.
+enum ArrowDirection: Equatable, Sendable {
+    case left
+    case right
+    case up
+    case down
+}
 enum KeyResponse: Equatable, Sendable {
 
     case dismiss
     case confirm
     case deleteSearchCharacter
     case typeIntoSearch(String)
+    /// An arrow key, reported as the direction pressed rather than as a change of selection.
+    ///
+    /// What "up" means depends on the arrangement — a row in a grid, the previous card in a
+    /// list, one step back around a ring — and this layer has no business knowing which is on
+    /// screen. It says which key was pressed; `OverlayLayout` decides what that moves.
+    case moveSelection(ArrowDirection)
     /// Leave the event alone and let it continue down the pipeline.
     case passThrough
 
@@ -34,6 +46,10 @@ enum KeyResponse: Equatable, Sendable {
     static let keypadEnterKeyCode: Int64 = 76
     static let deleteKeyCode: Int64 = 51
     static let forwardDeleteKeyCode: Int64 = 117
+    static let leftArrowKeyCode: Int64 = 123
+    static let rightArrowKeyCode: Int64 = 124
+    static let downArrowKeyCode: Int64 = 125
+    static let upArrowKeyCode: Int64 = 126
 
     /// Resolve one `keyDown`.
     ///
@@ -56,6 +72,14 @@ enum KeyResponse: Equatable, Sendable {
             return .confirm
         case deleteKeyCode, forwardDeleteKeyCode:
             return .deleteSearchCharacter
+        case leftArrowKeyCode:
+            return .moveSelection(.left)
+        case rightArrowKeyCode:
+            return .moveSelection(.right)
+        case upArrowKeyCode:
+            return .moveSelection(.up)
+        case downArrowKeyCode:
+            return .moveSelection(.down)
         default:
             break
         }

@@ -175,6 +175,41 @@ struct OverlayLayout: Equatable {
         }
     }
 
+    // MARK: - Keyboard navigation
+
+    /// How far an arrow key moves the selection in this arrangement, in list positions.
+    ///
+    /// The arrangements disagree about what an arrow means, and the disagreement is the whole
+    /// reason this lives here rather than in the key handling. A grid is the only one where up
+    /// and down are not simply "the previous and next window" — they cross a whole row, and only
+    /// the layout knows how wide a row currently is.
+    ///
+    /// Every arrangement accepts all four keys rather than only the two along its own axis. On a
+    /// horizontal strip, pressing Down to mean "further along" is a reasonable thing to try, and
+    /// having it do nothing teaches the user that the keyboard is unreliable here. The cost of
+    /// accepting it is nothing; the cost of ignoring it is a feature that feels broken.
+    func selectionStep(for direction: ArrowDirection) -> Int {
+        switch style {
+        case .grid:
+            // A row at a time vertically, so the selection tracks the column it was in.
+            switch direction {
+            case .left: return -1
+            case .right: return 1
+            case .up: return -gridColumns
+            case .down: return gridColumns
+            }
+
+        case .strip, .list, .circular, .spiral:
+            // Left and up go back, right and down go forward. For the ring arrangements that
+            // means anticlockwise and clockwise, since the seats are laid out clockwise from
+            // the top.
+            switch direction {
+            case .left, .up: return -1
+            case .right, .down: return 1
+            }
+        }
+    }
+
     // MARK: - Grid geometry
 
     var gridColumns: Int {
