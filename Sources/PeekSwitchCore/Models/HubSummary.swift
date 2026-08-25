@@ -70,9 +70,14 @@ struct HubSummary: Equatable {
 
     /// The line below the title, or `nil` when there is nothing to say. A window on the desktop you
     /// are already looking at needs no line: that is the unremarkable case.
-    var statusLine: String? {
+    ///
+    /// - Parameter includingAge: `false` on a scaled-down arrangement. At the smallest size the hub
+    ///   is about 124 points across, and the full phrase truncates mid-token to something like
+    ///   "Another desktop · 2…", which reads worse than not saying it. The warning is the part worth
+    ///   keeping, so the age is what goes — the same trade the title makes when it gives up a line.
+    func statusLine(includingAge: Bool = true) -> String? {
         guard isOnAnotherDesktop else { return nil }
-        guard let lastSeen else { return "Another desktop" }
+        guard includingAge, let lastSeen else { return "Another desktop" }
         return "Another desktop · \(lastSeen)"
     }
 

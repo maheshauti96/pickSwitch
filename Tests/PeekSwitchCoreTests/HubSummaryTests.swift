@@ -91,20 +91,20 @@ struct HubSummaryTests {
     func onThisDesktopIsSilent() {
         let result = summary(window(onActiveSpace: true))
         #expect(result.isOnAnotherDesktop == false)
-        #expect(result.statusLine == nil)
+        #expect(result.statusLine() == nil)
     }
 
     @Test("a window on another desktop says so, with its age")
     func anotherDesktopWithAge() {
         let result = summary(window(onActiveSpace: false, seenAgo: 20 * 60))
-        #expect(result.statusLine == "Another desktop · 20m ago")
+        #expect(result.statusLine() == "Another desktop · 20m ago")
     }
 
     /// A window on another Space that this session has never seen has no stamp to report, and the
     /// warning is worth giving without one.
     @Test("a window on another desktop with no history still warns")
     func anotherDesktopWithoutHistory() {
-        #expect(summary(window(onActiveSpace: false)).statusLine == "Another desktop")
+        #expect(summary(window(onActiveSpace: false)).statusLine() == "Another desktop")
     }
 
     /// The rule that makes recency worth showing at all. Every window on the active Space is stamped
@@ -115,7 +115,7 @@ struct HubSummaryTests {
     func recencyIsSuppressedOnThisDesktop() {
         let result = summary(window(onActiveSpace: true, seenAgo: 0))
         #expect(result.lastSeen == nil)
-        #expect(result.statusLine == nil)
+        #expect(result.statusLine() == nil)
     }
 
     /// A stamp from the future means the clock moved, not that the window is about to be used.
@@ -169,5 +169,25 @@ struct HubSummaryTests {
     ])
     func relativeAges(seconds: TimeInterval, expected: String) {
         #expect(HubSummary.relativeAge(seconds) == expected)
+    }
+}
+
+extension HubSummaryTests {
+
+    /// At its smallest the hub is about 124 points across and the full phrase truncates mid-token to
+    /// something like "Another desktop · 2…". The warning is the half worth keeping.
+    @Test("a scaled-down arrangement keeps the warning and drops the age")
+    func scaledDownStatusDropsTheAge() {
+        let result = summary(window(onActiveSpace: false, seenAgo: 20 * 60))
+        #expect(result.statusLine(includingAge: true) == "Another desktop · 20m ago")
+        #expect(result.statusLine(includingAge: false) == "Another desktop")
+    }
+
+    /// Dropping the age must not invent a line for a window that needs none.
+    @Test("a window on this desktop stays silent at every size")
+    func scaledDownStaysSilentOnThisDesktop() {
+        let result = summary(window(onActiveSpace: true, seenAgo: 20 * 60))
+        #expect(result.statusLine(includingAge: true) == nil)
+        #expect(result.statusLine(includingAge: false) == nil)
     }
 }

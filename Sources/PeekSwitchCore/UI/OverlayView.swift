@@ -361,6 +361,9 @@ struct OverlayView: View {
             let detailSize = max(9, 11 * scale)
             let statusSize = max(9, 10 * scale)
             let summary = state.hubSummary(for: entry)
+            // Same threshold the title uses to give up a line: below it the disc is too narrow for
+            // the age as well as the warning, and a half-truncated age is worse than none.
+            let statusLine = summary.statusLine(includingAge: scale > 0.8)
 
             VStack(spacing: 3 * scale) {
                 // What this window belongs to. For a browser window that is the site rather than
@@ -391,7 +394,7 @@ struct OverlayView: View {
                     .foregroundStyle(palette.text)
 
                 if entry.isApplication || entry.isMinimized || state.isIncognito(entry)
-                    || summary.statusLine != nil {
+                    || statusLine != nil {
                     HStack(spacing: 4) {
                         if entry.isApplication {
                             ApplicationBadge()
@@ -406,7 +409,7 @@ struct OverlayView: View {
                         }
                         // The one warning on screen that selecting this replaces the whole screen
                         // rather than just raising a window, and how stale it is if it does.
-                        if let statusLine = summary.statusLine {
+                        if let statusLine {
                             Text(statusLine)
                                 .font(.system(size: statusSize, weight: .medium))
                                 .lineLimit(1)
