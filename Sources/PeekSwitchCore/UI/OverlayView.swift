@@ -32,6 +32,29 @@ struct OverlayView: View {
     private var palette: OverlayPalette { OverlayPalette.forScheme(colorScheme) }
     private var layout: OverlayLayout { state.layout }
 
+    /// The hub stays fully opaque through its nominal radius, then fades as one continuous
+    /// same-colour corona to a stable 1.45× radius. The fixed reach keeps the hub's visual weight
+    /// unchanged as windows are opened, closed, or filtered.
+    private static let hubCoronaReach: CGFloat = 1.45
+
+    private static func hubCoronaMask(reach: CGFloat) -> Gradient {
+        let safeReach = max(1, reach)
+        let coreLocation = 1 / safeReach
+        let sampleCount = 8
+        var stops: [Gradient.Stop] = [
+            .init(color: .white, location: 0),
+            .init(color: .white, location: coreLocation)
+        ]
+
+        for sample in 1...sampleCount {
+            let progress = Double(sample) / Double(sampleCount)
+            let alpha = pow(1 - progress, 1.7)
+            let location = coreLocation + (1 - coreLocation) * CGFloat(progress)
+            stops.append(.init(color: .white.opacity(alpha), location: location))
+        }
+        return Gradient(stops: stops)
+    }
+
     /// Cards, positioned. The strip is the only style with a non-zero scroll offset.
     private var cards: [OverlayLayout.PositionedCard] {
         layout.positionedCards(scrollOffset: state.scrollOffset)
@@ -293,6 +316,10 @@ struct OverlayView: View {
 
     private var radial: some View {
         ZStack(alignment: .topLeading) {
+            // The corona reaches into the first ring, so it must be behind every wedge. Drawing it
+            // with the caption would wash translucent colour over unselected cards.
+            hubSurface
+
             ForEach(layout.radialSeats, id: \.index) { positioned in
                 wedge(positioned)
             }
@@ -340,6 +367,39 @@ struct OverlayView: View {
             revealAnimation(forVisibleOffset: positioned.seat.offset),
             value: state.isRevealed
         )
+    }
+
+    /// The selected hub's colour plate. Its nominal radius remains fully opaque so caption
+    /// contrast is independent of the desktop; the remaining 45% fades continuously to clear.
+    ///
+    /// This is deliberately visual-only and leaves `radialHubFrame` unchanged: the glow must not
+    /// enlarge the hub's confirmation hit target or steal the innermost part of a wedge.
+    @ViewBuilder
+    private var hubSurface: some View {
+        if let entry = state.selectedEntry {
+            let frame = layout.radialHubFrame
+            let hubRadius = frame.width / 2
+            let reach = Self.hubCoronaReach
+            let surfaceRadius = hubRadius * reach
+            let surfaceDiameter = surfaceRadius * 2
+
+            Circle()
+                .fill(palette.selectedCardFill(tintedBy: state.tint(for: entry)))
+                .frame(width: surfaceDiameter, height: surfaceDiameter)
+                .mask(
+                    RadialGradient(
+                        gradient: Self.hubCoronaMask(reach: reach),
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: surfaceDiameter / 2
+                    )
+                )
+                .allowsHitTesting(false)
+                .animation(captionChangeAnimation, value: entry.id)
+                .opacity(state.isRevealed ? 1 : 0)
+                .animation(hubRevealAnimation, value: state.isRevealed)
+                .position(x: frame.midX, y: frame.midY)
+        }
     }
 
     /// What the hollow middle says.
@@ -439,16 +499,11 @@ struct OverlayView: View {
             .animation(captionChangeAnimation, value: entry.id)
             .padding(.horizontal, 18 * scale)
             .frame(width: frame.width, height: frame.height)
-            // A disc rather than nothing: the caption sits over whatever desktop happens to
-            // be behind the panel, and text alone there is unreadable half the time.
-            //
-            // Tinted with the selected window's own hue, and animated separately from the caption
-            // above so a colour change cannot replay the disc's entrance.
+            // The colour surface is drawn behind the wedges by `hubSurface`; only the selected
+            // window's artwork remains attached to the nominal caption frame so its blur cannot
+            // escape into the corona.
             .background(
                 ZStack {
-                    Circle()
-                        .fill(palette.selectedCardFill(tintedBy: state.tint(for: entry)))
-
                     // The selected window's own artwork, large and faint, as a watermark. Its
                     // strength is bounded by measurement rather than taste — see
                     // `OverlayPalette.hubArtworkOpacity` — because the caption sits on top of it.
@@ -469,7 +524,6 @@ struct OverlayView: View {
                 .clipShape(Circle())
                 .animation(captionChangeAnimation, value: entry.id)
             )
-            .overlay(Circle().strokeBorder(palette.border, lineWidth: 1))
             .opacity(state.isRevealed ? 1 : 0)
             .animation(hubRevealAnimation, value: state.isRevealed)
             .position(x: frame.midX, y: frame.midY)

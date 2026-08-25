@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PeekSwitch — hub treatments</title>
+<style>
+  :root {
+    --ui-bg: #16181b;
+    --ui-panel: #1e2126;
+    --ui-line: rgba(255,255,255,0.12);
+    --ui-text: #e8eaed;
+    --ui-dim: rgba(232,234,237,0.62);
+    --ui-accent: #0088b0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 24px 28px 64px;
+  }
+  h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  h1 span { color: var(--ui-dim); font-weight: 400; }
+  .intro { max-width: 78ch; color: var(--ui-dim); margin: 10px 0 4px; }
+  .intro strong { color: var(--ui-text); font-weight: 600; }
+  .recommendation {
+    max-width: 92ch; margin: 12px 0 4px; padding: 10px 12px;
+    color: var(--ui-text); background: rgba(0,136,176,0.12);
+    border-left: 3px solid #35b7d7; border-radius: 0 8px 8px 0;
+  }
+  .recommendation strong { color: #79d8ed; }
+
+  /* ---------- controls ---------- */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 18px 26px;
+    background: var(--ui-panel); border: 1px solid var(--ui-line);
+    border-radius: 10px; padding: 14px 16px; margin: 18px 0 22px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .control { display: flex; flex-direction: column; gap: 5px; }
+  .control > label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ui-dim); }
+  .seg { display: flex; border: 1px solid var(--ui-line); border-radius: 7px; overflow: hidden; }
+  .seg button {
+    background: transparent; border: 0; color: var(--ui-dim);
+    font: inherit; padding: 5px 11px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ui-accent); color: #fff; }
+  input[type=range] { width: 148px; accent-color: var(--ui-accent); }
+  .val { font-variant-numeric: tabular-nums; color: var(--ui-text); font-size: 12px; }
+
+  /* ---------- variant grid ---------- */
+  .grid {
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  }
+  .variant {
+    background: var(--ui-panel); border: 1px solid var(--ui-line);
+    border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .variant.recommended {
+    border-color: rgba(53,183,215,0.82);
+    box-shadow: 0 0 0 1px rgba(53,183,215,0.22), 0 10px 30px rgba(0,0,0,0.18);
+  }
+  .variant header { padding: 12px 14px 10px; border-bottom: 1px solid var(--ui-line); }
+  .variant-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .variant h2 { font-size: 14px; font-weight: 600; }
+  .tag {
+    flex: none; padding: 2px 7px; border: 1px solid var(--ui-line); border-radius: 999px;
+    color: var(--ui-dim); font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+    line-height: 1.4; text-transform: uppercase;
+  }
+  .tag.current { color: #d9dde2; background: rgba(255,255,255,0.07); }
+  .tag.recommended { color: #b9f1fb; border-color: rgba(53,183,215,0.65); background: rgba(0,136,176,0.2); }
+  .variant .note { color: var(--ui-dim); font-size: 12px; margin-top: 4px; }
+
+  /* The stage stands in for the desktop the overlay floats over. */
+  .stage {
+    height: 320px; display: grid; place-items: center;
+    background-size: cover; background-position: center; position: relative;
+  }
+
+  /* ---------- the hub itself ---------- */
+  /* Sized generously so a bloom can extend past the nominal disc. */
+  .hub { position: relative; width: 310px; height: 310px; display: grid; place-items: center; }
+  .hub .surface { position: absolute; inset: 0; border-radius: 50%; }
+  .hub .rim { position: absolute; border-radius: 50%; }
+  .hub .mark {
+    position: absolute; width: 196px; height: 196px;
+    left: 50%; top: 50%; transform: translate(-50%,-50%);
+    display: grid; place-items: center;
+  }
+  .hub .mark svg { width: 100%; height: 100%; filter: blur(3px); }
+  .hub .caption {
+    position: relative; width: 156px; text-align: center;
+    display: flex; flex-direction: column; gap: 3px; align-items: center;
+  }
+  .caption .source {
+    max-width: 100%; font-size: 11px; font-weight: 500; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .caption .title {
+    width: 100%; font-size: 15px; font-weight: 600; line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .caption .title.clamped {
+    display: -webkit-box; -webkit-box-orient: vertical; line-clamp: 3; -webkit-line-clamp: 3; overflow: hidden;
+  }
+  .caption .status {
+    max-width: 100%; font-size: 10px; font-weight: 500; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Shows where the caption actually sits, for judging whether it is on opaque pixels. */
+  .hub.debug .caption { outline: 1px dashed rgba(255,0,90,0.85); outline-offset: 3px; }
+  .hub.debug .textring {
+    position: absolute; border-radius: 50%; border: 1px dashed rgba(255,0,90,0.55);
+    left: 50%; top: 50%; transform: translate(-50%,-50%);
+  }
+
+  /* ---------- readout ---------- */
+  .readout { padding: 11px 14px; border-top: 1px solid var(--ui-line); font-size: 12px; }
+  .readout table { width: 100%; border-collapse: collapse; }
+  .readout td { padding: 2px 0; }
+  .readout td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .pass { color: #52c07a; }
+  .fail { color: #ff6b6b; font-weight: 600; }
+  .readout .why { color: var(--ui-dim); margin-top: 6px; line-height: 1.45; }
+  footer { margin-top: 30px; color: var(--ui-dim); max-width: 78ch; }
+  footer h3 { color: var(--ui-text); font-size: 13px; margin-bottom: 6px; }
+  footer li { margin: 4px 0 4px 18px; }
+  code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>PeekSwitch — the spiral's middle <span>· treatment options</span></h1>
+<p class="intro">
+  Six ways to draw the hub, on the same content and the same palette the app actually uses.
+  <strong>The constraint that matters:</strong> the spiral draws no plate, so wherever the hub stops
+  being opaque, the caption's background becomes the desktop. That is the exact regression the palette
+  work exists to prevent, so each option reports the measured contrast of its text against the
+  surface at the caption's outer edge — not a guess, the same WCAG arithmetic the test suite uses.
+  Anything marked <span class="fail">fail</span> is below 4.5:1 and cannot ship as drawn.
+</p>
+<p class="recommendation">
+  <strong>Recommended starting point: 5 · Caption-safe soft sun.</strong>
+  It keeps a fully opaque surface beneath every caption line plus a 4pt safety margin, removes the rim,
+  then fades continuously into a wide corona. This is the softest treatment that does not make
+  wallpaper colour part of the text-contrast equation.
+</p>
+
+<div class="controls">
+  <div class="control">
+    <label>Theme</label>
+    <div class="seg" id="theme">
+      <button data-v="light" aria-pressed="true">Light</button>
+      <button data-v="dark" aria-pressed="false">Dark</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Desktop behind</label>
+    <div class="seg" id="wall">
+      <button data-v="mid" aria-pressed="true">Mid</button>
+      <button data-v="pale" aria-pressed="false">Pale</button>
+      <button data-v="ink" aria-pressed="false">Ink</button>
+      <button data-v="busy" aria-pressed="false">Busy</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Window icon</label>
+    <div class="seg" id="icon">
+      <button data-v="chrome" aria-pressed="true">Chrome</button>
+      <button data-v="slack" aria-pressed="false">Slack</button>
+      <button data-v="mono" aria-pressed="false">Mono</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Icon hue tint <span class="val" id="hueVal">0.55</span></label>
+    <input type="range" id="hue" min="0" max="1" step="0.01" value="0.55">
+  </div>
+  <div class="control">
+    <label>Watermark <span class="val" id="markVal">—</span></label>
+    <input type="range" id="mark" min="0" max="0.6" step="0.01" value="0.10">
+  </div>
+  <div class="control">
+    <label>Falloff start <span class="val" id="coreVal">0.72</span></label>
+    <input type="range" id="core" min="0.3" max="1" step="0.01" value="0.72">
+  </div>
+  <div class="control">
+    <label>Bloom reach <span class="val" id="bloomVal">1.45</span></label>
+    <input type="range" id="bloom" min="1" max="1.6" step="0.01" value="1.45">
+  </div>
+  <div class="control">
+    <label>Show caption bounds</label>
+    <div class="seg" id="dbg">
+      <button data-v="off" aria-pressed="true">Off</button>
+      <button data-v="on" aria-pressed="false">On</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer>
+  <h3>What to look for</h3>
+  <ul>
+    <li>Switch <strong>Desktop behind</strong> to <em>Pale</em> and <em>Busy</em>. Any option that
+      fades out under the caption will fail there first, and a white wallpaper is common.</li>
+    <li>Turn on <strong>Show caption bounds</strong>. The dashed ring is where the outermost text sits;
+      the fill has to still be opaque at that radius.</li>
+    <li>Push <strong>Watermark</strong> up. The current shipped value is 0.10 light / 0.06 dark,
+      which is the measured ceiling for a flat disc — a treatment that keeps the centre brighter may
+      afford more.</li>
+    <li>Try the <em>Mono</em> icon. A near-black logo is the worst case for a light theme and a
+      near-white one for dark.</li>
+  </ul>
+  <h3>Numbers taken from the app</h3>
+  <ul>
+    <li>Hub diameter 192pt; caption column 156pt wide; title 15pt over up to three lines.</li>
+    <li>Light: white fill, text <code>#201e1d</code>, secondary at 68%, tint 15% toward the hue.</li>
+    <li>Dark: fill <code>rgb(46,54,63)</code>, white text, secondary at 58%, tint 26% toward the hue.</li>
+  </ul>
+</footer>
+
+<script>
+// ---------------------------------------------------------------------------
+// Palette, transcribed from OverlayPalette.swift so decisions here transfer.
+// ---------------------------------------------------------------------------
+const PALETTE = {
+  light: {
+    fill: [255, 255, 255],
+    text: [32, 30, 29], textAlpha: 1,
+    secondary: [32, 30, 29], secondaryAlpha: 0.68,
+    border: 'rgba(32,30,29,0.16)',
+    tintStrength: 0.15, tintSaturation: 0.85, tintBrightness: 1.0,
+    shippedMark: 0.10
+  },
+  dark: {
+    fill: [46, 54, 63],
+    text: [255, 255, 255], textAlpha: 1,
+    secondary: [255, 255, 255], secondaryAlpha: 0.58,
+    border: 'rgba(255,255,255,0.10)',
+    tintStrength: 0.26, tintSaturation: 1.0, tintBrightness: 0.26,
+    shippedMark: 0.06
+  }
+};
+
+// Stand-ins for real desktops. Contrast uses the worst sampled colour from each
+// wallpaper rather than its average, so a busy stripe cannot be hidden by averaging.
+const WALLS = {
+  mid: {
+    css: 'linear-gradient(135deg,#4a5a72,#2f3a4a 60%,#59637a)',
+    samples: [[74,90,114], [47,58,74], [89,99,122]]
+  },
+  pale: {
+    css: 'linear-gradient(135deg,#f3f1ec,#dcdfe4 55%,#fbfaf7)',
+    samples: [[243,241,236], [220,223,228], [251,250,247]]
+  },
+  ink: {
+    css: 'linear-gradient(135deg,#0d1014,#1a2029 60%,#080a0d)',
+    samples: [[13,16,20], [26,32,41], [8,10,13]]
+  },
+  busy: {
+    css: 'repeating-linear-gradient(48deg,#e9e4d8 0 22px,#3a4b63 22px 44px,#c2451f 44px 62px,#f7f4ec 62px 84px)',
+    samples: [[233,228,216], [58,75,99], [194,69,31], [247,244,236]]
+  }
+};
+
+const ICONS = {
+  chrome: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#f7f7f7"/>
+    <path d="M50 2a48 48 0 0 1 41.6 24H50a24 24 0 0 0-21.3 13L14.6 15A48 48 0 0 1 50 2z" fill="#e8453c"/>
+    <path d="M14.6 15l14.1 24A24 24 0 0 0 50 74l-12 24A48 48 0 0 1 14.6 15z" fill="#3fa84a"/>
+    <path d="M91.6 26A48 48 0 0 1 38 98l12-24a24 24 0 0 0 20.8-36z" fill="#fabd06"/>
+    <circle cx="50" cy="50" r="19" fill="#4a90e2"/></svg>`,
+  slack: `<svg viewBox="0 0 100 100">
+    <rect x="20" y="43" width="14" height="34" rx="7" fill="#e01e5a"/>
+    <rect x="43" y="66" width="34" height="14" rx="7" fill="#ecb22e"/>
+    <rect x="66" y="23" width="14" height="34" rx="7" fill="#2eb67d"/>
+    <rect x="23" y="20" width="34" height="14" rx="7" fill="#36c5f0"/>
+    <rect x="43" y="20" width="14" height="37" rx="7" fill="#36c5f0"/>
+    <rect x="43" y="43" width="37" height="14" rx="7" fill="#2eb67d"/></svg>`,
+  mono: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="#141414"/>
+    <path d="M50 20a30 30 0 0 0-9 58c-1.5.3-2-.7-2-1.6v-8c-8 1.5-10-4-10-4-1.4-3.4-3.3-4.3-3.3-4.3-2.6-1.8.2-1.7.2-1.7 2.9.2 4.4 3 4.4 3 2.6 4.4 6.7 3.1 8.3 2.4.3-1.9 1-3.2 1.9-4-6.5-.7-13.3-3.3-13.3-14.5 0-3.2 1.1-5.8 3-7.8-.3-.8-1.3-3.8.3-7.9 0 0 2.4-.8 8 3a28 28 0 0 1 14.6 0c5.5-3.8 8-3 8-3 1.6 4.1.6 7.1.3 7.9 1.9 2 3 4.6 3 7.8 0 11.2-6.8 13.7-13.3 14.4 1 .9 2 2.7 2 5.4v8c0 .9-.5 1.9-2 1.6A30 30 0 0 0 50 20z" fill="#f2f2f2"/></svg>`
+};
+
+// ---------------------------------------------------------------------------
+// The treatments. Each owns one function: how opaque the fill is at radius r,
+// where r is a fraction of the nominal 96pt hub radius. The CSS gradient is
+// generated from that same function, so what you see and what is measured
+// cannot drift apart.
+// ---------------------------------------------------------------------------
+function falloffAlpha(r, core, reach, exponent = 1) {
+  if (r <= core) return 1;
+  if (reach <= core || r >= reach) return 0;
+  const remaining = 1 - (r - core) / (reach - core);
+  return Math.pow(remaining, exponent);
+}
+
+const VARIANTS = [
+  {
+    id: 'disc',
+    name: '1 · Hard disc (shipped today)',
+    tag: 'Current', tagKind: 'current',
+    note: 'Flat 192pt fill, 1px rim, and a clipped watermark. Opaque everywhere the caption is.',
+    rim: true, hardEdge: true, clipMark: true,
+    alphaAt: r => r <= 1 ? 1 : 0
+  },
+  {
+    id: 'feather',
+    name: '2 · Feathered disc',
+    tag: 'Experimental', tagKind: 'experimental',
+    note: 'A user-tuned opaque core and soft outer edge. It looks lighter, but can fade underneath the caption.',
+    rim: false,
+    alphaAt: (r, p) => falloffAlpha(r, p.core, 1)
+  },
+  {
+    id: 'sun',
+    name: '3 · Unconstrained sun',
+    tag: 'Experimental', tagKind: 'experimental',
+    note: 'A user-tuned core plus a corona beyond the old disc. Atmospheric, but unsafe when falloff starts beneath text.',
+    rim: false,
+    alphaAt: (r, p) => falloffAlpha(r, p.core, p.bloom, 1.7)
+  },
+  {
+    id: 'corebright',
+    name: '4 · Inner-lit disc',
+    tag: 'Experimental', tagKind: 'experimental',
+    note: 'Brightest at the centre, dimming toward a defined rim. Keeps the hard edge, so legibility is unchanged.',
+    rim: true, hardEdge: true, clipMark: true, lift: true,
+    alphaAt: r => r <= 1 ? 1 : 0
+  },
+  {
+    id: 'halo',
+    name: '5 · Caption-safe soft sun',
+    tag: 'Recommended', tagKind: 'recommended', recommended: true,
+    note: 'Opaque through the caption plus a 4pt margin, then one continuous fade into a corona. No rim or opacity jump.',
+    rim: false,
+    alphaAt: (r, p) => falloffAlpha(r, captionSafeCore(p), p.bloom, 1.7)
+  },
+  {
+    id: 'markbloom',
+    name: '6 · Watermark as the light',
+    tag: 'Experimental', tagKind: 'experimental',
+    note: 'Barely any disc; the enlarged icon itself blooms. Most atmospheric and least legible.',
+    rim: false, markLed: true,
+    alphaAt: (r, p) => 0.92 * falloffAlpha(r, p.core * 0.8, 1)
+  }
+];
+
+// ---------------------------------------------------------------------------
+// Colour helpers. Same WCAG arithmetic as OverlayPaletteTests.
+// ---------------------------------------------------------------------------
+function hsbToRgb(h, s, v) {
+  const i = Math.floor(h * 6), f = h * 6 - i;
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i % 6];
+  return [r * 255, g * 255, b * 255];
+}
+function mix(a, b, t) { return a.map((v, i) => v * (1 - t) + b[i] * t); }
+function tintedFill(theme, hue) {
+  const p = PALETTE[theme];
+  const vivid = hsbToRgb(hue, p.tintSaturation, p.tintBrightness);
+  return mix(p.fill, vivid, p.tintStrength);
+}
+function channel(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+function luminance(c) { return 0.2126 * channel(c[0]) + 0.7152 * channel(c[1]) + 0.0722 * channel(c[2]); }
+function contrast(a, b) {
+  const la = luminance(a), lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+function over(top, topAlpha, bottom) { return mix(bottom, top, topAlpha); }
+function rgba(c, a) { return `rgba(${c.map(v => Math.round(v)).join(',')},${a})`; }
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const state = { theme: 'light', wall: 'mid', icon: 'chrome', hue: 0.55, mark: 0.10, core: 0.72, bloom: 1.45, dbg: false };
+
+const HUB_DIAMETER = 192;
+const HUB_RADIUS = HUB_DIAMETER / 2;
+const SURFACE_DIAMETER = 310;
+const SURFACE_RADIUS = SURFACE_DIAMETER / 2;
+const CAPTION_SAFETY_MARGIN = 4;
+
+// The caption's outermost text, as a fraction of the hub's radius. The title column is
+// 156pt wide inside a 192pt disc, and the block runs roughly 95pt tall, so its corners
+// land close to the rim — which is exactly why a fading edge is risky here.
+const TEXT_RADIUS = Math.hypot(78, 47) / HUB_RADIUS;
+
+function captionSafeCore(p) {
+  return Math.min(1, Math.max(p.core, TEXT_RADIUS + CAPTION_SAFETY_MARGIN / HUB_RADIUS));
+}
+
+function watermarkOpacity(variant) {
+  return Math.min(1, state.mark * (variant.markLed ? 3.2 : 1));
+}
+
+function gradientFor(variant) {
+  const fill = tintedFill(state.theme, state.hue);
+
+  // Explicit pixel stops keep the 192pt hard treatments aligned with their rim.
+  // Percentage stops would resolve against the radial gradient's farthest corner,
+  // which is larger than the 155px surface radius and would overdraw the disc.
+  if (variant.hardEdge) {
+    if (variant.lift) {
+      const centre = mix(fill, [255,255,255], 0.10);
+      return `radial-gradient(circle at 50% 50%, ${rgba(centre, 1)} 0px, ${rgba(fill, 1)} 78px, ${rgba(fill, 1)} ${HUB_RADIUS}px, ${rgba(fill, 0)} ${HUB_RADIUS}px)`;
+    }
+    return `radial-gradient(circle at 50% 50%, ${rgba(fill, 1)} 0px, ${rgba(fill, 1)} ${HUB_RADIUS}px, ${rgba(fill, 0)} ${HUB_RADIUS}px)`;
+  }
+
+  const stops = [];
+  const sampleCount = 128;
+  for (let i = 0; i <= sampleCount; i++) {
+    const radius = SURFACE_RADIUS * i / sampleCount;
+    const r = radius / HUB_RADIUS;
+    const a = Math.max(0, Math.min(1, variant.alphaAt(r, state)));
+    stops.push(`${rgba(fill, a)} ${radius.toFixed(2)}px`);
+  }
+  return `radial-gradient(circle at 50% 50%, ${stops.join(',')})`;
+}
+
+function contrastRows(variant) {
+  const p = PALETTE[state.theme];
+  const fill = tintedFill(state.theme, state.hue);
+
+  // At the caption's outermost point, composite the fill over every sampled wallpaper
+  // colour, then apply the worst-case watermark colour at its actual rendered opacity.
+  const a = Math.max(0, Math.min(1, variant.alphaAt(TEXT_RADIUS, state)));
+  const worstMark = state.theme === 'dark' ? [255,255,255] : [0,0,0];
+  const markAlpha = watermarkOpacity(variant);
+
+  const rows = [];
+  for (const [label, colour, alpha] of [
+    ['Title', p.text, p.textAlpha],
+    ['Secondary', p.secondary, p.secondaryAlpha]
+  ]) {
+    let minimum = Infinity;
+    for (const wall of WALLS[state.wall].samples) {
+      const base = over(fill, a, wall);
+      const surface = mix(base, worstMark, markAlpha);
+      const resolved = over(colour, alpha, surface);
+      minimum = Math.min(minimum, contrast(resolved, surface));
+    }
+    rows.push([label, minimum]);
+  }
+  return { rows, alpha: a };
+}
+
+// SwiftUI starts this line at 15pt, lets it shrink no lower than 10pt, and only
+// truncates after it has tried to fit within three lines. Mirror that behavior so
+// the mock's debug bounds describe the same caption geometry as the app.
+function fitCaptionTitle(element) {
+  element.classList.remove('clamped');
+  for (let size = 15; size >= 10; size -= 0.25) {
+    const lineHeight = size * 1.2;
+    element.style.fontSize = `${size}px`;
+    element.style.lineHeight = `${lineHeight}px`;
+    if (element.scrollHeight <= lineHeight * 3 + 1) {
+      element.dataset.fittedSize = size.toFixed(2);
+      return;
+    }
+  }
+  element.style.fontSize = '10px';
+  element.style.lineHeight = '12px';
+  element.dataset.fittedSize = '10.00';
+  element.classList.add('clamped');
+}
+
+function render() {
+  document.getElementById('hueVal').textContent = state.hue.toFixed(2);
+  document.getElementById('markVal').textContent =
+    state.mark.toFixed(2) + (Math.abs(state.mark - PALETTE[state.theme].shippedMark) < 0.005 ? ' (shipped)' : '');
+  document.getElementById('coreVal').textContent = state.core.toFixed(2);
+  document.getElementById('bloomVal').textContent = state.bloom.toFixed(2);
+
+  const p = PALETTE[state.theme];
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  for (const variant of VARIANTS) {
+    const { rows, alpha } = contrastRows(variant);
+    const worst = Math.min(...rows.map(r => r[1]));
+    const why = worst >= 4.5
+      ? 'Legible across every sampled colour in this desktop.'
+      : alpha < 0.999
+        ? 'Below 4.5:1 — the fade exposes the wallpaper beneath the caption. The dashed ring must remain inside the opaque core.'
+        : 'Below 4.5:1 even on an opaque core — the watermark is too strong. Lower <em>Watermark</em> until both rows pass.';
+
+    const el = document.createElement('section');
+    el.className = variant.recommended ? 'variant recommended' : 'variant';
+    el.setAttribute('aria-label', variant.name);
+    el.innerHTML = `
+      <header>
+        <div class="variant-title">
+          <h2>${variant.name}</h2>
+          <span class="tag ${variant.tagKind}">${variant.tag}</span>
+        </div>
+        <div class="note">${variant.note}</div>
+      </header>
+      <div class="stage" style="background:${WALLS[state.wall].css}">
+        <div class="hub${state.dbg ? ' debug' : ''}">
+          <div class="surface"></div>
+          ${variant.rim ? '<div class="rim"></div>' : ''}
+          ${state.dbg ? '<div class="textring"></div>' : ''}
+          <div class="mark">${ICONS[state.icon]}</div>
+          <div class="caption">
+            <div class="source">Slack · 2 of 3</div>
+            <div class="title">prod-giga-enhance-logs (Channel) - Quattr Inc. - 2 new items</div>
+            <div class="status">Another desktop · 20m ago</div>
+          </div>
+        </div>
+      </div>
+      <div class="readout">
+        <table>
+          ${rows.map(([label, value]) => `
+            <tr><td>${label} contrast</td>
+            <td class="${value >= 4.5 ? 'pass' : 'fail'}">${value.toFixed(2)}:1 ${value >= 4.5 ? '' : '· fail'}</td></tr>
+          `).join('')}
+          <tr><td>Fill opacity under outer text</td><td>${(alpha * 100).toFixed(0)}%</td></tr>
+          ${variant.recommended ? `<tr><td>Protected core radius</td><td>${captionSafeCore(state).toFixed(2)}× · ${Math.round(captionSafeCore(state) * HUB_RADIUS)}pt</td></tr>` : ''}
+        </table>
+        <div class="why">${why}</div>
+      </div>`;
+
+    const hub = el.querySelector('.hub');
+    hub.querySelector('.surface').style.background = gradientFor(variant);
+    if (variant.rim) {
+      const rim = hub.querySelector('.rim');
+      Object.assign(rim.style, {
+        width: HUB_DIAMETER + 'px', height: HUB_DIAMETER + 'px', left: '50%', top: '50%',
+        transform: 'translate(-50%,-50%)', border: `1px solid ${p.border}`
+      });
+    }
+    if (state.dbg) {
+      const ring = hub.querySelector('.textring');
+      const d = HUB_DIAMETER * TEXT_RADIUS;
+      Object.assign(ring.style, { width: d + 'px', height: d + 'px' });
+    }
+    const mark = hub.querySelector('.mark');
+    mark.style.opacity = watermarkOpacity(variant);
+    mark.style.width = mark.style.height = (variant.markLed ? 250 : 196) + 'px';
+    mark.style.clipPath = variant.clipMark ? `circle(${HUB_RADIUS}px at 50% 50%)` : 'none';
+
+    const caption = hub.querySelector('.caption');
+    caption.querySelector('.source').style.color = rgba(p.secondary, p.secondaryAlpha);
+    caption.querySelector('.title').style.color = rgba(p.text, p.textAlpha);
+    caption.querySelector('.status').style.color = rgba(p.secondary, p.secondaryAlpha);
+
+    grid.appendChild(el);
+    fitCaptionTitle(caption.querySelector('.title'));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Controls
+// ---------------------------------------------------------------------------
+for (const id of ['theme', 'wall', 'icon', 'dbg']) {
+  document.getElementById(id).addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    for (const sibling of button.parentElement.children) {
+      sibling.setAttribute('aria-pressed', String(sibling === button));
+    }
+    state[id] = id === 'dbg' ? button.dataset.v === 'on' : button.dataset.v;
+    if (id === 'theme') {
+      state.mark = PALETTE[state.theme].shippedMark;
+      document.getElementById('mark').value = state.mark;
+    }
+    render();
+  });
+}
+for (const id of ['hue', 'mark', 'core', 'bloom']) {
+  document.getElementById(id).addEventListener('input', event => {
+    state[id] = parseFloat(event.target.value);
+    render();
+  });
+}
+
+render();
+</script>
+</body>
+</html>
