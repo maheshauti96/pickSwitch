@@ -353,14 +353,31 @@ struct OverlayView: View {
             // four lines of illegible type says less than two lines of readable type.
             let scale = layout.radialScale
             let titleSize = max(10, 15 * scale)
-            let titleLines = scale > 0.8 ? 4 : 3
+            // Three lines rather than the four this had before the source and status lines were
+            // added. That is the trade: two facts gained for one line of title. The disc is 192
+            // points across and a circle's usable area is its inscribed square, so there is no
+            // version of this where everything fits and nothing is given up.
+            let titleLines = scale > 0.8 ? 3 : 2
+            let detailSize = max(9, 11 * scale)
+            let statusSize = max(9, 10 * scale)
+            let summary = state.hubSummary(for: entry)
 
-            VStack(spacing: 4 * scale) {
-                // The application name deliberately is not repeated here. The wedge under the
-                // pointer is already tinted, outlined, labelled with that name and showing its
-                // icon, and most titles end in it as well — it appeared four times in one glance.
-                // The title is the one thing a wedge has no room for, so the hub spends everything
-                // it has on that.
+            VStack(spacing: 3 * scale) {
+                // What this window belongs to. For a browser window that is the site rather than
+                // the browser, which is the identifying half: a Chrome window whose title never
+                // mentions GitHub is told apart by `github.com` and not at all by "Google Chrome".
+                // Absent entirely when it would only repeat the wedge — see `HubSummary.sourceLine`.
+                if let sourceLine = summary.sourceLine {
+                    Text(sourceLine)
+                        .font(.system(size: detailSize, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(palette.secondaryText)
+                        .contentTransition(.opacity)
+                }
+
+                // The title is the one thing a wedge has no room for, so the hub still spends most
+                // of what it has on this.
                 Text(entry.displayTitle)
                     .font(.system(size: titleSize, weight: .semibold))
                     .lineLimit(titleLines)
@@ -373,7 +390,8 @@ struct OverlayView: View {
                     // dropping the line above can never leave the middle blank.
                     .foregroundStyle(palette.text)
 
-                if entry.isApplication || entry.isMinimized || state.isIncognito(entry) {
+                if entry.isApplication || entry.isMinimized || state.isIncognito(entry)
+                    || summary.statusLine != nil {
                     HStack(spacing: 4) {
                         if entry.isApplication {
                             ApplicationBadge()
@@ -385,6 +403,16 @@ struct OverlayView: View {
                             Image(systemName: "arrow.down.right.and.arrow.up.left")
                                 .font(.system(size: 8, weight: .semibold))
                                 .foregroundStyle(palette.secondaryText)
+                        }
+                        // The one warning on screen that selecting this replaces the whole screen
+                        // rather than just raising a window, and how stale it is if it does.
+                        if let statusLine = summary.statusLine {
+                            Text(statusLine)
+                                .font(.system(size: statusSize, weight: .medium))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .foregroundStyle(palette.secondaryText)
+                                .contentTransition(.opacity)
                         }
                     }
                 }

@@ -49,7 +49,15 @@ struct BrowserTab: Equatable, Hashable, Sendable {
 
     /// The bit of the URL worth reading on a card: "grok.com" rather than the full
     /// query-string-laden address.
-    var host: String {
+    var host: String { Self.host(ofURL: url) }
+
+    /// The readable host of any page address.
+    ///
+    /// Shared with browser *windows*, whose active tab address arrives from a different place
+    /// entirely — the window record rather than a tab listing. Stripping `www.` in two places
+    /// would eventually mean one of them stopping, and a window reading `www.github.com` beside a
+    /// tab reading `github.com` looks like two different sites.
+    static func host(ofURL url: String) -> String {
         guard let host = URL(string: url)?.host else { return url }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }

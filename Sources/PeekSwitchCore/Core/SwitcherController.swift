@@ -881,6 +881,16 @@ public final class SwitcherController {
                         else { continue }
 
                         completedWindowIDs.insert(windowID)
+                        // Named before the favicon is even requested. The host is already known
+                        // here, and a site whose icon cannot be fetched is still worth naming —
+                        // which is most of them on a first visit.
+                        if let presentationID {
+                            self.state.setSiteHost(
+                                BrowserTab.host(ofURL: activeTabURL),
+                                for: windowID,
+                                presentationID: presentationID
+                            )
+                        }
                         Task { [weak self, browserFavicons] in
                             guard let self,
                                   self.browserInspectionGeneration == generation

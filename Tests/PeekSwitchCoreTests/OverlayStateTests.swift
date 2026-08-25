@@ -309,3 +309,91 @@ struct OverlayRevealSequencingTests {
         }
     }
 }
+
+/// The facts the spiral's middle reads, and the guard that keeps one of them from leaking.
+@Suite("Hub facts")
+@MainActor
+struct HubFactsTests {
+
+    private func state(entries: [WindowEntry]) -> OverlayState {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        state.isVisible = true
+        state.load(entries: entries, selectedIndex: 0)
+        return state
+    }
+
+    private func chromeWindows() -> [WindowEntry] {
+        (1...3).map { index in
+            var entry = Fixture.entry(
+                id: CGWindowID(index),
+                app: "Google Chrome",
+                title: "Chrome window \(index)",
+                zOrder: index
+            )
+            entry.isOnActiveSpace = true
+            return entry
+        }
+    }
+
+    /// A private window's destination must never be named, and the guard belongs on the read rather
+    /// than only on the write: a `CGWindowID` can be reclassified part-way through a presentation,
+    /// after a host has already been recorded for it.
+    @Test("a host recorded before a window was known to be private is never read back")
+    func privateWindowNeverNamesItsSite() {
+        let windows = chromeWindows()
+        let subject = state(entries: windows)
+        subject.setSiteHost("github.com", for: 2, presentationID: subject.presentationID)
+        #expect(subject.siteHost(for: windows[1]) == "github.com")
+
+        // The browser answers late, and this window turns out to be a private one.
+        subject.incognitoWindowIDs = [2]
+
+        #expect(subject.siteHost(for: windows[1]) == nil)
+        let summary = subject.hubSummary(for: windows[1])
+        #expect(summary.siteHost == nil)
+        #expect(summary.sourceLine == "Google Chrome \u{00B7} 2 of 3")
+    }
+
+    /// Hosts arrive from an asynchronous browser inspection, which can finish after the presentation
+    /// it belongs to has gone.
+    @Test("a host from a finished presentation is refused")
+    func staleHostIsRefused() {
+        let windows = chromeWindows()
+        let subject = state(entries: windows)
+        subject.setSiteHost("github.com", for: 1, presentationID: subject.presentationID - 1)
+        #expect(subject.siteHost(for: windows[0]) == nil)
+    }
+
+    /// Counted over the unfiltered list on purpose. Searching narrows what is on screen; it does not
+    /// close two of the three Chrome windows, and "2 of 3" turning into "1 of 1" as the user types
+    /// would describe the search rather than the window.
+    @Test("position among an application's windows survives a search")
+    func positionIsUnaffectedBySearch() {
+        let windows = chromeWindows()
+        let subject = state(entries: windows)
+        let before = subject.windowPosition(for: windows[1])
+        #expect(before?.index == 2)
+        #expect(before?.count == 3)
+
+        subject.appendToSearch("window 2")
+        #expect(subject.entries.count < 3, "the search should have filtered the list")
+
+        let after = subject.windowPosition(for: windows[1])
+        #expect(after?.index == 2, "index should still describe the application, not the search")
+        #expect(after?.count == 3, "count should still describe the application, not the search")
+    }
+
+    /// One window means no position, so the hub's source line disappears rather than reading
+    /// "Warp · 1 of 1".
+    @Test("a lone window reports no position and no source line")
+    func loneWindowHasNoSourceLine() {
+        var entry = Fixture.entry(id: 9, app: "Warp", title: "zsh")
+        entry.isOnActiveSpace = true
+        let subject = state(entries: [entry])
+
+        #expect(subject.windowPosition(for: entry) == nil)
+        #expect(subject.hubSummary(for: entry).sourceLine == nil)
+    }
+}

@@ -66,6 +66,12 @@ final class OverlayState: ObservableObject {
     /// `WindowEntry.applicationIcon` remains the immutable fallback and is always used for
     /// incognito windows and non-window search targets.
     @Published private(set) var browserIconsByWindowID: [CGWindowID: NSImage] = [:]
+    /// The active site of each browser window, as a readable host.
+    ///
+    /// Only ever set for windows whose browser reported the documented `normal` mode, so a private
+    /// window's destination is never held here — the same rule that decides whether a favicon may be
+    /// fetched at all, for the same reason.
+    @Published private(set) var siteHostsByWindowID: [CGWindowID: String] = [:]
     /// Private-window icons with their badge already composited, keyed by application.
     ///
     /// Not `@Published`: it is a cache derived from `incognitoWindowIDs` and the application's own
@@ -327,6 +333,7 @@ final class OverlayState: ObservableObject {
         // Never carry a per-window favicon, or the tint taken from it, across presentations
         // without rematching it.
         browserIconsByWindowID.removeAll(keepingCapacity: true)
+        siteHostsByWindowID.removeAll(keepingCapacity: true)
         siteTintsByWindowID.removeAll(keepingCapacity: true)
         siteIconsByEntryID.removeAll(keepingCapacity: true)
         siteTintsByEntryID.removeAll(keepingCapacity: true)
@@ -399,6 +406,20 @@ final class OverlayState: ObservableObject {
             return badged
         }
         return browserIconsByWindowID[entry.windowID] ?? entry.applicationIcon
+    }
+
+    /// The active site of an entry, or `nil` when there is none worth naming.
+    ///
+    /// Guarded against private windows here rather than only where the host is recorded, for the
+    /// same reason `displayIcon` is: a `CGWindowID` can be reclassified part-way through a
+    /// presentation, and reading through a single accessor means a host written a moment earlier
+    /// cannot outlive that reclassification.
+    func siteHost(for entry: WindowEntry) -> String? {
+        if let tab = entry.tab {
+            return tab.host.isEmpty ? nil : tab.host
+        }
+        guard entry.isWindow, !isIncognito(entry) else { return nil }
+        return siteHostsByWindowID[entry.windowID]
     }
 
     /// Whether this tab already has a resolved icon, so the controller does not ask twice.
@@ -490,6 +511,25 @@ final class OverlayState: ObservableObject {
         resolvedTints = ownerByEntry.compactMapValues { separated[$0] }
     }
 
+    /// Record the active site of a browser window, for the hub to name.
+    ///
+    /// Separate from `setBrowserIcon` and called earlier, because the two facts fail independently:
+    /// the host is known as soon as the window is paired with its browser record, while the icon
+    /// needs a network round trip that often does not finish and sometimes cannot succeed at all.
+    /// Tying the name to the icon would mean a site the switcher knows about staying unnamed
+    /// because its favicon happened to 404.
+    func setSiteHost(
+        _ host: String,
+        for windowID: CGWindowID,
+        presentationID expectedPresentationID: Int
+    ) {
+        guard presentationID == expectedPresentationID,
+              !incognitoWindowIDs.contains(windowID),
+              !host.isEmpty
+        else { return }
+        siteHostsByWindowID[windowID] = host
+    }
+
     /// Publish a browser-window icon only if it still belongs to the visible presentation and
     /// window.
     ///
@@ -569,6 +609,7 @@ final class OverlayState: ObservableObject {
 
         thumbnails.removeValue(forKey: windowID)
         browserIconsByWindowID.removeValue(forKey: windowID)
+        siteHostsByWindowID.removeValue(forKey: windowID)
         siteTintsByWindowID.removeValue(forKey: windowID)
         // Reload so the per-application counts, display badges and scroll offset all
         // reflect the shorter list rather than going stale. Deliberately not `load`,
@@ -592,6 +633,7 @@ final class OverlayState: ObservableObject {
     func releaseThumbnails() {
         thumbnails.removeAll(keepingCapacity: false)
         browserIconsByWindowID.removeAll(keepingCapacity: false)
+        siteHostsByWindowID.removeAll(keepingCapacity: false)
         siteTintsByWindowID.removeAll(keepingCapacity: false)
         siteIconsByEntryID.removeAll(keepingCapacity: false)
         siteTintsByEntryID.removeAll(keepingCapacity: false)
@@ -623,5 +665,33 @@ final class OverlayState: ObservableObject {
             return nil
         }
         return count
+    }
+
+    /// Which of its application's windows this is, 1-based, and how many there are.
+    ///
+    /// Counted over `allEntries` rather than the filtered `entries`, so the phrase does not
+    /// change while the user types: "2 of 3" turning into "1 of 1" mid-search would describe the
+    /// search rather than the window.
+    func windowPosition(for entry: WindowEntry) -> (index: Int, count: Int)? {
+        guard entry.isWindow else { return nil }
+        let siblings = allEntries.filter {
+            $0.isWindow && $0.applicationName == entry.applicationName
+        }
+        guard siblings.count > 1,
+              let offset = siblings.firstIndex(where: { $0.windowID == entry.windowID })
+        else { return nil }
+        return (index: offset + 1, count: siblings.count)
+    }
+
+    /// Everything the hub says about an entry.
+    func hubSummary(for entry: WindowEntry) -> HubSummary {
+        let position = windowPosition(for: entry)
+        return HubSummary.make(
+            entry: entry,
+            siteHost: siteHost(for: entry),
+            windowIndex: position?.index,
+            windowCount: position?.count,
+            now: Date().timeIntervalSinceReferenceDate
+        )
     }
 }
