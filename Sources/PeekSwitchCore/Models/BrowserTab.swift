@@ -36,6 +36,12 @@ struct BrowserTab: Equatable, Hashable, Sendable {
     /// `active tab index`); Safari uses its own (`name of tabs`, `current tab`). Anything
     /// not on this list is simply not searched — there is no generic way to ask an
     /// arbitrary application for its tabs.
+    ///
+    /// Membership is checked against the browser's own scripting dictionary rather than assumed
+    /// from it being Chromium-derived. Being built on Chromium does not guarantee the terms
+    /// survive: an application can ship with scripting stripped out entirely, and then every
+    /// query fails silently at runtime. Comet was added after confirming its dictionary declares
+    /// `mode`, `active tab`, `active tab index`, `title` and `URL`.
     enum Browser: String, CaseIterable, Sendable {
         case chrome
         case safari
@@ -43,6 +49,7 @@ struct BrowserTab: Equatable, Hashable, Sendable {
         case brave
         case chromium
         case arc
+        case comet
 
         var bundleIdentifier: String {
             switch self {
@@ -52,6 +59,7 @@ struct BrowserTab: Equatable, Hashable, Sendable {
             case .brave: return "com.brave.Browser"
             case .chromium: return "org.chromium.Chromium"
             case .arc: return "company.thebrowser.Browser"
+            case .comet: return "ai.perplexity.comet"
             }
         }
 
@@ -64,6 +72,7 @@ struct BrowserTab: Equatable, Hashable, Sendable {
             case .brave: return "Brave Browser"
             case .chromium: return "Chromium"
             case .arc: return "Arc"
+            case .comet: return "Comet"
             }
         }
 
