@@ -46,6 +46,15 @@ enum ArrowDirection: Equatable, Sendable {
 enum KeyResponse: Equatable, Sendable {
 
     case dismiss
+    /// Consume the key and do nothing with it.
+    ///
+    /// Exists for one case: the shortcut's own key auto-repeating. Holding ⌥Space long enough to
+    /// repeat produces a stream of key-downs after the chord has already been acted on, and there is
+    /// no reading of those that is useful. Treating them as the chord again would toggle the overlay
+    /// dozens of times a second; treating them as typing puts a run of spaces in the search field,
+    /// which is what "there is an extra space after my text" turned out to be. Passing them on would
+    /// hand the same repeats to the hotkey. So they stop here.
+    case ignore
     /// The registered shortcut, pressed while its own overlay is up.
     ///
     /// Deliberately not `dismiss`. Escape backs out of an active search before it closes anything,
@@ -86,6 +95,9 @@ enum KeyResponse: Equatable, Sendable {
     ///     usable at this tap location.
     ///   - characters: what the key would type on the active layout, or `nil` for keys that type
     ///     nothing.
+    ///   - isAutorepeat: whether this key-down came from the key being held rather than newly
+    ///     pressed. Only consulted for the shortcut's own key; holding an ordinary letter to repeat
+    ///     it is normal typing and stays that way.
     ///   - shortcutKeyCode: the key code of the registered global shortcut, when there is one.
     ///   - shortcutModifiers: the modifiers that shortcut requires. Empty for a shortcut that needs
     ///     none, such as F13.
@@ -93,6 +105,7 @@ enum KeyResponse: Equatable, Sendable {
         keyCode: Int64,
         activeModifiers: CGEventFlags,
         characters: String?,
+        isAutorepeat: Bool = false,
         shortcutKeyCode: Int64?,
         shortcutModifiers: CGEventFlags = []
     ) -> KeyResponse {
@@ -119,10 +132,16 @@ enum KeyResponse: Equatable, Sendable {
         // and consumed, rather than passed through for the Carbon hotkey to notice: this layer
         // already knows what the combination means, and consuming it is what guarantees the key
         // cannot also be typed.
-        if let shortcutKeyCode,
-           keyCode == shortcutKeyCode,
-           activeModifiers.isSuperset(of: shortcutModifiers) {
-            return .triggerShortcut
+        if let shortcutKeyCode, keyCode == shortcutKeyCode {
+            // A repeat of the shortcut's own key is the key still being held from the press that was
+            // already dealt with, whatever the modifiers now say. This is the case that leaked
+            // spaces: hold ⌥Space, let Option go a moment before Space, and every repeat after that
+            // looks exactly like a deliberate space bar.
+            if isAutorepeat { return .ignore }
+
+            if activeModifiers.isSuperset(of: shortcutModifiers) {
+                return .triggerShortcut
+            }
         }
 
         // A command or control chord is a shortcut, not typing — passing those through is what

@@ -77,7 +77,7 @@ struct WindowEntry: Identifiable {
     /// at all, so each target kind owns a stable namespace. Application takes precedence in the
     /// impossible malformed case where both optional payloads are supplied, matching activation.
     var id: String {
-        if let webSearch { return "web:\(webSearch.query)" }
+        if let webSearch { return "web:\(webSearch.kind):\(webSearch.query)" }
         if let launchableApplication { return "application:\(launchableApplication.id)" }
         if let tab { return "tab:\(tab.identity)" }
         return "window:\(windowID)"
@@ -196,6 +196,18 @@ struct WebSearchTarget: Equatable {
     /// Exactly what the user typed, which is what the result shows and what the destination encodes.
     let query: String
     let destination: WebSearch.Destination
+
+    /// Which of the two offers this is, for the entry's identity.
+    ///
+    /// One query can produce both — go to the address, or search for it — and they are two results
+    /// that must not share an id. Two entries with one id is not a cosmetic problem: the list is
+    /// diffed by id, so the second would replace the first and only one option would ever appear.
+    var kind: String {
+        switch destination {
+        case .address: return "address"
+        case .search: return "search"
+        }
+    }
 
     /// The line naming what confirming this will do.
     ///

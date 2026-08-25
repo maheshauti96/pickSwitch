@@ -1765,6 +1765,15 @@ extension SwitcherController: TriggerMonitorDelegate {
         guard state.isVisible else { return }
         pendingSearchConfirmation = nil
         let changed = state.appendToSearch(characters)
+        // Shape only, never content: the query is the user's own typing. Enough to tell a stray
+        // space that the switcher inserted from one the user meant, which is the only way to
+        // separate "the caret is drawn too far right" from "a space really is in there".
+        if characters.allSatisfy(\.isWhitespace) {
+            Log.overlay.info("""
+                whitespace typed into search; query is now \(self.state.searchQuery.count)                 characters and ends with whitespace: \
+                \(self.state.searchQuery.last?.isWhitespace == true)
+                """)
+        }
         loadBrowserTabsIfNeeded()
         guard changed else { return }
         afterSearchChanged()

@@ -48,10 +48,17 @@ final class OverlayState: ObservableObject {
 
     var isSearching: Bool { !searchQuery.isEmpty }
 
-    /// True whenever a query is active but no selectable result is currently visible.
+    /// The visible results that are somewhere on this machine.
+    ///
+    /// Distinguished from `entries` because a query also offers the web, and the web is never a
+    /// match — it is the fallback that is always available. Anything asking "did the query find
+    /// anything?" has to ask about these, or the answer is trivially yes for every query ever typed.
+    var localEntries: [WindowEntry] { entries.filter { !$0.isWebSearch } }
+
+    /// True whenever a query is active but nothing on this machine matched it.
     /// This intentionally includes the brief period while secondary sources are resolving;
     /// callers deciding whether web search is safe must use `canOfferWebSearch` instead.
-    var hasNoSearchMatches: Bool { isSearching && entries.isEmpty }
+    var hasNoSearchMatches: Bool { isSearching && localEntries.isEmpty }
 
     /// Whether tabs or the installed-application catalog could still replace an apparent miss.
     var isResolvingSearch: Bool {
@@ -325,27 +332,32 @@ final class OverlayState: ObservableObject {
         return true
     }
 
-    /// The web-search result to offer after the local ones, if any.
+    /// The web results to offer after the local ones.
     ///
-    /// Offered only when something local matched. With nothing matching, the empty state already
-    /// makes the same offer as a full sentence, and it reads better there than a single card would —
-    /// so this exists to close the opposite gap, where one local match used to remove the option
-    /// entirely. Typing "grok" with Grok Bot installed had no way to reach the web at all.
+    /// One per destination the query could plausibly reach, so an address gets two: go there, or
+    /// search for it. The conservative address test cannot tell "grok.com, take me there" from
+    /// "grok.com, tell me about it", and since these are results the user picks from, it does not
+    /// have to — the order carries the guess and both remain reachable.
     ///
     /// Last, never first. Switching is what the switcher is for, so a local window or application
     /// always holds the default selection and Return keeps meaning "go to the thing I found".
+    ///
+    /// Withheld while the local sources are still answering, but only when nothing has matched yet.
+    /// Tabs and the installed-application catalogue arrive asynchronously, and offering the web
+    /// before they land would put a web result under the default selection during the moment before
+    /// the application that actually matched appears — so Return pressed quickly would open a browser
+    /// instead of the app.
     private func webSearchResults(
         for query: String,
         alongside matches: [WindowEntry]
     ) -> [WindowEntry] {
-        guard !matches.isEmpty,
-              !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let destination = WebSearch.destination(for: query)
-        else { return [] }
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        let localSourcesSettled = hasLoadedTabs && hasLoadedApplications
+        guard !matches.isEmpty || localSourcesSettled else { return [] }
 
-        return [
+        return WebSearch.destinations(for: query).map { destination in
             .webSearchEntry(WebSearchTarget(query: query, destination: destination))
-        ]
+        }
     }
 
     func load(entries: [WindowEntry], selectedIndex: Int?) {

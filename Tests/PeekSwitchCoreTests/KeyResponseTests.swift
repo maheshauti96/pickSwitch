@@ -78,6 +78,60 @@ struct KeyResponseTests {
         )
     }
 
+    /// The leak that survived the second fix. Hold ⌥Space, let Option go a fraction before Space,
+    /// and every auto-repeat after that is indistinguishable from a deliberate space bar — so the
+    /// search field filled with spaces after the text.
+    ///
+    /// A repeat of the shortcut's own key is that key still being held from the press that was
+    /// already dealt with. There is no useful reading of it: as a chord it would toggle the overlay
+    /// dozens of times a second, and as typing it inserts spaces nobody asked for.
+    @Test("a repeat of the shortcut's key is ignored, modifiers or not", arguments: [
+        CGEventFlags(rawValue: 0), CGEventFlags.maskAlternate,
+    ])
+    func shortcutKeyRepeatsAreIgnored(modifiers: CGEventFlags) {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: Self.space,
+                activeModifiers: modifiers,
+                characters: " ",
+                isAutorepeat: true,
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option
+            ) == .ignore
+        )
+    }
+
+    /// Only the shortcut's key. Holding an ordinary letter down to repeat it is how keyboards work,
+    /// and a search field that dropped those would be its own bug.
+    @Test("an ordinary key still types when held")
+    func ordinaryKeyRepeatsStillType() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: Self.letterA,
+                activeModifiers: Self.noModifiers,
+                characters: "a",
+                isAutorepeat: true,
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option
+            ) == .typeIntoSearch("a")
+        )
+    }
+
+    /// A fresh press of the same key is still a space. Suppressing repeats must not suppress the key.
+    @Test("a fresh press of the shortcut's key still types")
+    func freshPressStillTypes() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: Self.space,
+                activeModifiers: Self.noModifiers,
+                characters: " ",
+                isAutorepeat: false,
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option
+            ) == .typeIntoSearch(" ")
+        )
+    }
+
     /// A chord that includes the shortcut's modifiers and more still means the shortcut. Holding an
     /// extra modifier is not a reason to start typing.
     @Test("extra modifiers on top of the shortcut still toggle")

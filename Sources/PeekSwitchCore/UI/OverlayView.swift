@@ -100,7 +100,9 @@ struct OverlayView: View {
                 // magnifier's 6pt put a visible gap between the last character and the caret, which
                 // read as a trailing space that had been typed — the one thing a search field must
                 // never lie about, since it is the only feedback that a keystroke landed.
-                HStack(spacing: 2) {
+                // Flush, not merely close. A caret with any gap in front of it reads as a space
+                // that was typed, and this field's only job is to report what was typed.
+                HStack(spacing: 0) {
                     Text(state.searchQuery)
                         .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)

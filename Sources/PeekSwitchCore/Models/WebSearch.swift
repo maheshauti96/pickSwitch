@@ -43,13 +43,37 @@ enum WebSearch {
     /// only for text that was never going to resolve on its own.
     static let searchTemplate = "https://www.google.com/search?q="
 
+    /// Everywhere the query could reasonably take the user, best guess first.
+    ///
+    /// A phrase has one answer. An address has two, and offering only the first is a guess the
+    /// switcher does not need to make: "grok.com" is almost certainly somewhere to go, but it is also
+    /// a perfectly ordinary thing to want to search for, and the conservative address test cannot
+    /// tell those apart. Since the results are a list the user picks from, both can be present and
+    /// the ordering carries the guess instead of the filtering.
+    ///
+    /// Ordered address-first so that Return keeps doing what it did before this existed.
+    static func destinations(for query: String) -> [Destination] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        var destinations: [Destination] = []
+        if let address = addressURL(for: trimmed) {
+            destinations.append(.address(address))
+        }
+        if let search = searchDestination(for: trimmed) {
+            destinations.append(search)
+        }
+        return destinations
+    }
+
+    /// The single best destination, which is the first of `destinations(for:)`.
     static func destination(for query: String) -> Destination? {
+        destinations(for: query).first
+    }
+
+    private static func searchDestination(for query: String) -> Destination? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-
-        if let address = addressURL(for: trimmed) {
-            return .address(address)
-        }
 
         // `urlQueryAllowed` leaves "+" and "&" intact, which would corrupt the parameter, so
         // they are removed from the allowed set.

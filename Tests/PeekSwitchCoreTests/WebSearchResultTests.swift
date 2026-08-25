@@ -57,18 +57,94 @@ struct WebSearchResultTests {
         #expect(subject.entries.firstIndex { $0.isWebSearch } == subject.entries.count - 1)
     }
 
-    /// With nothing matching, the empty state makes the same offer as a full sentence, which reads
-    /// better there than a single card would. So this must stay out of the way of that.
-    @Test("a query that matched nothing adds no result, leaving the empty state its prompt")
-    func notOfferedWhenNothingMatched() {
+    /// With nothing matching, the web is the only thing left to offer, so it becomes the results
+    /// rather than a sentence about them. `hasNoSearchMatches` still has to read false-for-matched
+    /// off the *local* results, or every query would look like a hit.
+    @Test("a query that matched nothing offers the web as the results")
+    func offeredWhenNothingMatched() {
         let subject = state()
         subject.setTabs([])
         subject.setApplications([])
         subject.appendToSearch("zzzznothing")
 
-        #expect(subject.entries.isEmpty)
+        #expect(subject.localEntries.isEmpty)
+        #expect(subject.entries.isEmpty == false)
+        #expect(subject.entries.allSatisfy { $0.isWebSearch })
         #expect(subject.hasNoSearchMatches)
         #expect(subject.canOfferWebSearch)
+    }
+
+    /// Tabs and the installed-application catalogue arrive asynchronously. Offering the web before
+    /// they land would put a web result under the default selection during the moment before the
+    /// application that actually matched appears, so Return pressed quickly would open a browser
+    /// instead of the app.
+    @Test("nothing is offered while the local sources are still answering")
+    func withheldUntilLocalSourcesSettle() {
+        let subject = state()
+        subject.appendToSearch("zzzznothing")
+
+        #expect(subject.entries.isEmpty, "no offer yet")
+        #expect(subject.isResolvingSearch)
+
+        subject.setTabs([])
+        subject.setApplications([])
+
+        #expect(subject.entries.isEmpty == false, "offered once the local sources have settled")
+        #expect(subject.entries.allSatisfy { $0.isWebSearch })
+    }
+
+    // MARK: - An address has two answers
+
+    /// The conservative address test cannot tell "grok.com, take me there" from "grok.com, tell me
+    /// about it", and since these are results the user picks from, it does not have to.
+    @Test("an address offers both going there and searching for it")
+    func addressOffersBoth() {
+        let subject = state()
+        subject.setTabs([])
+        subject.setApplications([])
+        subject.appendToSearch("grok.com")
+
+        let offers = subject.entries.filter { $0.isWebSearch }
+        #expect(offers.count == 2)
+        #expect(offers.first?.sourceLabel == "Go to grok.com")
+        #expect(offers.last?.sourceLabel == "Search the web")
+    }
+
+    /// Address first, so Return keeps doing what it did before the second option existed.
+    @Test("going there is the default of the two")
+    func addressIsTheDefault() {
+        let subject = state()
+        subject.setTabs([])
+        subject.setApplications([])
+        subject.appendToSearch("grok.com")
+
+        #expect(subject.selectedIndex == 0)
+        #expect(subject.selectedEntry?.sourceLabel == "Go to grok.com")
+    }
+
+    /// Two results from one query must not share an id. The list is diffed by id, so a collision
+    /// would silently drop one of the two options rather than showing both.
+    @Test("the two offers have distinct identities")
+    func twoOffersHaveDistinctIdentities() {
+        let subject = state()
+        subject.setTabs([])
+        subject.setApplications([])
+        subject.appendToSearch("grok.com")
+
+        let ids = Set(subject.entries.filter { $0.isWebSearch }.map(\.id))
+        #expect(ids.count == 2, "one id was reused, so an option was lost: \(ids)")
+    }
+
+    @Test("a phrase offers only a search")
+    func phraseOffersOnlyASearch() {
+        let subject = state()
+        subject.setTabs([])
+        subject.setApplications([])
+        subject.appendToSearch("quarterly report")
+
+        let offers = subject.entries.filter { $0.isWebSearch }
+        #expect(offers.count == 1)
+        #expect(offers.first?.sourceLabel == "Search the web")
     }
 
     @Test("no query means no offer")

@@ -468,16 +468,24 @@ final class TriggerMonitor {
             // have reached.
             switch KeyResponse.forKeyDown(
                 keyCode: event.getIntegerValueField(.keyboardEventKeycode),
-                // Queried from the keyboard rather than taken from `event.flags`. At
-                // `.cghidEventTap` the event's own flags are unreliable — see `KeyResponse` — and
-                // getting this wrong is what made a space untypeable under an ⌥Space shortcut.
-                activeModifiers: CGEventSource.flagsState(.combinedSessionState),
+                // The union of the live keyboard state and the event's own flags. Neither is
+                // complete on its own: at `.cghidEventTap` the event may arrive without the
+                // modifiers the window server later attaches, and a live query is a snapshot taken
+                // marginally after the press. Both fail by *missing* a modifier rather than by
+                // inventing one, and missing one is the failure that matters here — it turns the
+                // shortcut into a space. Taking either source's word for it needs both to be wrong
+                // in the same direction at the same instant.
+                activeModifiers: CGEventSource.flagsState(.combinedSessionState)
+                    .union(event.flags),
                 characters: Self.characters(from: event),
+                isAutorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                 shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) },
                 shortcutModifiers: monitor.keyboardShortcut?.eventFlags ?? []
             ) {
             case .dismiss:
                 monitor.dispatch { $0.escapePressed() }
+                return nil
+            case .ignore:
                 return nil
             case .triggerShortcut:
                 // Consumed, which is the point: the Carbon hotkey behind this would otherwise
