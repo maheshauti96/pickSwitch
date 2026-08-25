@@ -232,7 +232,7 @@ struct WindowWedgeView: View {
     /// there is a row's worth of height spare for them.
     private var label: some View {
         VStack(spacing: 1) {
-            Text(entry.applicationName)
+            Text(entry.sourceLabel)
                 .font(.system(size: metrics.titleFontSize, weight: .medium))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)

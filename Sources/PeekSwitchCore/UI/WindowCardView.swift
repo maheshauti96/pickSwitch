@@ -205,7 +205,7 @@ struct WindowCardView: View {
                     .foregroundStyle(palette.text)
 
                 if metrics.showsSubtitle {
-                    Text(entry.isApplication ? entry.displayTitle : entry.applicationName)
+                    Text(entry.isApplication ? entry.displayTitle : entry.sourceLabel)
                         .font(.system(size: metrics.subtitleFontSize))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -253,7 +253,7 @@ struct WindowCardView: View {
     /// which is the part you can recognise at ring distance anyway.
     private var primaryText: String {
         if entry.isApplication { return entry.applicationName }
-        return metrics.usesApplicationNameAsPrimary ? entry.applicationName : entry.displayTitle
+        return metrics.usesApplicationNameAsPrimary ? entry.sourceLabel : entry.displayTitle
     }
 
     private var accessibilityLabel: String {

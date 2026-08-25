@@ -79,6 +79,13 @@ public final class SwitcherController {
     private var browserIconsByWindowID: [CGWindowID: CachedBrowserIcon] = [:]
     private var browserIconOrder: [CGWindowID] = []
     private static let maximumRememberedBrowserIcons = 64
+
+    /// How many tab results may have their site icon resolved for one visible list.
+    ///
+    /// Generous enough to cover a screenful in any arrangement, low enough that a query matching
+    /// most of a forty-tab browser does not fan out a request per tab for a list that is about to
+    /// change with the next keystroke.
+    private static let maximumVisibleTabIconRequests = 16
     private let triggerMonitor: TriggerMonitor
     private let hotKeyMonitor: HotKeyMonitor
 
@@ -1796,6 +1803,7 @@ extension SwitcherController: TriggerMonitorDelegate {
     private func afterSearchChanged() {
         hoveredIndex = nil
         resizePanelForCurrentLayout()
+        refreshTabIcons()
 
         // Filtering can bring windows into view whose thumbnails were never captured,
         // because capture is scoped to what was on screen. Tabs are skipped: they have no
@@ -1805,6 +1813,55 @@ extension SwitcherController: TriggerMonitorDelegate {
         guard !capturable.isEmpty else { return }
         let scale = panel?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         startCaptures(for: capturable, backingScale: scale)
+    }
+
+    /// Resolve site icons for the tab results currently on screen.
+    ///
+    /// Bounded to what is visible, which matters here more than it does for windows: a search can
+    /// match dozens of tabs, and a browser with forty of them would otherwise fan out forty
+    /// requests for a list the user is about to narrow further with the next keystroke. The service
+    /// deduplicates by origin underneath, so ten tabs on one site cost one request.
+    private func refreshTabIcons() {
+        guard state.isVisible else { return }
+        let presentationID = state.presentationID
+
+        let pending = state.entries
+            .filter { $0.isTab && !state.hasSiteIcon(for: $0) }
+            .prefix(Self.maximumVisibleTabIconRequests)
+
+        for entry in pending {
+            // Fails closed: a tab whose window did not report the browser's exact `normal` mode is
+            // never sent to the network, so a private tab keeps the plain browser icon.
+            guard let tab = entry.tab, tab.allowsFaviconRequest else { continue }
+
+            let entryID = entry.id
+            let browserIcon = entry.applicationIcon
+
+            Task { [weak self, browserFavicons] in
+                guard let self,
+                      let favicon = await browserFavicons.favicon(for: tab.url)
+                else { return }
+
+                let siteIcon = NSImage(
+                    cgImage: favicon,
+                    size: NSSize(width: favicon.width, height: favicon.height)
+                )
+                siteIcon.isTemplate = false
+
+                // Same composition as a browser window's: the browser in front, the site behind
+                // it, so a tab result reads as "a page, in this browser" at a glance.
+                let composed = browserIcon.map {
+                    BrowserWindowIcon.layered(siteIcon: siteIcon, browserIcon: $0)
+                } ?? siteIcon
+
+                self.state.setTabIcon(
+                    composed,
+                    tint: IconTint.sampled(from: siteIcon),
+                    for: entryID,
+                    presentationID: presentationID
+                )
+            }
+        }
     }
 
     func confirmPressed() {

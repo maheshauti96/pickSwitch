@@ -60,7 +60,7 @@ struct WindowRowView: View {
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(entry.applicationName)
+                Text(entry.sourceLabel)
                     .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)

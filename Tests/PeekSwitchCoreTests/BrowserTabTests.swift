@@ -252,4 +252,115 @@ struct BrowserTabTests {
             #expect(!browser.usesCurrentTab)
         }
     }
+
+    // MARK: - Parsing tabs
+
+    private static let field = "\u{01}"
+    private static let item = "\u{02}"
+    private static let record = "\u{03}"
+
+    private func tabRecord(
+        window: Int,
+        mode: String,
+        titles: [String],
+        urls: [String]
+    ) -> String {
+        [
+            String(window),
+            mode,
+            titles.joined(separator: Self.item),
+            urls.joined(separator: Self.item),
+        ].joined(separator: Self.field)
+    }
+
+    @Test("A tab record parses into tabs with their window's mode")
+    func tabRecordParses() {
+        let output = [
+            tabRecord(
+                window: 7,
+                mode: "normal",
+                titles: ["Home / X", "Inbox"],
+                urls: ["https://x.com/home", "https://mail.example.com"]
+            ),
+            tabRecord(
+                window: 8,
+                mode: "incognito",
+                titles: ["Private"],
+                urls: ["https://example.com"]
+            ),
+        ].joined(separator: Self.record)
+
+        let tabs = BrowserTabService.parseTabs(output, browser: .chrome)
+        #expect(tabs.count == 3)
+
+        #expect(tabs[0].windowIdentifier == 7)
+        #expect(tabs[0].tabIndex == 1)
+        #expect(tabs[0].host == "x.com")
+        #expect(tabs[1].tabIndex == 2)
+
+        // The eligibility that decides whether a request is ever made.
+        #expect(tabs[0].allowsFaviconRequest)
+        #expect(tabs[1].allowsFaviconRequest)
+        #expect(!tabs[2].allowsFaviconRequest, "an incognito window's tabs must never be fetched")
+    }
+
+    /// Fails closed. An unrecognised mode is treated as private, because the cost of guessing
+    /// wrong is a private address going out over the network.
+    @Test("An unknown window mode blocks the icon request", arguments: ["", "guest", "unknown", "Normal-ish"])
+    func unknownModeBlocksTheRequest(mode: String) {
+        let output = tabRecord(
+            window: 1,
+            mode: mode,
+            titles: ["Something"],
+            urls: ["https://example.com"]
+        )
+
+        let tabs = BrowserTabService.parseTabs(output, browser: .chrome)
+        #expect(tabs.count == 1)
+        #expect(!tabs[0].allowsFaviconRequest, "mode \"\(mode)\" should not be eligible")
+    }
+
+    /// Safari cannot report a mode at all, so the script substitutes a literal and every Safari
+    /// tab is ineligible — the same fail-closed treatment its windows already get.
+    @Test("Safari tabs are never eligible")
+    func safariTabsAreNeverEligible() {
+        let output = tabRecord(
+            window: 3,
+            mode: "unknown",
+            titles: ["Page"],
+            urls: ["https://example.com"]
+        )
+
+        let tabs = BrowserTabService.parseTabs(output, browser: .safari)
+        #expect(tabs.count == 1)
+        #expect(!tabs[0].allowsFaviconRequest)
+    }
+
+    @Test("A malformed tab record is skipped rather than crashing")
+    func malformedTabRecordsAreSkipped() {
+        let output = [
+            "not-a-number\u{01}normal\u{01}Title\u{01}https://example.com",
+            ["5", "normal"].joined(separator: Self.field),
+            tabRecord(window: 9, mode: "normal", titles: ["Good"], urls: ["https://good.example"]),
+        ].joined(separator: Self.record)
+
+        let tabs = BrowserTabService.parseTabs(output, browser: .chrome)
+        #expect(tabs.count == 1)
+        #expect(tabs[0].windowIdentifier == 9)
+    }
+
+    /// A tab with neither a title nor an address is still loading and cannot be matched.
+    @Test("Empty tabs are dropped")
+    func emptyTabsAreDropped() {
+        let output = tabRecord(
+            window: 2,
+            mode: "normal",
+            titles: ["", "Real"],
+            urls: ["", "https://real.example"]
+        )
+
+        let tabs = BrowserTabService.parseTabs(output, browser: .chrome)
+        #expect(tabs.count == 1)
+        #expect(tabs[0].title == "Real")
+    }
 }

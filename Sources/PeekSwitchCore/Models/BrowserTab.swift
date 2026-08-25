@@ -18,6 +18,30 @@ struct BrowserTab: Equatable, Hashable, Sendable {
     let title: String
     let url: String
 
+    /// Whether the icon of this tab's site may be fetched over the network.
+    ///
+    /// True only when the tab's window reported the browser's exact `normal` mode. It fails
+    /// closed, and the default is `false`, because the cost of getting this wrong is asymmetric:
+    /// requesting an icon for a private tab would put a private destination on the network, and no
+    /// icon is a far smaller loss than that.
+    let allowsFaviconRequest: Bool
+
+    init(
+        browser: Browser,
+        windowIdentifier: Int,
+        tabIndex: Int,
+        title: String,
+        url: String,
+        allowsFaviconRequest: Bool = false
+    ) {
+        self.browser = browser
+        self.windowIdentifier = windowIdentifier
+        self.tabIndex = tabIndex
+        self.title = title
+        self.url = url
+        self.allowsFaviconRequest = allowsFaviconRequest
+    }
+
     /// Stable within a presentation, which is all the UI needs to key a card by.
     var identity: String {
         "\(browser.bundleIdentifier):\(windowIdentifier):\(tabIndex)"

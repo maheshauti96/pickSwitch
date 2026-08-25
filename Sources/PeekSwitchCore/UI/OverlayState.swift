@@ -105,6 +105,14 @@ final class OverlayState: ObservableObject {
     /// icon: three Chrome windows share one application icon but rarely one site.
     private var siteTintsByWindowID: [CGWindowID: IconTint] = [:]
 
+    /// Icons and hues for tab results, keyed by entry id because a tab has no `CGWindowID`.
+    ///
+    /// Tabs need this more than windows do, not less. A window list rarely holds more than a
+    /// handful from one browser; a search across tabs routinely returns a dozen, and without the
+    /// site's own icon they are a dozen identical browser icons stacked up.
+    @Published private(set) var siteIconsByEntryID: [String: NSImage] = [:]
+    private var siteTintsByEntryID: [String: IconTint] = [:]
+
     /// The tint each entry actually draws with, after clustered hues have been spread apart.
     ///
     /// Resolved for the whole presentation rather than per card, because separation is a property
@@ -314,6 +322,8 @@ final class OverlayState: ObservableObject {
         // without rematching it.
         browserIconsByWindowID.removeAll(keepingCapacity: true)
         siteTintsByWindowID.removeAll(keepingCapacity: true)
+        siteIconsByEntryID.removeAll(keepingCapacity: true)
+        siteTintsByEntryID.removeAll(keepingCapacity: true)
         reload(entries: entries, selectedIndex: selectedIndex)
     }
 
@@ -364,8 +374,39 @@ final class OverlayState: ObservableObject {
     /// would create network traffic for a private destination. Tabs and installed applications
     /// have no native window id and likewise keep their own supplied icon.
     func displayIcon(for entry: WindowEntry) -> NSImage? {
+        if entry.isTab {
+            return siteIconsByEntryID[entry.id] ?? entry.applicationIcon
+        }
         guard entry.isWindow, !isIncognito(entry) else { return entry.applicationIcon }
         return browserIconsByWindowID[entry.windowID] ?? entry.applicationIcon
+    }
+
+    /// Whether this tab already has a resolved icon, so the controller does not ask twice.
+    func hasSiteIcon(for entry: WindowEntry) -> Bool {
+        siteIconsByEntryID[entry.id] != nil
+    }
+
+    /// Publish a tab's composed icon, if it still belongs to the visible presentation.
+    ///
+    /// - Parameter image: already composed, since the caller holds both halves.
+    @discardableResult
+    func setTabIcon(
+        _ image: NSImage,
+        tint: IconTint?,
+        for entryID: String,
+        presentationID expectedPresentationID: Int
+    ) -> Bool {
+        guard isVisible,
+              presentationID == expectedPresentationID,
+              tabEntries.contains(where: { $0.id == entryID })
+        else { return false }
+
+        siteIconsByEntryID[entryID] = image
+        if let tint, siteTintsByEntryID[entryID] != tint {
+            siteTintsByEntryID[entryID] = tint
+            recomputeTints()
+        }
+        return true
     }
 
     /// The tint for an entry's container, or `nil` when it should keep the flat palette fill.
@@ -388,6 +429,12 @@ final class OverlayState: ObservableObject {
     private func tintSource(for entry: WindowEntry) -> (owner: String, tint: IconTint)? {
         if entry.isWindow, !isIncognito(entry), let site = siteTintsByWindowID[entry.windowID] {
             return ("site:\(entry.windowID)", site)
+        }
+
+        // A tab's own site, for the same reason: its browser's hue is shared with every other tab
+        // in the list and so separates none of them.
+        if entry.isTab, let site = siteTintsByEntryID[entry.id] {
+            return ("site:\(entry.id)", site)
         }
 
         let key = entry.bundleIdentifier ?? entry.applicationName
@@ -526,6 +573,8 @@ final class OverlayState: ObservableObject {
         thumbnails.removeAll(keepingCapacity: false)
         browserIconsByWindowID.removeAll(keepingCapacity: false)
         siteTintsByWindowID.removeAll(keepingCapacity: false)
+        siteIconsByEntryID.removeAll(keepingCapacity: false)
+        siteTintsByEntryID.removeAll(keepingCapacity: false)
         // `applicationTints` deliberately survives: an application icon does not change, and
         // re-sampling every icon on the next presentation would be pure waste.
     }

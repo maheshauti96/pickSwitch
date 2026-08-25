@@ -72,6 +72,21 @@ struct WindowEntry: Identifiable {
     var isTab: Bool { launchableApplication == nil && tab != nil }
     var isWindow: Bool { tab == nil && launchableApplication == nil }
 
+    /// What a card shows where it names the *source* of an entry rather than the entry itself.
+    ///
+    /// For a window that is the application, which is the useful answer. For a tab it is the site,
+    /// because the application is not: every tab in a search shares one browser name, so a list of
+    /// them read as fifteen results all called "Google Chrome" with nothing to tell them apart.
+    /// "x.com" identifies a result; the browser it happens to live in does not.
+    ///
+    /// Deliberately separate from `applicationName`, which still names the browser. That value is
+    /// what groups windows per application, what search matches against, and what the tint is keyed
+    /// on, and none of those should start treating one browser as many applications.
+    var sourceLabel: String {
+        if let tab, !tab.host.isEmpty { return tab.host }
+        return applicationName
+    }
+
     /// What the card shows on its title line. Some windows genuinely have no
     /// title (utility panels, freshly opened documents).
     var displayTitle: String {

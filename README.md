@@ -72,6 +72,8 @@ the last window".
 
 **Type to narrow it down.** Start typing and the list filters by application and title.
 It searches your open browser tabs too, so a tab is one gesture away instead of two.
+Tab results are labelled by site — `x.com` rather than "Google Chrome", which every tab
+would otherwise say — and carry the site's icon layered with the browser's.
 Applications that are not running show up as well, so you can launch one without
 leaving for Spotlight. If nothing matches, Return searches the web.
 

@@ -164,6 +164,11 @@ actor BrowserTabService {
     /// One event per window rather than one per tab. See the type comment for why that
     /// distinction is worth the slightly awkward script.
     private static func enumerate(_ browser: BrowserTab.Browser) -> TabsOutcome {
+        // Safari has no `mode`, and asking for a property a dictionary does not declare fails the
+        // whole script rather than that one field. Substituting a literal keeps one script for
+        // every browser while leaving Safari's tabs correctly ineligible for an icon request.
+        let modeExpression = browser.reportsWindowMode ? "(mode of w as text)" : "\"unknown\""
+
         let source = """
         set AppleScript's text item delimiters to "\(itemDelimiter)"
         tell application "\(browser.scriptingName)"
@@ -172,6 +177,7 @@ actor BrowserTabService {
                 set titles to \(browser.titleProperty) of tabs of w
                 set addresses to URL of tabs of w
                 set end of collected to ((id of w as text) & "\(fieldDelimiter)" ¬
+                    & \(modeExpression) & "\(fieldDelimiter)" ¬
                     & (titles as text) & "\(fieldDelimiter)" & (addresses as text))
             end repeat
         end tell
@@ -181,7 +187,7 @@ actor BrowserTabService {
 
         switch run(source) {
         case .success(let output):
-            return .success(parse(output, browser: browser))
+            return .success(parseTabs(output, browser: browser))
         case .denied:
             return .denied
         case .failed(let message):
@@ -274,15 +280,21 @@ actor BrowserTabService {
         return windows
     }
 
-    private static func parse(_ output: String, browser: BrowserTab.Browser) -> [BrowserTab] {
+    static func parseTabs(_ output: String, browser: BrowserTab.Browser) -> [BrowserTab] {
         var tabs: [BrowserTab] = []
 
         for record in output.components(separatedBy: recordDelimiter) where !record.isEmpty {
             let fields = record.components(separatedBy: fieldDelimiter)
-            guard fields.count == 3, let windowIdentifier = Int(fields[0]) else { continue }
+            guard fields.count == 4, let windowIdentifier = Int(fields[0]) else { continue }
 
-            let titles = fields[1].components(separatedBy: itemDelimiter)
-            let addresses = fields[2].components(separatedBy: itemDelimiter)
+            // Only the browser's exact `normal` answer permits a network request for this tab's
+            // icon. Anything else — incognito, an unrecognised mode, or a browser that cannot
+            // report one at all — is treated as private.
+            let mode = fields[1].trimmingCharacters(in: .whitespaces).lowercased()
+            let allowsFaviconRequest = mode == "normal"
+
+            let titles = fields[2].components(separatedBy: itemDelimiter)
+            let addresses = fields[3].components(separatedBy: itemDelimiter)
 
             for (offset, title) in titles.enumerated() {
                 let url = offset < addresses.count ? addresses[offset] : ""
@@ -297,7 +309,8 @@ actor BrowserTabService {
                         // AppleScript indexes from one, and the index is what selects it.
                         tabIndex: offset + 1,
                         title: title,
-                        url: url
+                        url: url,
+                        allowsFaviconRequest: allowsFaviconRequest
                     )
                 )
             }
