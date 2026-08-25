@@ -167,6 +167,14 @@ struct OverlayView: View {
     private var cardShadowRadius: CGFloat { showsBackdrop ? 0 : 9 }
     private var cardShadowOpacity: Double { showsBackdrop ? 0 : 0.34 }
 
+    /// White radial cards need a touch more lift from a white desktop, but a stronger stroke would
+    /// also darken every seam inside the ring. Keep the same broad shadow and raise only its source
+    /// opacity in Light Mode; Dark Mode already has enough edge contrast and stays unchanged.
+    private var wedgeShadowOpacity: Double {
+        guard !showsBackdrop else { return 0 }
+        return colorScheme == .light ? 0.38 : 0.34
+    }
+
     // MARK: - Cards
 
     private func card(_ card: OverlayLayout.PositionedCard) -> some View {
@@ -353,7 +361,7 @@ struct OverlayView: View {
             isIncognito: state.isIncognito(entry),
             tint: state.tint(for: entry),
             shadowRadius: cardShadowRadius,
-            shadowOpacity: cardShadowOpacity
+            shadowOpacity: wedgeShadowOpacity
         )
         // Wedges are painted in seat order, so without this the selected one's glow would
         // be overpainted by whichever wedge happens to come after it.
