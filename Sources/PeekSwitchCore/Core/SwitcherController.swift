@@ -804,8 +804,13 @@ public final class SwitcherController {
                             .intersection(visibleIDs)
                     }
 
+                    // Counts on both sides, not just the matches. "1 matched" alone cannot
+                    // distinguish a browser window missing from the switcher's own list from one
+                    // that is present but could not be paired with the browser's description of
+                    // it — and those are unrelated faults with unrelated fixes.
                     Log.registry.info("""
-                        inspected \(matched.count) matched browser windows, \
+                        inspected \(matched.count) of \(candidates.count) browser windows \
+                        (\(scripted.count) reported by their browsers), \
                         \(incognito.count) incognito
                         """)
 
