@@ -401,7 +401,14 @@ struct OverlayView: View {
             .frame(width: frame.width, height: frame.height)
             // A disc rather than nothing: the caption sits over whatever desktop happens to
             // be behind the panel, and text alone there is unreadable half the time.
-            .background(Circle().fill(palette.chipFill))
+            //
+            // Tinted with the selected window's own hue, and animated separately from the caption
+            // above so a colour change cannot replay the disc's entrance.
+            .background(
+                Circle()
+                    .fill(palette.selectedCardFill(tintedBy: state.tint(for: entry)))
+                    .animation(captionChangeAnimation, value: entry.id)
+            )
             .overlay(Circle().strokeBorder(palette.border, lineWidth: 1))
             .opacity(state.isRevealed ? 1 : 0)
             .animation(hubRevealAnimation, value: state.isRevealed)
