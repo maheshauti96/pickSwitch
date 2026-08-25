@@ -143,6 +143,13 @@ enum IncognitoMatcher {
         )
     }
 
+    /// Shortest run of real characters a browser's title fragment must have before it is allowed
+    /// to identify a window by being contained in ours.
+    ///
+    /// Guards the containment passes against near-empty evidence: a two-character fragment appears
+    /// inside almost any title, and matching on it would pair windows essentially at random.
+    static let minimumContainedTitleLength = 6
+
     /// The passes, in the order they run.
     private enum MatchRequirement: CaseIterable {
         /// Same browser, same title, same rectangle. Unambiguous in practice.
@@ -150,6 +157,10 @@ enum IncognitoMatcher {
         /// Same browser and title. Distinct titles are the common case, and a title is the more
         /// meaningful of the two signals — it is what the user is reading.
         case title
+        /// Same browser and rectangle, and the browser's title found inside ours.
+        case containedTitleAndFrame
+        /// Same browser, and the browser's title found inside ours. See `containsTitle`.
+        case containedTitle
         /// Same browser and rectangle, for a window whose title the two APIs disagree about
         /// (a page that retitled itself between the two reads).
         case frame
@@ -161,6 +172,10 @@ enum IncognitoMatcher {
                 return sameTitle(entry, scripted) && sameFrame(entry, scripted)
             case .title:
                 return sameTitle(entry, scripted)
+            case .containedTitleAndFrame:
+                return containsTitle(entry, scripted) && sameFrame(entry, scripted)
+            case .containedTitle:
+                return containsTitle(entry, scripted)
             case .frame:
                 return sameFrame(entry, scripted)
             }
@@ -172,6 +187,50 @@ enum IncognitoMatcher {
             // An empty title matches any other empty one, which is no evidence at all, so it is
             // not allowed to settle a pair on its own.
             return !left.isEmpty && left == right
+        }
+
+        /// Whether the browser's title for a window is present, in order, inside ours.
+        ///
+        /// Exact equality fails routinely, and on real desktops it fails for both windows of a
+        /// browser at once — which is worse than it sounds, because two maximised windows share a
+        /// rectangle to the pixel, so the frame pass cannot break the tie either and neither
+        /// window gets classified.
+        ///
+        /// Two things make the strings differ, and they compose:
+        ///
+        /// - Accessibility reports the window title, which Chrome builds by appending its own name
+        ///   and, for a private window, a parenthesised mode: 58 characters of page title arrive as
+        ///   86. Stripping a trailing `" - <app name>"` would handle that one case, but the mode
+        ///   suffix is localised, so the list of things to strip is unbounded.
+        /// - The browser's own scripting name is truncated when the page title is long, and
+        ///   Chromium elides the *middle*: a 127-character title came back as 59 with the head and
+        ///   tail kept either side of an ellipsis. So the browser's string is not a prefix of ours
+        ///   either.
+        ///
+        /// Splitting the browser's title at its ellipses and requiring every fragment to appear in
+        /// order inside ours covers both without knowing anything about a specific browser's
+        /// formatting or the user's language. It is deliberately asymmetric — theirs inside ours,
+        /// never the reverse — because ours is the one carrying the additions.
+        private func containsTitle(_ entry: WindowEntry, _ scripted: ScriptedBrowserWindow) -> Bool {
+            let ours = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let theirs = scripted.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !ours.isEmpty, !theirs.isEmpty else { return false }
+
+            let fragments = theirs
+                .split(whereSeparator: { $0 == "…" || $0 == "\u{2026}" })
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard !fragments.isEmpty,
+                  fragments.reduce(0, { $0 + $1.count })
+                      >= IncognitoMatcher.minimumContainedTitleLength
+            else { return false }
+
+            var searchRange = ours.startIndex..<ours.endIndex
+            for fragment in fragments {
+                guard let found = ours.range(of: fragment, range: searchRange) else { return false }
+                searchRange = found.upperBound..<ours.endIndex
+            }
+            return true
         }
 
         private func sameFrame(_ entry: WindowEntry, _ scripted: ScriptedBrowserWindow) -> Bool {

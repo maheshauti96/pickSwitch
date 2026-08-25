@@ -66,6 +66,12 @@ final class OverlayState: ObservableObject {
     /// `WindowEntry.applicationIcon` remains the immutable fallback and is always used for
     /// incognito windows and non-window search targets.
     @Published private(set) var browserIconsByWindowID: [CGWindowID: NSImage] = [:]
+    /// Private-window icons with their badge already composited, keyed by application.
+    ///
+    /// Not `@Published`: it is a cache derived from `incognitoWindowIDs` and the application's own
+    /// icon, and publishing it would announce a change to every observer each time a new browser's
+    /// badge is first drawn, in the middle of the render that asked for it.
+    private var badgedPrivateIcons: [String: NSImage] = [:]
     /// The strip's pixel scroll offset.
     @Published var scrollOffset: CGFloat = 0
     /// First card on screen for the styles that page by whole items.
@@ -371,13 +377,27 @@ final class OverlayState: ObservableObject {
     /// The one icon policy used by every layout.
     ///
     /// Private windows deliberately retain the browser icon: even a cookie-free favicon request
-    /// would create network traffic for a private destination. Tabs and installed applications
-    /// have no native window id and likewise keep their own supplied icon.
+    /// would create network traffic for a private destination. They are badged here instead, which
+    /// is what gives every arrangement the same marker without each one having to place it — and
+    /// the corner it uses is free precisely because these windows have no site icon. Tabs and
+    /// installed applications have no native window id and likewise keep their own supplied icon.
     func displayIcon(for entry: WindowEntry) -> NSImage? {
         if entry.isTab {
             return siteIconsByEntryID[entry.id] ?? entry.applicationIcon
         }
-        guard entry.isWindow, !isIncognito(entry) else { return entry.applicationIcon }
+        guard entry.isWindow else { return entry.applicationIcon }
+        guard !isIncognito(entry) else {
+            guard let applicationIcon = entry.applicationIcon else { return nil }
+            // Keyed by application rather than by window: the composite depends only on the
+            // browser's icon, so every private window of one browser shares it, and nothing about
+            // it goes stale within a session. Cached because this is called from a view body, and
+            // returning a freshly built `NSImage` each time would defeat AppKit's own caching.
+            let key = entry.bundleIdentifier ?? entry.applicationName
+            if let cached = badgedPrivateIcons[key] { return cached }
+            let badged = PrivateWindowIcon.badged(applicationIcon)
+            badgedPrivateIcons[key] = badged
+            return badged
+        }
         return browserIconsByWindowID[entry.windowID] ?? entry.applicationIcon
     }
 

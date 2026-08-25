@@ -223,9 +223,9 @@ struct WindowCardView: View {
                 ApplicationBadge()
             }
 
-            if isIncognito {
-                IncognitoBadge()
-            }
+            // Private browsing is marked on the icon by `PrivateWindowIcon`, not here. It used to be
+            // a glyph in this row and was missed: this row is where secondary details live, and
+            // which session a window belongs to is not a secondary detail.
 
             if let badgeCount {
                 // Requirement 3.6. Outlined rather than filled, matching the design's

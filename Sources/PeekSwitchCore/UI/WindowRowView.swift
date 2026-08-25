@@ -83,9 +83,7 @@ struct WindowRowView: View {
                 ApplicationBadge(isOnAccent: isSelected)
             }
 
-            if isIncognito {
-                IncognitoBadge(isOnAccent: isSelected, size: 10)
-            }
+            // Private browsing is marked on the icon by `PrivateWindowIcon`, not in this row.
 
             if entry.isMinimized {
                 Image(systemName: "arrow.down.right.and.arrow.up.left")

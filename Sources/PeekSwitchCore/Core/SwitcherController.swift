@@ -769,10 +769,19 @@ public final class SwitcherController {
                 guard self.browserInspectionGeneration == generation else { return }
 
                 let currentWindowIDs = Set(self.state.allWindowEntries.map(\.windowID))
-                let matched = IncognitoMatcher.matchedWindows(
+                let paired = IncognitoMatcher.matchedWindows(
                     entries: pending,
                     scripted: scripted
-                ).filter { currentWindowIDs.contains($0.key) }
+                )
+                let matched = paired.filter { currentWindowIDs.contains($0.key) }
+                if paired.count != matched.count {
+                    // Separates "could not pair" from "paired, then discarded as stale". The two
+                    // have nothing in common except the symptom.
+                    Log.registry.info("""
+                        \(paired.count - matched.count) of \(paired.count) paired browser \
+                        windows discarded as no longer current
+                        """)
+                }
 
                 if !matched.isEmpty {
                     let incognito = Set(
@@ -813,6 +822,51 @@ public final class SwitcherController {
                         (\(scripted.count) reported by their browsers), \
                         \(incognito.count) incognito
                         """)
+
+                    if matched.count < candidates.count {
+                        // Which signal failed, for the windows that did not pair. Titles are not
+                        // logged — they are the user's browsing — so this reports only whether
+                        // each signal agreed with anything, which is what separates "the two APIs
+                        // disagree about the title" from "several windows look identical".
+                        let unmatched = candidates.filter { matched[$0.windowID] == nil }
+                        for entry in unmatched {
+                            let sameBrowser = scripted.filter {
+                                $0.browser.bundleIdentifier == entry.bundleIdentifier
+                            }
+                            let titleAgreements = sameBrowser.filter {
+                                let ours = entry.title
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                                let theirs = $0.title
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                                return !ours.isEmpty && ours == theirs
+                            }.count
+                            let frameAgreements = sameBrowser.filter {
+                                abs($0.frame.minX - entry.frame.minX)
+                                    <= IncognitoMatcher.frameTolerance
+                                    && abs($0.frame.minY - entry.frame.minY)
+                                        <= IncognitoMatcher.frameTolerance
+                                    && abs($0.frame.width - entry.frame.width)
+                                        <= IncognitoMatcher.frameTolerance
+                                    && abs($0.frame.height - entry.frame.height)
+                                        <= IncognitoMatcher.frameTolerance
+                            }.count
+                            Log.registry.info("""
+                                unpaired browser window \(entry.windowID): \
+                                \(sameBrowser.count) same-browser records, \
+                                \(titleAgreements) agree on title, \
+                                \(frameAgreements) agree on frame, \
+                                our title \(entry.title.count) chars, \
+                                our frame \(entry.frame.debugDescription, privacy: .public)
+                                """)
+                        }
+                        for window in scripted where !matched.values.contains(window) {
+                            Log.registry.info("""
+                                unpaired browser record \(window.identifier): \
+                                their title \(window.title.count) chars, \
+                                their frame \(window.frame.debugDescription, privacy: .public)
+                                """)
+                        }
+                    }
 
                     var completedWindowIDs: Set<CGWindowID> = []
                     for (windowID, browserWindow) in matched {

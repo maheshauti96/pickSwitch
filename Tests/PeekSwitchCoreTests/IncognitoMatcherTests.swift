@@ -268,4 +268,141 @@ struct IncognitoMatcherTests {
             #expect(browser.reportsWindowMode, "\(browser) should report a mode")
         }
     }
+
+    // MARK: - Titles the two APIs report differently
+
+    /// The exact shape that shipped broken, transcribed from a real session.
+    ///
+    /// Two maximised Chrome windows, one private. Their rectangles are identical to the pixel, so
+    /// the frame pass cannot separate them. Accessibility reports the page title with Chrome's name
+    /// and the localised mode appended — 58 characters arriving as 86 — while Chrome's own scripting
+    /// name for the other window is elided in the middle at 59 characters. Exact equality matched
+    /// neither, the frame pass could settle neither, and both windows went unclassified: the private
+    /// one showed no badge at all.
+    @Test("a private window is found when the browser and Accessibility word its title differently")
+    func matchesDespiteTitleDecorationAndElision() {
+        let shared = CGRect(x: -1512, y: 68, width: 1512, height: 950)
+        let entries = [
+            entry(
+                id: 5164,
+                title: "[development] Quattr Inc | Grow Your Web Traffic 2X Faster"
+                    + " - Google Chrome (Incognito)",
+                frame: shared
+            ),
+            entry(
+                id: 54,
+                title: "fix(clustering): make the string comparison deterministic"
+                    + " by mahesha-quattr · Pull Request #91 · Quattr/taxonomy-engine"
+                    + " - Google Chrome",
+                frame: shared
+            ),
+        ]
+        let scripted = [
+            self.scripted(
+                1_263_774_572,
+                incognito: true,
+                title: "[development] Quattr Inc | Grow Your Web Traffic 2X Faster",
+                frame: shared
+            ),
+            self.scripted(
+                1_263_774_200,
+                incognito: false,
+                title: "fix(clustering): make the str… #91 · Quattr/taxonomy-engine",
+                frame: shared
+            ),
+        ]
+
+        let matched = IncognitoMatcher.matchedWindows(entries: entries, scripted: scripted)
+        #expect(matched.count == 2)
+        #expect(matched[5164]?.identifier == 1_263_774_572)
+        #expect(matched[54]?.identifier == 1_263_774_200)
+        #expect(IncognitoMatcher.incognitoWindowIDs(entries: entries, scripted: scripted) == [5164])
+    }
+
+    /// Containment must not outrank equality. When one window's title is a substring of another's,
+    /// the window whose title matches exactly has to win, whichever order they arrive in.
+    @Test("an exact title beats a merely contained one")
+    func exactTitleWinsOverContainment() {
+        let entries = [
+            entry(id: 1, title: "Docs", frame: CGRect(x: 0, y: 0, width: 800, height: 600)),
+            entry(id: 2, title: "Docs — Reference", frame: CGRect(x: 10, y: 0, width: 800, height: 600)),
+        ]
+        let scripted = [
+            self.scripted(10, incognito: true, title: "Docs",
+                          frame: CGRect(x: 0, y: 0, width: 800, height: 600)),
+            self.scripted(11, incognito: false, title: "Docs — Reference",
+                          frame: CGRect(x: 10, y: 0, width: 800, height: 600)),
+        ]
+
+        let matched = IncognitoMatcher.matchedWindows(entries: entries, scripted: scripted)
+        #expect(matched[1]?.identifier == 10)
+        #expect(matched[2]?.identifier == 11)
+    }
+
+    /// A fragment short enough to appear in anything is not evidence. Without a floor here, a
+    /// browser reporting a near-empty title would pair with an arbitrary window.
+    ///
+    /// The rectangles are deliberately different. With them equal the `frame` pass settles the pair
+    /// on its own and the title rule is never consulted, so the test would pass without testing
+    /// anything — which is exactly what it did on the first run.
+    @Test("a title too short to mean anything does not pair by containment")
+    func shortTitleDoesNotPairByContainment() {
+        let entries = [
+            entry(
+                id: 1,
+                title: "A really quite long window title - Google Chrome",
+                frame: CGRect(x: 0, y: 0, width: 800, height: 600)
+            ),
+        ]
+        let scripted = [
+            self.scripted(
+                10,
+                incognito: true,
+                title: "e",
+                frame: CGRect(x: 900, y: 0, width: 800, height: 600)
+            ),
+        ]
+
+        #expect(IncognitoMatcher.matchedWindows(entries: entries, scripted: scripted).isEmpty)
+    }
+
+    /// Fragments either side of an elision must appear in the order the browser reported them, so
+    /// that a title sharing both fragments in reverse is not accepted. Distinct rectangles again,
+    /// so the frame pass cannot settle the pair behind the rule under test.
+    @Test("elided fragments must appear in order")
+    func elidedFragmentsMustBeInOrder() {
+        let entries = [
+            entry(
+                id: 1,
+                title: "taxonomy-engine and then clustering - Google Chrome",
+                frame: CGRect(x: 0, y: 0, width: 800, height: 600)
+            ),
+        ]
+        let scripted = [
+            self.scripted(
+                10,
+                incognito: true,
+                title: "clustering… taxonomy-engine",
+                frame: CGRect(x: 900, y: 0, width: 800, height: 600)
+            ),
+        ]
+
+        #expect(IncognitoMatcher.matchedWindows(entries: entries, scripted: scripted).isEmpty)
+    }
+
+    /// Containment is theirs-inside-ours only. Accessibility is the side that adds decoration, so
+    /// accepting the reverse would let a browser record claim a window with a longer title than it
+    /// reported — and on a desktop full of maximised windows, claim the wrong one.
+    @Test("containment does not run in reverse")
+    func containmentIsNotSymmetric() {
+        let entries = [
+            entry(id: 1, title: "Quattr", frame: CGRect(x: 0, y: 0, width: 800, height: 600)),
+        ]
+        let scripted = [
+            self.scripted(10, incognito: true, title: "Quattr Inc | Grow Your Web Traffic",
+                          frame: CGRect(x: 400, y: 0, width: 800, height: 600)),
+        ]
+
+        #expect(IncognitoMatcher.matchedWindows(entries: entries, scripted: scripted).isEmpty)
+    }
 }

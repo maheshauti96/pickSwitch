@@ -278,16 +278,16 @@ struct WindowWedgeView: View {
                     .help("Open installed application")
             }
 
-            if isIncognito {
-                IncognitoBadge(isOnAccent: isSelected, size: badgeSize)
-            }
+            // Private browsing is marked on the icon by `PrivateWindowIcon`. A wedge has the least
+            // label room of any arrangement, and this row was the worst place for the one marker
+            // that changes what selecting the window means.
         }
     }
 
     private var badgeSize: CGFloat { 8 }
 
     private var hasBadges: Bool {
-        entry.isTab || entry.isApplication || isIncognito
+        entry.isTab || entry.isApplication
     }
 
     private var minimizedBadge: some View {

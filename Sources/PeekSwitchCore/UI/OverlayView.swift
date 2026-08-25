@@ -379,7 +379,7 @@ struct OverlayView: View {
                             ApplicationBadge()
                         }
                         if state.isIncognito(entry) {
-                            IncognitoBadge(size: max(9, 10 * scale))
+                            IncognitoBadge(size: max(14, 15 * scale))
                         }
                         if entry.isMinimized {
                             Image(systemName: "arrow.down.right.and.arrow.up.left")
