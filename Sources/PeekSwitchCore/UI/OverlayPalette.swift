@@ -66,6 +66,24 @@ struct OverlayPalette {
     let tintSaturation: Double
     let tintBrightness: Double
 
+    /// How strongly the selected window's own icon shows through the spiral's middle, `0...1`.
+    ///
+    /// Measured, not chosen. The hub carries the smallest type in the app and every guarantee about
+    /// that type assumed a flat fill behind it, so the question is how far the surface under the text
+    /// may move. An icon has no luminance to reason about — it can be GitHub's near-black mark or a
+    /// near-white one — so the bound comes from the worst case: solid white and solid black at this
+    /// opacity, over every tinted fill, in both themes.
+    ///
+    /// The binding case is the 9-point secondary line, which is *translucent* in both themes, so
+    /// moving the surface moves the text with it and the contrast between them closes from both ends.
+    /// That is what makes these values as low as they are, and why the light theme's is not simply
+    /// larger despite starting from white.
+    ///
+    /// `OverlayPaletteTests` holds the bound and also holds the opposite: that the value is close to
+    /// the largest one that clears 4.5:1, so a future palette change cannot quietly leave the
+    /// watermark invisible either.
+    let hubArtworkOpacity: Double
+
     static func forScheme(_ scheme: ColorScheme) -> OverlayPalette {
         scheme == .dark ? .dark : .light
     }
@@ -91,7 +109,13 @@ struct OverlayPalette {
         // the tint colour the card without lightening it, so contrast stays where it was.
         tintStrength: 0.26,
         tintSaturation: 1.0,
-        tintBrightness: 0.26
+        tintBrightness: 0.26,
+        // Lower than the light theme's. The dark card is near-black and the text on it is white, so
+        // artwork can only close the gap between them; the light theme's white card with dark text
+        // has the same asymmetry the other way round and more room to give.
+        // Much higher than the opacity-only approach could allow, because the blend direction is
+        // what keeps it safe now rather than the number being small.
+        hubArtworkOpacity: 0.06
     )
 
     /// `--ps-*` light theme.
@@ -116,7 +140,8 @@ struct OverlayPalette {
         // room to spare, and it is still enough to tell a ring of Chrome windows apart.
         tintStrength: 0.15,
         tintSaturation: 0.85,
-        tintBrightness: 1.0
+        tintBrightness: 1.0,
+        hubArtworkOpacity: 0.10
     )
 
     /// PeekSwitch's selection colour, `#0088b0`.

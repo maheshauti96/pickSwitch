@@ -516,3 +516,185 @@ struct OverlayPaletteTests {
         #expect(OverlayPalette.dark.accent == OverlayPalette.light.accent)
     }
 }
+
+/// The guarantee extended to cover artwork showing through the spiral's middle.
+///
+/// Everything the main suite proves about the hub's text assumes a flat fill behind it. Once the
+/// selected window's icon shows through, that stops being true — and an icon has no luminance to
+/// reason about, because it can be GitHub's near-black mark or a near-white one.
+///
+/// The first attempt bounded the damage with a low opacity, and the measurement killed it: holding
+/// 4.5:1 for the 9-point secondary line allowed 0.06 in the dark theme and 0.10 in the light one,
+/// too faint to be worth drawing. So the artwork is now blended in the only direction that cannot
+/// hurt — darkening where the text is light, lightening where it is dark — and what these tests
+/// check is that property rather than a chosen number.
+///
+/// Stated as a comparison against the flat fill, not against 4.5:1 directly. That is the stronger
+/// claim and the one the design actually relies on: whatever the icon contains, the text is at least
+/// as legible as it was before any artwork existed. The absolute bar is then inherited from the main
+/// suite, which already sweeps every hue in both themes.
+@Suite("Hub artwork contrast")
+struct HubArtworkContrastTests {
+
+    private static let minimumRatio = 4.5
+
+    private var palettes: [(String, OverlayPalette)] {
+        [("dark", .dark), ("light", .light)]
+    }
+
+    private static let everyHue: [IconTint] = (0..<24).map {
+        IconTint(hue: Double($0) / 24, vividness: 1)
+    }
+
+    private static let black = RGBA(red: 0, green: 0, blue: 0, alpha: 1)
+    private static let white = RGBA(red: 1, green: 1, blue: 1, alpha: 1)
+
+    /// The two extremes an icon can put behind the text.
+    private static let artworkExtremes: [(String, RGBA)] = [
+        ("solid white artwork", RGBA(red: 1, green: 1, blue: 1, alpha: 1)),
+        ("solid black artwork", RGBA(red: 0, green: 0, blue: 0, alpha: 1)),
+    ]
+
+    /// The bound: whatever the icon contains, the hub's text still clears 4.5:1. Checked at both
+    /// extremes an icon can reach, every hue, both themes, both desktops. Nothing an icon can hold is
+    /// worse than solid white or solid black, which makes this a real bound rather than a sample.
+    @Test("hub text clears 4.5:1 with any artwork behind it")
+    func hubTextClearsTheBar() {
+        for (name, palette) in palettes {
+            for tint in Self.everyHue {
+                let fill = components(palette.selectedCardFill(tintedBy: tint))
+
+                for (artworkName, artwork) in Self.artworkExtremes {
+                    let surface = blend(artwork, over: fill, opacity: palette.hubArtworkOpacity)
+
+                    for (desktop, desktopName) in [(Self.black, "black"), (Self.white, "white")] {
+                        for (textName, text) in [
+                            ("primary", palette.text), ("secondary", palette.secondaryText)
+                        ] {
+                            let value = ratio(text: text, on: surface, over: desktop)
+                            #expect(
+                                value >= Self.minimumRatio,
+                                """
+                                \(name) hue \(tint.hue) \(textName) with \(artworkName) over \
+                                \(desktopName): \(value) < \(Self.minimumRatio)
+                                """
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// And the other half, which is the one a bound alone cannot give: the value is near the largest
+    /// that still clears the bar.
+    ///
+    /// Without this the safest opacity is zero and the watermark silently does nothing — a palette
+    /// change that tightened the margin could reduce it to invisible and every other test here would
+    /// still pass. Together the two say "as strong as legibility allows, and no stronger".
+    @Test("the artwork is as strong as the contrast guarantee allows")
+    func artworkIsAsStrongAsAllowed() {
+        for (name, palette) in palettes {
+            let largestSafe = largestSafeOpacity(for: palette)
+            #expect(
+                palette.hubArtworkOpacity <= largestSafe + 0.0001,
+                "\(name) uses \(palette.hubArtworkOpacity) but only \(largestSafe) is legible"
+            )
+            #expect(
+                palette.hubArtworkOpacity >= largestSafe - 0.02,
+                """
+                \(name) uses \(palette.hubArtworkOpacity) where \(largestSafe) would still be \
+                legible; the watermark is fainter than it needs to be
+                """
+            )
+            // A watermark nobody can see is not worth the code that draws it.
+            #expect(palette.hubArtworkOpacity >= 0.04, "\(name) artwork is too faint to see at all")
+        }
+    }
+
+    /// The largest opacity, to 0.01, at which every hue and both text colours still clear the bar.
+    private func largestSafeOpacity(for palette: OverlayPalette) -> Double {
+        var largest = 0.0
+        for step in 1...100 {
+            let candidate = Double(step) / 100
+            var safe = true
+            for tint in Self.everyHue {
+                let fill = components(palette.selectedCardFill(tintedBy: tint))
+                for (_, artwork) in Self.artworkExtremes {
+                    let surface = blend(artwork, over: fill, opacity: candidate)
+                    for desktop in [Self.black, Self.white] {
+                        for text in [palette.text, palette.secondaryText] {
+                            if ratio(text: text, on: surface, over: desktop) < Self.minimumRatio {
+                                safe = false
+                            }
+                        }
+                    }
+                }
+            }
+            if safe { largest = candidate } else { break }
+        }
+        return largest
+    }
+
+    // MARK: - Colour arithmetic
+
+    private struct RGBA {
+        let red: Double
+        let green: Double
+        let blue: Double
+        let alpha: Double
+    }
+
+    private func components(_ color: Color) -> RGBA {
+        guard let resolved = NSColor(color).usingColorSpace(.sRGB) else {
+            return RGBA(red: 0, green: 0, blue: 0, alpha: 1)
+        }
+        return RGBA(
+            red: Double(resolved.redComponent),
+            green: Double(resolved.greenComponent),
+            blue: Double(resolved.blueComponent),
+            alpha: Double(resolved.alphaComponent)
+        )
+    }
+
+    /// `top` drawn over `bottom` at `opacity`.
+    private func blend(_ top: RGBA, over bottom: RGBA, opacity: Double) -> RGBA {
+        RGBA(
+            red: bottom.red * (1 - opacity) + top.red * opacity,
+            green: bottom.green * (1 - opacity) + top.green * opacity,
+            blue: bottom.blue * (1 - opacity) + top.blue * opacity,
+            alpha: bottom.alpha
+        )
+    }
+
+    private func composite(_ top: RGBA, over bottom: RGBA) -> RGBA {
+        let alpha = top.alpha
+        return RGBA(
+            red: top.red * alpha + bottom.red * (1 - alpha),
+            green: top.green * alpha + bottom.green * (1 - alpha),
+            blue: top.blue * alpha + bottom.blue * (1 - alpha),
+            alpha: 1
+        )
+    }
+
+    private func ratio(text: Color, on fill: RGBA, over desktop: RGBA) -> Double {
+        let surface = composite(fill, over: desktop)
+        let resolved = composite(components(text), over: surface)
+        return ratio(resolved, surface)
+    }
+
+    private func ratio(_ first: RGBA, _ second: RGBA) -> Double {
+        let a = luminance(first)
+        let b = luminance(second)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
+    private func luminance(_ colour: RGBA) -> Double {
+        func channel(_ value: Double) -> Double {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(colour.red)
+            + 0.7152 * channel(colour.green)
+            + 0.0722 * channel(colour.blue)
+    }
+}

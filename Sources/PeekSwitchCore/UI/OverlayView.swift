@@ -445,9 +445,29 @@ struct OverlayView: View {
             // Tinted with the selected window's own hue, and animated separately from the caption
             // above so a colour change cannot replay the disc's entrance.
             .background(
-                Circle()
-                    .fill(palette.selectedCardFill(tintedBy: state.tint(for: entry)))
-                    .animation(captionChangeAnimation, value: entry.id)
+                ZStack {
+                    Circle()
+                        .fill(palette.selectedCardFill(tintedBy: state.tint(for: entry)))
+
+                    // The selected window's own artwork, large and faint, as a watermark. Its
+                    // strength is bounded by measurement rather than taste — see
+                    // `OverlayPalette.hubArtworkOpacity` — because the caption sits on top of it.
+                    if let icon = state.displayIcon(for: entry) {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            // Slightly larger than the disc and centred, so it reads as artwork
+                            // running behind the caption rather than an icon placed in it.
+                            .frame(width: frame.width * 1.02, height: frame.height * 1.02)
+                            // Softened so the type is never crossed by a hard edge. Detail is not the
+                            // point here; the shape and colour are.
+                            .blur(radius: 3)
+                            .opacity(palette.hubArtworkOpacity)
+                    }
+                }
+                .clipShape(Circle())
+                .animation(captionChangeAnimation, value: entry.id)
             )
             .overlay(Circle().strokeBorder(palette.border, lineWidth: 1))
             .opacity(state.isRevealed ? 1 : 0)
