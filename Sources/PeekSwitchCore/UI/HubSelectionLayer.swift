@@ -842,7 +842,7 @@ enum HubHalo {
     /// value at 4px gives this. Light is the same solve over a range twenty times smaller: its
     /// reference lifts a 230 canvas to 244 four pixels out.
     static func crest(for scheme: ColorScheme) -> Double {
-        scheme == .dark ? 0.68 : 0.80
+        scheme == .dark ? 0.63 : 0.80
     }
 
     /// How much brighter the glow is inside the ring than outside it, at equal distance.

@@ -468,16 +468,22 @@ struct OverlayPalette {
         // 200 from a source of 224 — the missing 11% is the blur, and the earlier "about 10%, so
         // start 5% above" halved the correction it had already worked out.
         //
-        // The 8% overshoot that answer produced has now been given back, because the blur it was
-        // paying for is gone: `HubChrome.ringGlowBlur` is 0.7pt rather than 1.4pt, so almost none of
-        // the stroke's own value is thrown into its shoulders. Left at 206/252/242 the rendered rim
-        // measured luminance 234.6 against the reference's 209.6 and its green channel sat at 247,
-        // one hard shove from clipping — and because the halo and the inward bloom are painted in
-        // this same colour, the entire glow was 1.2 to 1.35x the reference's at every offset either
-        // side of the line, not just at the peak. So the correction is a single scale on the source
-        // rather than an adjustment to any one layer's opacity: 0.855 of the old value, which is
-        // what puts a rim drawn at 0.97 opacity on the reference's measured (176,220,209).
-        hubRing: Color(.sRGB, red: 192 / 255, green: 234 / 255, blue: 225 / 255, opacity: 1),
+        // The 8% overshoot that answer produced was given back once `HubChrome.ringGlowBlur` came
+        // down to 0.7pt and stopped throwing the stroke's value into its shoulders — and then 8.5%
+        // of it had to be put back, because the statistic it was being fitted to was the wrong one.
+        //
+        // Averaging every bearing's luminance at each radius, as the earlier passes did, dilutes a
+        // line that wanders even one pixel: the two get averaged with their neighbours and the
+        // reported peak lands below both. Measured that way the reference's rim reads 209.6, and the
+        // rim was tuned to match it. Measured per bearing — each bearing's own brightest pixel,
+        // which is what an eye follows around the circle — the reference reads 232.3 and ours read
+        // 214.0. The rim was 8% dim against a target that was itself 10% low.
+        //
+        // So this is the reference's per-bearing rim divided by what a stroke at 0.97 opacity keeps
+        // of its source. `HubHalo.crest` came down by the same factor at the same time, so the glow
+        // stayed where it had already been measured to belong and only the line got brighter — which
+        // is the difference between a brighter rim and a bigger smudge.
+        hubRing: Color(.sRGB, red: 208 / 255, green: 254 / 255, blue: 244 / 255, opacity: 1),
         radialSelectedStrengthScale: 1.55,
         wedgeShadowOpacity: 0.34
     )
@@ -541,11 +547,23 @@ struct OverlayPalette {
         // cresting on the centreline instead of beside it, the rendered rim measures 252.4 against
         // the reference's 252.9, and the per-bearing spread is 1.00 against its 0.99.
         //
-        // Red is 4 points higher than the old value for a reason worth keeping: green and blue were
+        // Red went up 4 points, and then to white, for a reason worth keeping: green and blue were
         // already clipping at 255 on screen while red arrived at 244, so the brightest pixel of the
         // overlay measured *more* saturated than the reference's (0.043 against 0.023) purely
-        // because the two channels that had run out of room could not keep up with the one that
-        // had. Raising the channel that was not clipping is the only direction that helps.
+        // because the two channels that had run out of room could not keep up with the one that had.
+        // Raising the channel that was not clipping is the only direction that helps.
+        //
+        // And this is where that ends, one step short of white. Pure white was tried and reverted:
+        // it gains 1.4 luminance on the rendered rim and costs the feature the hub is built around.
+        // `hubAmbience` works by substituting the hovered window's hue into this colour, and a
+        // colour with no saturation has no hue to substitute — `OverlayPaletteTests` and
+        // `HubTintTests` both caught the ambience going flat across the whole wheel.
+        //
+        // The rim is at the ceiling either way. Its per-bearing peak renders 252.7 against the light
+        // reference's 254.1, and that reference's rim is the only thing in its image which has
+        // clipped — the card field's own ninth decile is 243.9. So in Light Mode "make the rim
+        // brighter than the cards" is finished here, and anything further has to come from the
+        // surround rather than from the rim. See the note on `wellScrimOpacityLight` in `HubChrome`.
         hubRing: Color(.sRGB, red: 250 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
         // Kept close to 1: every extra point of tint on a white card costs the secondary line,
         // and 1.85 failed 4.5:1 on blues. 1.3 is still visibly stronger than rest.

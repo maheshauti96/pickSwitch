@@ -176,8 +176,14 @@ enum HubChrome {
     /// The floor is no longer arithmetic either. `HubTintTests` requires the hub centre's
     /// red-minus-green to move by more than 0.03 between a red icon and a green one; that used to
     /// bind at about 0.039 and now has an order of magnitude of room.
+    ///
+    /// Light went to 1.0 when `wellScrimOpacityLight` went to 0.80. What reaches the eye is
+    /// `(1 - scrim)` of the value here, so the extra scrim would have taken the watermark from 0.256
+    /// effective down to 0.16; painting the icon at full strength underneath brings it back to 0.20.
+    /// There is nowhere further to go — this is the ceiling — which is the honest cost of holding the
+    /// hub's interior near the card field, and it is 22% of the watermark rather than all of it.
     static let backdropIconOpacityDark: Double = 0.68
-    static let backdropIconOpacityLight: Double = 0.80
+    static let backdropIconOpacityLight: Double = 1.0
 
     /// How heavily the well's tint is laid over its frosted substrate, `0...1`.
     ///
@@ -206,8 +212,29 @@ enum HubChrome {
     /// points of scrim put it at 4.92:1 and cost two points of the thirty-four the well was
     /// transmitting. Worth it: a bound that holds by one percent is a bound that the next change to
     /// any of five other constants breaks silently.
+    ///
+    /// Light moved from 0.68 to 0.80 for a different reason, and it is the reason the rim can stop
+    /// looking like it glows even when the rim itself is measurably correct.
+    ///
+    /// Both references share a property neither was built to demonstrate: **the hub's interior and
+    /// the card field are the same brightness.** The light image reads 232.1 inside the hub and 233.6
+    /// across the cards — a gap of 1.5 — and the dark image reads 1.0 and 14.2. In both, the rim is
+    /// the only thing brighter than everything else, which is what makes it read as emitting rather
+    /// than as an outline.
+    ///
+    /// A well that transmits the wallpaper cannot hold that property, because the wallpaper is not
+    /// the card field. At 0.68 the light interior ranges from 155.9 over a black wallpaper to 237.5
+    /// over a white one, against cards that render 226 whatever is behind them — so on a dark patch
+    /// of wallpaper the middle of the overlay sits 70 luminance below everything around it and the
+    /// rim reads as the edge of a hole. 0.80 halves that worst case to 43, and 0.95 would close it to
+    /// 8 — but 0.95 is a plate, which is the thing the frosted well exists to not be.
+    ///
+    /// 0.80 is where those stop trading well: the well still passes a fifth of the wallpaper, the
+    /// watermark survives (`backdropIconOpacityLight` went to 1.0 to give back most of what the extra
+    /// scrim took), and the caption's own contrast improves rather than suffering, since in Light
+    /// Mode more scrim means a *lighter* surface under dark ink in the case that binds.
     static let wellScrimOpacityDark: Double = 0.68
-    static let wellScrimOpacityLight: Double = 0.68
+    static let wellScrimOpacityLight: Double = 0.80
 
     /// Where the watermark begins fading, as a fraction of its own radius.
     ///
