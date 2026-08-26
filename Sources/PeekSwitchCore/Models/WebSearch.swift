@@ -21,16 +21,74 @@ import Foundation
 /// something that was a phrase can load a page the user never asked for.
 enum WebSearch {
 
+    /// An assistant the query can be handed to as a prompt.
+    ///
+    /// ## Why these are results rather than a setting
+    ///
+    /// Typing a question into the switcher is already the gesture: the words are there, and where
+    /// they should go is the only thing left to decide. Making that a preference would force the
+    /// decision once, in advance, for every question — when in practice which assistant to ask is
+    /// a per-question choice. As results they sit next to the web search, and picking one is the
+    /// same keystroke as picking a window.
+    ///
+    /// ## Prefill, and what each of them does with it
+    ///
+    /// All three take the prompt in a `q` parameter, which is the convention across the assistants
+    /// rather than anything specific to this app. They differ in what happens next, and the
+    /// difference is theirs to make rather than ours to paper over: ChatGPT submits the prompt on
+    /// load, whereas Claude fills its composer and waits for Return. Grok follows ChatGPT.
+    ///
+    /// Only the query the user typed is ever sent, and only when they pick one of these results.
+    enum PromptProvider: String, CaseIterable, Equatable, Sendable {
+        case chatGPT
+        case claude
+        case grok
+
+        /// How the result names itself, which is also what the user reads before choosing.
+        var displayName: String {
+            switch self {
+            case .chatGPT: return "ChatGPT"
+            case .claude: return "Claude"
+            case .grok: return "Grok"
+            }
+        }
+
+        /// Everything before the encoded prompt.
+        var template: String {
+            switch self {
+            case .chatGPT: return "https://chatgpt.com/?q="
+            // `/new` rather than the root: without it an existing conversation is reopened and the
+            // prefill lands in whatever thread was last used.
+            case .claude: return "https://claude.ai/new?q="
+            case .grok: return "https://grok.com/?q="
+            }
+        }
+
+        /// The provider's own front page, used only to fetch its logo.
+        ///
+        /// Deliberately not the prompt URL. This value is handed to the favicon service, which
+        /// makes a network request — so it must carry no part of what the user typed.
+        var siteURL: String {
+            switch self {
+            case .chatGPT: return "https://chatgpt.com/"
+            case .claude: return "https://claude.ai/"
+            case .grok: return "https://grok.com/"
+            }
+        }
+    }
+
     /// Where a query should take the user.
     enum Destination: Equatable {
         /// The query was an address; go straight there.
         case address(URL)
         /// The query was a search; ask a search engine.
         case search(URL)
+        /// The query is a prompt for an assistant.
+        case prompt(PromptProvider, URL)
 
         var url: URL {
             switch self {
-            case .address(let url), .search(let url): return url
+            case .address(let url), .search(let url), .prompt(_, let url): return url
             }
         }
     }
@@ -63,7 +121,23 @@ enum WebSearch {
         if let search = searchDestination(for: trimmed) {
             destinations.append(search)
         }
+        // After the search, never before it. Ordering here is what Return means, and Return has
+        // meant "look this up" since before the assistants were offered — quietly promoting one of
+        // them would change what an existing habit does.
+        destinations.append(contentsOf: PromptProvider.allCases.compactMap { provider in
+            promptDestination(for: trimmed, provider: provider)
+        })
         return destinations
+    }
+
+    private static func promptDestination(
+        for query: String,
+        provider: PromptProvider
+    ) -> Destination? {
+        guard let encoded = encodedParameter(query),
+              let url = URL(string: provider.template + encoded)
+        else { return nil }
+        return .prompt(provider, url)
     }
 
     /// The single best destination, which is the first of `destinations(for:)`.
@@ -72,18 +146,23 @@ enum WebSearch {
     }
 
     private static func searchDestination(for query: String) -> Destination? {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        // `urlQueryAllowed` leaves "+" and "&" intact, which would corrupt the parameter, so
-        // they are removed from the allowed set.
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "+&=?#")
-        guard
-            let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: allowed),
-            let url = URL(string: searchTemplate + encoded)
+        guard let encoded = encodedParameter(query),
+              let url = URL(string: searchTemplate + encoded)
         else { return nil }
         return .search(url)
+    }
+
+    /// The query, safe to sit after a `q=`.
+    ///
+    /// Shared by the search engine and every assistant, because the hazard is the same for all of
+    /// them: `urlQueryAllowed` leaves `+`, `&`, `=`, `?` and `#` intact, and any of those in a
+    /// prompt would silently truncate it or invent a second parameter.
+    private static func encodedParameter(_ query: String) -> String? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+&=?#")
+        return trimmed.addingPercentEncoding(withAllowedCharacters: allowed)
     }
 
     /// The query as an address, if it plainly is one.

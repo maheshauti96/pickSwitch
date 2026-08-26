@@ -116,4 +116,110 @@ struct WebSearchTests {
         #expect(url.absoluteString.hasPrefix(WebSearch.searchTemplate))
         #expect(!url.absoluteString.contains(" "))
     }
+
+    // MARK: - Assistants
+
+    /// Every provider is offered, in a stable order, after the search.
+    ///
+    /// Order is the contract here: it decides what Return does, and Return has meant "look this
+    /// up" since before the assistants existed.
+    @Test("a phrase is offered to every assistant, after the search")
+    func promptsFollowTheSearch() {
+        let offers = WebSearch.destinations(for: "how do I revert a merge commit")
+        #expect(offers.count == 1 + WebSearch.PromptProvider.allCases.count)
+
+        guard case .search = offers.first else {
+            Issue.record("the search should still come first")
+            return
+        }
+
+        let providers: [WebSearch.PromptProvider] = offers.dropFirst().compactMap { offer in
+            guard case .prompt(let provider, _) = offer else { return nil }
+            return provider
+        }
+        #expect(providers == WebSearch.PromptProvider.allCases)
+    }
+
+    /// An address keeps its own default, and still gets the assistants after it.
+    @Test("an address is still offered to the assistants, but never first")
+    func addressKeepsItsDefault() {
+        let offers = WebSearch.destinations(for: "grok.com")
+        guard case .address = offers.first else {
+            Issue.record("an address must still be the default")
+            return
+        }
+        #expect(offers.count == 2 + WebSearch.PromptProvider.allCases.count)
+    }
+
+    /// The prompt has to arrive intact. Every one of these characters is ordinary in a question
+    /// and every one of them would otherwise truncate the parameter or invent a second one.
+    @Test("the prompt survives the characters that break query strings")
+    func promptSurvivesEncoding() {
+        let query = "a+b & c=d? e#f 100%"
+        for offer in WebSearch.destinations(for: query) {
+            guard case .prompt(let provider, let url) = offer else { continue }
+            let text = url.absoluteString
+            #expect(text.hasPrefix(provider.template), "\(provider) used the wrong template")
+
+            let parameter = String(text.dropFirst(provider.template.count))
+            #expect(!parameter.contains("+"), "\(provider) left a bare + in the prompt")
+            #expect(!parameter.contains("&"), "\(provider) left a bare & in the prompt")
+            #expect(!parameter.contains("="), "\(provider) left a bare = in the prompt")
+            #expect(!parameter.contains("?"), "\(provider) left a bare ? in the prompt")
+            #expect(!parameter.contains("#"), "\(provider) left a bare # in the prompt")
+            #expect(!parameter.contains(" "), "\(provider) left a bare space in the prompt")
+
+            // And it round-trips: what the assistant receives is what was typed.
+            #expect(parameter.removingPercentEncoding == query, "\(provider) mangled the prompt")
+        }
+    }
+
+    /// Every provider goes somewhere over TLS, at the host it says it does.
+    @Test("each provider's template is an https URL at its own host")
+    func templatesAreWellFormed() {
+        for provider in WebSearch.PromptProvider.allCases {
+            #expect(provider.template.hasPrefix("https://"))
+            #expect(provider.template.hasSuffix("q="))
+            #expect(provider.siteURL.hasPrefix("https://"))
+            #expect(!provider.displayName.isEmpty)
+
+            let host = URL(string: provider.siteURL)?.host
+            #expect(host != nil)
+            if let host {
+                #expect(provider.template.contains(host), "\(provider) prompts a different host")
+            }
+        }
+    }
+
+    /// The logo request must carry no part of what the user typed.
+    ///
+    /// `logoSourceURL` is handed to the favicon service, which puts it on the network. The prompt
+    /// URL is never fetched — it is only ever handed to the browser, and only once the user has
+    /// picked that result — so this is the boundary that keeps a half-typed question off the wire.
+    @Test("fetching a provider's logo sends nothing the user typed")
+    func logoRequestCarriesNoQuery() {
+        let query = "something private and identifying"
+        for offer in WebSearch.destinations(for: query) {
+            guard case .prompt = offer else { continue }
+            let target = WebSearchTarget(query: query, destination: offer)
+            let source = try? #require(target.logoSourceURL)
+            #expect(source != nil)
+            guard let source else { continue }
+
+            #expect(!source.contains("?"), "the logo URL carries a query string: \(source)")
+            for word in query.split(separator: " ") {
+                #expect(!source.contains(word), "the logo URL leaked \(word)")
+            }
+        }
+
+        // And the non-prompt offers have no logo to fetch at all.
+        for offer in WebSearch.destinations(for: "grok.com") {
+            switch offer {
+            case .prompt: continue
+            case .address, .search:
+                #expect(WebSearchTarget(query: "grok.com", destination: offer)
+                    .logoSourceURL == nil)
+            }
+        }
+    }
 }

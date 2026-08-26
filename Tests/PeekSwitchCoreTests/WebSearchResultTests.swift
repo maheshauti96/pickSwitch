@@ -41,8 +41,14 @@ struct WebSearchResultTests {
         subject.appendToSearch("grok")
 
         #expect(subject.localEntries.count == 1, "the local match should still be there")
-        #expect(subject.entries.count == 2, "and the web offer alongside it")
-        #expect(subject.entries.last?.isWebSearch == true)
+        // The offers are a trailing block rather than one entry — a search plus one prompt per
+        // assistant — so this asserts the shape instead of a count that grows whenever another
+        // provider is added.
+        let offers = subject.entries.filter(\.isWebSearch)
+        #expect(offers.count == 1 + WebSearch.PromptProvider.allCases.count)
+        #expect(subject.entries.count == subject.localEntries.count + offers.count)
+        #expect(subject.entries.suffix(offers.count).allSatisfy { $0.isWebSearch })
+        #expect(offers.first?.sourceLabel == "Search the web")
     }
 
     /// Switching is the point of the switcher, so the local match keeps the default selection and
@@ -54,7 +60,13 @@ struct WebSearchResultTests {
 
         #expect(subject.selectedIndex == 0)
         #expect(subject.selectedEntry?.isWebSearch == false)
-        #expect(subject.entries.firstIndex { $0.isWebSearch } == subject.entries.count - 1)
+        // Every offer sits after every local result, and none of them holds the selection.
+        let firstOffer = subject.entries.firstIndex(where: \.isWebSearch)
+        #expect(firstOffer != nil)
+        if let firstOffer {
+            #expect(subject.entries[firstOffer...].allSatisfy { $0.isWebSearch })
+            #expect(firstOffer > 0, "an offer took the default selection")
+        }
     }
 
     /// With nothing matching, the web is the only thing left to offer, so it becomes the results
@@ -105,9 +117,15 @@ struct WebSearchResultTests {
         subject.appendToSearch("grok.com")
 
         let offers = subject.entries.filter { $0.isWebSearch }
-        #expect(offers.count == 2)
+        // Address, then search, then one prompt per assistant. The first two are the ordering
+        // that decides what Return does, so they stay pinned by position.
+        #expect(offers.count == 2 + WebSearch.PromptProvider.allCases.count)
         #expect(offers.first?.sourceLabel == "Go to grok.com")
-        #expect(offers.last?.sourceLabel == "Search the web")
+        #expect(offers.dropFirst().first?.sourceLabel == "Search the web")
+        #expect(
+            offers.suffix(WebSearch.PromptProvider.allCases.count).map(\.sourceLabel)
+                == WebSearch.PromptProvider.allCases.map { "Prompt on \($0.displayName)" }
+        )
     }
 
     /// Address first, so Return keeps doing what it did before the second option existed.
@@ -131,8 +149,9 @@ struct WebSearchResultTests {
         subject.setApplications([])
         subject.appendToSearch("grok.com")
 
-        let ids = Set(subject.entries.filter { $0.isWebSearch }.map(\.id))
-        #expect(ids.count == 2, "one id was reused, so an option was lost: \(ids)")
+        let offers = subject.entries.filter { $0.isWebSearch }
+        let ids = Set(offers.map(\.id))
+        #expect(ids.count == offers.count, "an id was reused, so an option was lost: \(ids)")
     }
 
     @Test("a phrase offers only a search")
@@ -143,8 +162,10 @@ struct WebSearchResultTests {
         subject.appendToSearch("quarterly report")
 
         let offers = subject.entries.filter { $0.isWebSearch }
-        #expect(offers.count == 1)
+        // No address to go to, so: the search, then the assistants.
+        #expect(offers.count == 1 + WebSearch.PromptProvider.allCases.count)
         #expect(offers.first?.sourceLabel == "Search the web")
+        #expect(offers.allSatisfy { $0.sourceLabel != "Go to site" })
     }
 
     @Test("no query means no offer")
@@ -196,11 +217,24 @@ struct WebSearchResultTests {
     func hubNamesTheAction() {
         let subject = state()
         subject.appendToSearch("grok")
-        let entry = subject.entries.last
+        let entry = subject.entries.first(where: \.isWebSearch)
 
         #expect(entry?.isWebSearch == true)
         if let entry {
             #expect(subject.hubSummary(for: entry).sourceLine == "Search the web")
+        }
+        // And each assistant names itself, so the hub never says merely "prompt".
+        for provider in WebSearch.PromptProvider.allCases {
+            let prompt = subject.entries.first {
+                $0.webSearch?.sourceLabel == "Prompt on \(provider.displayName)"
+            }
+            #expect(prompt != nil, "\(provider.displayName) was not offered")
+            if let prompt {
+                #expect(
+                    subject.hubSummary(for: prompt).sourceLine
+                        == "Prompt on \(provider.displayName)"
+                )
+            }
         }
     }
 

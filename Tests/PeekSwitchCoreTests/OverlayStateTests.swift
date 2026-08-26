@@ -378,7 +378,9 @@ struct HubFactsTests {
         #expect(before?.count == 3)
 
         subject.appendToSearch("window 2")
-        #expect(subject.entries.count < 3, "the search should have filtered the list")
+        // Counted over local results: a query also offers the web and the assistants, and those
+        // are appended rather than filtered, so `entries` alone no longer shrinks.
+        #expect(subject.localEntries.count < 3, "the search should have filtered the list")
 
         let after = subject.windowPosition(for: windows[1])
         #expect(after?.index == 2, "index should still describe the application, not the search")
