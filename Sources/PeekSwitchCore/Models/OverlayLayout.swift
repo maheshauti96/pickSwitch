@@ -68,8 +68,109 @@ struct OverlayLayout: Equatable {
         self.isSearching = isSearching
     }
 
+    /// The query pill along the top of the panel.
+    ///
+    /// Gathered here rather than left inline in the view because the height the layout
+    /// *reserves* has to follow the type size the view *draws*, and while those were two
+    /// unrelated literals they disagreed: the pill drew about 25pt of content inside a 40pt
+    /// band, so a third of the reserved strip was empty and the field looked smaller than the
+    /// space it was already being given.
+    enum Search {
+        /// The typed query. This is the number that was too small.
+        ///
+        /// 20pt, from 12. The pill is the only confirmation that a keystroke was captured at
+        /// all, and it competes for attention with a ring of application icons and a lit hub —
+        /// at 12pt it lost. It is now the largest type in the overlay, ahead of the hub's own
+        /// 15pt title, which is the right order: the title says what is selected and can be
+        /// read at leisure, whereas the query has to be noticed without being looked for.
+        static let queryFontSize: CGFloat = 20
+
+        /// The magnifier, kept subordinate to the query at three quarters of its size. Equal
+        /// sizing makes the glyph read as part of the text rather than as a label for it.
+        static let iconFontSize: CGFloat = 15
+
+        static let horizontalPadding: CGFloat = 18
+        static let verticalPadding: CGFloat = 9
+        /// Magnifier to query. The caret's own spacing is deliberately zero — see `searchField`.
+        static let iconSpacing: CGFloat = 8
+
+        static let caretWidth: CGFloat = 2
+        /// Sized against the type rather than fixed, so the caret stays a caret and does not
+        /// become a stripe when the query size changes.
+        static var caretHeight: CGFloat { queryFontSize * 1.1 }
+
+        /// What one line of the query occupies. SF's ascender-plus-descender is a little under
+        /// 1.2x its point size, which is close enough to reserve space by and errs generous.
+        static var lineHeight: CGFloat { queryFontSize * 1.2 }
+
+        /// The capsule's own drawn height.
+        static var pillHeight: CGFloat { lineHeight + verticalPadding * 2 }
+
+        /// Breathing room between the capsule and the arrangement below it. The pill is
+        /// centred in the reserved band, so this is split above and below.
+        static let bandSlack: CGFloat = 10
+
+        /// Everything across the pill that is not the query: both paddings, the magnifier, its
+        /// spacing, and the caret. What is left of the panel after this and `panelMargin` is the
+        /// width the query itself may occupy.
+        static var furniture: CGFloat {
+            horizontalPadding * 2 + iconFontSize + iconSpacing + caretWidth
+        }
+
+        /// Clearance the pill keeps from the panel's own edges, so a long query stops short of
+        /// the corner rather than appearing to run out of the window.
+        static let panelMargin: CGFloat = 14
+
+        /// As much of the query as fits, keeping the end rather than the start.
+        ///
+        /// The tail is what was just typed and what the next keystroke will change, so that is
+        /// the part worth keeping. Dropping the end instead would hide exactly the characters
+        /// the caret sits against and leave it trailing a word the user finished seconds ago.
+        ///
+        /// Trimmed against a measured width, and both alternatives were tried first. A SwiftUI
+        /// `.frame(maxWidth:)` does not cap a label, it stretches one: given a panel's worth of
+        /// proposed width the text takes all of it, so a five-character query drew a 477pt pill
+        /// with the word pushed against the far edge. `fixedSize` stops the stretching and
+        /// brings the overflow back, since the two cannot both hold on one axis. And a character
+        /// count cannot bound a width at all — at 20pt, 23 capital Ms measure 457pt against
+        /// 287pt for 23 lowercase ones, so a cap tight enough for the first discards half of what
+        /// would have fitted in the second.
+        ///
+        /// Which leaves this. It also keeps the pill hugging its content, which is what the caret
+        /// requires: the caret sits flush after the last character, so a pill with a width
+        /// independent of what it holds would leave the caret detached from the text it marks.
+        ///
+        /// - Parameter width: measures a string in the query's own font. Injected so this stays
+        ///   free of AppKit — the view owns the font, this owns the arithmetic.
+        static func fittedQuery(
+            _ query: String,
+            panelWidth: CGFloat,
+            width: (String) -> CGFloat
+        ) -> String {
+            let budget = panelWidth - furniture - panelMargin * 2
+            guard budget > 0, width(query) > budget else { return query }
+
+            var kept = Substring(query)
+            while !kept.isEmpty, width("\u{2026}" + kept) > budget {
+                kept = kept.dropFirst()
+            }
+            return "\u{2026}" + kept
+        }
+    }
+
     /// Height reserved along the top of the panel for the search field.
-    static let searchFieldHeight: CGFloat = 40
+    ///
+    /// Derived, not chosen. Every offset in this type and the display budget in
+    /// `OverlayPlacement` are expressed in terms of this, so deriving it from what the pill
+    /// actually draws is what keeps a change to the type size from silently letting the field
+    /// overlap the first row of cards.
+    ///
+    /// Worth knowing where the ceiling is: `OverlayPlacement.availableContentHeight` gives the
+    /// radial styles `min(0.94 x height, height - this)`, so this only starts costing the ring
+    /// once it passes 6% of the display's usable height — 58.9pt on a 982pt frame, 54pt on 900.
+    /// At 52 the ring is untouched on any display taller than 867pt and loses a few points
+    /// below that, which is the reservation doing its job rather than a regression.
+    static var searchFieldHeight: CGFloat { Search.pillHeight + Search.bandSlack }
 
     /// Vertical shift applied to everything below the search field.
     var searchChrome: CGFloat { isSearching ? Self.searchFieldHeight : 0 }

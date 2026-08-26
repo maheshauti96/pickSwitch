@@ -95,33 +95,49 @@ struct OverlayView: View {
     /// This is the one caption that earns its place: it exists only while a query is
     /// active, and without it there is no way to tell a filtered list from a short one, or
     /// to see that a stray keystroke was captured.
+    /// The query, trimmed to what the pill can hold. See `OverlayLayout.Search.fittedQuery`.
+    private var visibleSearchQuery: String {
+        let font = NSFont.systemFont(
+            ofSize: OverlayLayout.Search.queryFontSize,
+            weight: .semibold
+        )
+        return OverlayLayout.Search.fittedQuery(
+            state.searchQuery,
+            panelWidth: layout.panelSize.width
+        ) { text in
+            NSAttributedString(string: text, attributes: [.font: font]).size().width
+        }
+    }
+
     private var searchField: some View {
-        VStack {
-            HStack(spacing: 6) {
+        let metrics = OverlayLayout.Search.self
+
+        return VStack {
+            HStack(spacing: metrics.iconSpacing) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: metrics.iconFontSize, weight: .semibold))
                 // The caret is grouped with the text at its own tighter spacing. Sharing the
-                // magnifier's 6pt put a visible gap between the last character and the caret, which
-                // read as a trailing space that had been typed — the one thing a search field must
-                // never lie about, since it is the only feedback that a keystroke landed.
+                // magnifier's spacing put a visible gap between the last character and the caret,
+                // which read as a trailing space that had been typed — the one thing a search field
+                // must never lie about, since it is the only feedback that a keystroke landed.
                 // Flush, not merely close. A caret with any gap in front of it reads as a space
                 // that was typed, and this field's only job is to report what was typed.
                 HStack(spacing: 0) {
-                    Text(state.searchQuery)
-                        .font(.system(size: 12, weight: .medium))
+                    Text(visibleSearchQuery)
+                        .font(.system(size: metrics.queryFontSize, weight: .semibold))
                         .lineLimit(1)
                     // A caret, so an empty-looking field still reads as one being typed into.
                     Rectangle()
                         .fill(palette.accent)
-                        .frame(width: 1.5, height: 13)
+                        .frame(width: metrics.caretWidth, height: metrics.caretHeight)
                 }
             }
             .foregroundStyle(palette.text)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
+            .padding(.horizontal, metrics.horizontalPadding)
+            .padding(.vertical, metrics.verticalPadding)
             .background(Capsule().fill(palette.chipFill))
             .overlay(Capsule().strokeBorder(palette.border, lineWidth: 1))
-            .shadow(color: .black.opacity(showsBackdrop ? 0 : 0.25), radius: 4, y: 2)
+            .shadow(color: .black.opacity(showsBackdrop ? 0 : 0.25), radius: 6, y: 2)
             .frame(height: OverlayLayout.searchFieldHeight)
 
             Spacer(minLength: 0)

@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Testing
 @testable import PeekSwitchCore
@@ -249,6 +250,80 @@ struct WindowSearchTests {
             #expect(plainCard.index == searchCard.index)
             #expect(isClose(searchCard.frame.minY, plainCard.frame.minY + OverlayLayout.searchFieldHeight))
             #expect(isClose(searchCard.frame.minX, plainCard.frame.minX))
+        }
+    }
+
+    /// The band has to hold the pill that is drawn in it.
+    ///
+    /// These were two unrelated literals until the pill was enlarged — a 12pt query inside a
+    /// fixed 40pt strip — and they had already drifted apart in the harmless direction: a third
+    /// of the reserved height was empty, which is why the field looked smaller than the space it
+    /// was being given. Drifting the other way is not harmless: the pill is centred in the band,
+    /// so it would spill over the first row of cards.
+    @Test("The reserved band holds the pill that is drawn in it")
+    func reservedBandHoldsThePill() {
+        let metrics = OverlayLayout.Search.self
+        #expect(metrics.pillHeight <= OverlayLayout.searchFieldHeight)
+        #expect(metrics.pillHeight >= metrics.lineHeight)
+        // And the caret stays a caret rather than becoming a stripe the height of the pill.
+        #expect(metrics.caretHeight < metrics.pillHeight)
+        #expect(metrics.caretHeight > metrics.queryFontSize)
+
+        // The radial budget takes min(0.94 x height, height - band), so a band past 6% of the
+        // display starts shrinking the ring. Worth failing on rather than discovering as a
+        // smaller hub — the reference's canvas is the 0.94 one.
+        #expect(OverlayLayout.searchFieldHeight <= 982 * 0.06)
+    }
+
+    /// A long query may not run the pill out of the panel it is drawn on.
+    ///
+    /// The narrowest panel is the empty state's plate, which is reached exactly when a long
+    /// query matches nothing — so it is the case a long query is most likely to be seen in
+    /// rather than a corner of one. Swept over character widths because the widest and
+    /// narrowest glyphs differ by a factor of nearly two at this size, which is what rules out
+    /// bounding this by a character count.
+    @Test("The query pill stays inside every panel it is drawn over")
+    func queryPillStaysInsideThePanel() {
+        let metrics = OverlayLayout.Search.self
+        let font = NSFont.systemFont(ofSize: metrics.queryFontSize, weight: .semibold)
+        func width(_ text: String) -> CGFloat {
+            NSAttributedString(string: text, attributes: [.font: font]).size().width
+        }
+
+        let narrowest = OverlayLayout(
+            style: .strip,
+            cardCount: 0,
+            selectedIndex: nil,
+            availableContentWidth: 1400,
+            availableContentHeight: 860,
+            isSearching: true
+        ).panelSize.width
+
+        for panel in [narrowest, 480, 824, 1200] {
+            for query in [
+                "how to",
+                String(repeating: "M", count: 120),
+                String(repeating: "8", count: 120),
+                String(repeating: "verylongquery ", count: 12),
+                String(repeating: "i", count: 200),
+            ] {
+                let shown = metrics.fittedQuery(query, panelWidth: panel, width: width)
+                let pill = width(shown) + metrics.furniture
+                #expect(
+                    pill <= panel - metrics.panelMargin * 2 + 0.5,
+                    "\(Int(panel))pt panel: \(query.count) chars drew a \(pill)pt pill"
+                )
+                // Nothing is trimmed that did not need to be.
+                if width(query) + metrics.furniture
+                    <= panel - metrics.panelMargin * 2 {
+                    #expect(shown == query, "\(Int(panel))pt panel trimmed a query that fitted")
+                }
+                // What survives is the end of the query, which is what the caret sits against.
+                if shown != query {
+                    #expect(shown.hasPrefix("\u{2026}"))
+                    #expect(query.hasSuffix(shown.dropFirst()))
+                }
+            }
         }
     }
 
