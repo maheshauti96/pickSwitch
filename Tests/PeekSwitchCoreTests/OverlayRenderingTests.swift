@@ -822,6 +822,157 @@ struct OverlayRenderingTests {
         return (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
     }
 
+    /// The selected wedge's own label, across every hue the selected window might have.
+    ///
+    /// `wedgeColourSurvivesTheWallpaper` deliberately skips seat 0 — "the selection and deliberately
+    /// a stronger colour" — so for as long as the selected body was the brand cyan, nothing measured
+    /// it and nothing needed to. It is now the window's hue at the cyan's luminance, which makes it a
+    /// surface that varies, and this is the sweep that covers it.
+    ///
+    /// Holding luminance is what should keep this safe, but "should" is the reason to render it: the
+    /// wedge washes its glass over a frosted substrate and lights both arcs, so what the label
+    /// actually sits on is the composite and not the palette colour. Cool hues are the case to watch,
+    /// because they cannot reach the reference luminance by brightness alone and are pushed to full
+    /// brightness with saturation spent instead — the palest result the treatment can produce.
+    @Test("The selected wedge's label survives whatever hue its window has")
+    func selectedWedgeLabelSurvivesItsHue() throws {
+        for (appearance, scheme) in [
+            (NSAppearance.Name.darkAqua, ColorScheme.dark),
+            (.aqua, .light),
+        ] {
+            for (desktopName, desktop) in [("black", Color.black), ("white", Color.white)] {
+                // Step 12 is the control: a greyscale icon yields no hue, so the selected wedge
+                // falls back to the brand cyan and renders exactly what shipped before this. Every
+                // hue is measured against it.
+                var brandRatio: Double?
+                // Control first, so there is a baseline to compare the hues against.
+                for step in [12] + Array(0..<12) {
+                    let selectedHue = Double(step) / 12
+                    let isControl = step == 12
+                    let subject = OverlayState()
+                    subject.availableContentWidth = 1400
+                    subject.availableContentHeight = 860
+                    subject.layoutStyle = .spiral
+                    let windowIDBase: UInt32 = 6_200 + UInt32(step) * 100
+                    subject.load(
+                        entries: Self.huedRing(
+                            count: 8,
+                            selectedHue: isControl ? nil : selectedHue,
+                            windowIDBase: windowIDBase,
+                            namePrefix: "Sel \(step)"
+                        ),
+                        // Seat 0 is the selection, which is what makes it the sample below.
+                        selectedIndex: 0
+                    )
+
+                    let size = subject.layout.panelSize
+                    let hosting = NSHostingView(rootView: ZStack {
+                        desktop
+                        OverlayView(state: subject, hoveredIndex: nil)
+                    }.frame(width: size.width, height: size.height))
+                    hosting.appearance = NSAppearance(named: appearance)
+                    hosting.frame = CGRect(origin: .zero, size: size)
+                    hosting.layoutSubtreeIfNeeded()
+                    let rep = try #require(
+                        hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds)
+                    )
+                    hosting.cacheDisplay(in: hosting.bounds, to: rep)
+
+                    let geometry = try #require(subject.layout.radial)
+                    let centre = subject.layout.radialCentre
+                    let scaleX = Double(rep.pixelsWide) / Double(size.width)
+                    let scaleY = Double(rep.pixelsHigh) / Double(size.height)
+
+                    // Same off-centre body sample the sibling test takes, so the two are measuring
+                    // the same kind of pixel: clear of the content box, both rim lights and the icon.
+                    let seat = geometry.seat(at: 0)
+                    let angle = seat.startAngle + (seat.endAngle - seat.startAngle) * 0.14
+                    let radius = seat.innerRadius
+                        + (seat.outerRadius - seat.innerRadius) * 0.55
+                    let colour = try #require(
+                        rep.colorAt(
+                            x: Int(Double(centre.x + radius * CGFloat(cos(angle))) * scaleX),
+                            y: Int(Double(centre.y + radius * CGFloat(sin(angle))) * scaleY)
+                        )?.usingColorSpace(.sRGB)
+                    )
+                    let red = Double(colour.redComponent) * 255
+                    let green = Double(colour.greenComponent) * 255
+                    let blue = Double(colour.blueComponent) * 255
+                    let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+                    let text = try #require(
+                        NSColor(OverlayPalette.forScheme(scheme).text).usingColorSpace(.sRGB)
+                    )
+                    let ratio = Self.contrast(text: text, againstLuminanceOf255: luminance)
+
+                    guard !isControl else {
+                        brandRatio = ratio
+                        continue
+                    }
+                    // Measured against the brand, not against 4.5:1, and the control is what settles
+                    // that. The selected wedge is deliberately the brightest body on the ring — which
+                    // is why `wedgeColourSurvivesTheWallpaper` skips seat 0 — and it already sat below
+                    // 4.5 before any of this: rendered, the control measures 3.52:1 in Dark Mode over
+                    // a black desktop and 3.22:1 over a white one. Requiring 4.5 here would not be
+                    // guarding this change, it would be quietly redesigning the selection's
+                    // brightness. What is guarded is that no hue reads worse than the cyan it
+                    // replaced.
+                    //
+                    // 4% is measured. Across the wheel the hues land between 3.41 and 4.20 against
+                    // the brand's 3.52 — most of them *better*, because cyan sits near the bright end
+                    // of what the treatment produces — and the worst case is yellow, 3.1% under it.
+                    let baseline = try #require(brandRatio)
+                    #expect(
+                        ratio >= baseline * 0.96,
+                        """
+                        \(scheme) over \(desktopName): selected wedge at hue \(selectedHue) \
+                        label is \(String(format: "%.2f", ratio)):1 on a body of \(Int(luminance)), \
+                        against the brand's \(String(format: "%.2f", baseline)):1
+                        """
+                    )
+                }
+            }
+        }
+    }
+
+    /// A ring of solid-icon windows where only seat 0's hue varies.
+    ///
+    /// - Parameter namePrefix: application names are cached against a sampled hue for the session,
+    ///   so each sweep step needs its own or the first step's hue would be pinned to all of them.
+    /// - Parameter selectedHue: `nil` gives seat 0 a greyscale icon, so it yields no tint and the
+    ///   selection falls back to the brand — the control for what shipped before hues were used.
+    private static func huedRing(
+        count: Int,
+        selectedHue: Double?,
+        windowIDBase: UInt32,
+        namePrefix: String
+    ) -> [WindowEntry] {
+        (0..<count).map { index -> WindowEntry in
+            let icon: NSImage
+            if index == 0 {
+                icon = selectedHue.map { solidIcon(hue: $0) }
+                    ?? solidIcon(NSColor(white: 0.32, alpha: 1))
+            } else {
+                icon = solidIcon(hue: Double(index) / Double(count))
+            }
+            return WindowEntry(
+                windowID: CGWindowID(windowIDBase + UInt32(index)),
+                processID: pid_t(index + 1),
+                applicationName: "\(namePrefix) Seat \(index)",
+                applicationIcon: icon,
+                title: "Window \(index)",
+                frame: CGRect(x: 100, y: 100, width: 800, height: 600),
+                isMinimized: false,
+                zOrder: index,
+                axElement: nil
+            )
+        }
+    }
+
+    private static func solidIcon(hue: Double) -> NSImage {
+        solidIcon(NSColor(hue: CGFloat(hue), saturation: 1, brightness: 1, alpha: 1))
+    }
+
     private static func solidIcon(_ colour: NSColor) -> NSImage {
         let image = NSImage(size: NSSize(width: 32, height: 32))
         image.lockFocus()

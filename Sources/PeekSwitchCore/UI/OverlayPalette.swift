@@ -129,12 +129,37 @@ struct OverlayPalette {
     /// at roughly 30% chroma on the selected cyan, 5–12% on the rest.
     func glassTint(for tint: IconTint?, selected: Bool, scheme: ColorScheme) -> Color {
         if selected {
-            // The mock's selected Chrome is cyan glass, not the icon's green.
-            return Color(
+            // Lit, and lit in the window's own colour.
+            //
+            // This used to return the brand cyan outright, on the authority of the mock — whose
+            // selected wedge happens to be Chrome, drawn cyan. Reading one tile as "selection is
+            // cyan" was the wrong generalisation: every *other* wedge on the ring is already its own
+            // hue, and the rim light of this one has followed the window since `glassRim` started
+            // deferring to `hubAmbience`. So the selected body was the one surface on screen that
+            // threw the window's identity away at the moment of pointing at it, and it contradicted
+            // its own edge while doing it.
+            //
+            // What made the cyan read as *selected* was never the hue, it was the level: 0.72
+            // saturation at 0.54 brightness against a resting body that reaches at most 0.47 at
+            // 0.23. Keeping that level and moving the hue keeps the signal and returns the identity.
+            let lit = Color(
                 hue: Self.brandHue,
                 saturation: scheme == .dark ? 0.72 : 0.30,
                 brightness: scheme == .dark ? 0.54 : 0.96,
                 opacity: 1
+            )
+            // No hue to take — a monochrome icon, tinting switched off, Increase Contrast — leaves
+            // the brand, which is what the hub ring falls back to for the same reason.
+            guard let tint, let base = NSColor(lit).usingColorSpace(.sRGB) else { return lit }
+            // Solved onto the cyan's luminance rather than reusing its brightness, because those
+            // are different quantities and the difference is what would break this: holding
+            // brightness while the hue moves swings luminance about 2.3x across the wheel, and this
+            // surface carries the application's name. See `rehued`.
+            return Self.rehued(
+                base,
+                to: tint.hue,
+                saturationScale: min(1, max(0.6, tint.vividness)),
+                saturationFloor: Self.ambienceSaturationFloor
             )
         }
         // Opaque, and a real colour rather than a veil of white.
@@ -270,34 +295,61 @@ struct OverlayPalette {
     /// user has turned icon tinting off, so both settings reach the hub without another check.
     func hubAmbience(for tint: IconTint?) -> Color {
         guard let tint, let base = NSColor(hubRing).usingColorSpace(.sRGB) else { return hubRing }
+        return Self.rehued(
+            base,
+            to: tint.hue,
+            // A washed-out icon gets a correspondingly quieter ambience, floored so a pastel still
+            // reads as its own colour rather than collapsing back to the brand.
+            saturationScale: min(1, max(0.6, tint.vividness)),
+            saturationFloor: Self.ambienceSaturationFloor
+        )
+    }
 
-        var hue: CGFloat = 0
-        var saturation: CGFloat = 0
-        var brightness: CGFloat = 0
+    /// Move `base` onto `hue` while holding its *perceived* luminance.
+    ///
+    /// Shared by the hub's ambience and the selected wedge's glass, which are the two places a
+    /// palette colour is re-hued to the window under the pointer. They need the same solve for the
+    /// same reason, and it is not a solve worth having two copies of: it is eighteen rounds of
+    /// bisection against a non-linear luminance curve, and a second copy would drift.
+    ///
+    /// Brightness is spent first. Where a hue cannot reach the reference at any brightness — cool
+    /// hues, mostly — a bounded share of saturation goes instead, because the alternative is a
+    /// colour that arrives as pale grey for every blue application and identifies nothing.
+    ///
+    /// - Parameters:
+    ///   - saturationScale: how much of `base`'s saturation this hue is allowed to ask for.
+    ///   - saturationFloor: the fraction of that it may be reduced to in order to reach the
+    ///     reference luminance.
+    static func rehued(
+        _ base: NSColor,
+        to hue: Double,
+        saturationScale: Double,
+        saturationFloor: Double
+    ) -> Color {
+        var baseHue: CGFloat = 0
+        var baseSaturation: CGFloat = 0
+        var baseBrightness: CGFloat = 0
         var alpha: CGFloat = 0
-        base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        base.getHue(&baseHue, saturation: &baseSaturation, brightness: &baseBrightness, alpha: &alpha)
 
-        let reference = Self.relativeLuminance(
+        let reference = relativeLuminance(
             red: Double(base.redComponent),
             green: Double(base.greenComponent),
             blue: Double(base.blueComponent)
         )
-        // A washed-out icon gets a correspondingly quieter ambience, floored so a pastel still
-        // reads as its own colour rather than collapsing back to the brand.
-        let vivid = min(1, max(0.6, tint.vividness))
-        let wanted = Double(saturation) * vivid
+        let wanted = Double(baseSaturation) * saturationScale
 
         func luminance(saturation: Double, brightness: Double) -> Double {
-            let (red, green, blue) = Self.components(
-                hue: tint.hue,
+            let (red, green, blue) = components(
+                hue: hue,
                 saturation: saturation,
                 brightness: brightness
             )
-            return Self.relativeLuminance(red: red, green: green, blue: blue)
+            return relativeLuminance(red: red, green: green, blue: blue)
         }
 
         var resolvedSaturation = wanted
-        var resolvedBrightness = Double(brightness)
+        var resolvedBrightness = Double(baseBrightness)
 
         if luminance(saturation: wanted, brightness: resolvedBrightness) > reference {
             // Monotonic in brightness at a fixed hue, so bisect down onto the reference.
@@ -313,11 +365,10 @@ struct OverlayPalette {
             }
             resolvedBrightness = (low + high) / 2
         } else if luminance(saturation: wanted, brightness: 1) < reference {
-            // Even at full brightness this hue is darker than the brand. Desaturating raises
-            // luminance, so spend saturation — down to the floor and no further, because a ring
-            // that arrived as pale grey for every cool application would identify nothing.
+            // Even at full brightness this hue is darker than the reference. Desaturating raises
+            // luminance, so spend saturation — down to the floor and no further.
             resolvedBrightness = 1
-            var low = wanted * Self.ambienceSaturationFloor
+            var low = wanted * saturationFloor
             var high = wanted
             for _ in 0..<18 {
                 let mid = (low + high) / 2
@@ -329,8 +380,7 @@ struct OverlayPalette {
             }
             resolvedSaturation = (low + high) / 2
         } else {
-            resolvedBrightness = 1
-            var low = Double(brightness)
+            var low = Double(baseBrightness)
             var high = 1.0
             for _ in 0..<18 {
                 let mid = (low + high) / 2
@@ -343,8 +393,8 @@ struct OverlayPalette {
             resolvedBrightness = (low + high) / 2
         }
 
-        let (red, green, blue) = Self.components(
-            hue: tint.hue,
+        let (red, green, blue) = components(
+            hue: hue,
             saturation: resolvedSaturation,
             brightness: resolvedBrightness
         )

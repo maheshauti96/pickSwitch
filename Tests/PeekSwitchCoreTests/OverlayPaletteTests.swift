@@ -702,6 +702,127 @@ struct OverlayPaletteTests {
         }
     }
 
+    /// The selected wedge's body is the window's own hue, lit — and the sweep is here because it did
+    /// not used to be either of those things.
+    ///
+    /// It returned the brand cyan outright, so nothing about it varied and nothing needed measuring.
+    /// Now that the hue moves, this surface is in exactly the position `hubAmbience` was in: it
+    /// carries the application's name, and holding HSB brightness while the hue travels swings
+    /// *perceived* luminance about 2.3x across the wheel. So what is pinned is the luminance, not the
+    /// brightness, and the text that sits on it.
+    @Test("The selected wedge's glass takes the window's hue at the brand's luminance")
+    func selectedGlassIsTheWindowsHueLit() {
+        for (name, palette) in palettes {
+            let scheme: ColorScheme = name == "dark" ? .dark : .light
+
+            // No hue to take leaves the brand, which is what a monochrome icon, Increase Contrast
+            // and the tint setting turned off all arrive as.
+            let fallback = palette.glassTint(for: nil, selected: true, scheme: scheme)
+            var brandHue: CGFloat = 0
+            var unusedS: CGFloat = 0
+            var unusedB: CGFloat = 0
+            var unusedA: CGFloat = 0
+            NSColor(fallback).usingColorSpace(.sRGB)?.getHue(
+                &brandHue, saturation: &unusedS, brightness: &unusedB, alpha: &unusedA
+            )
+            let brand = components(fallback)
+            let reference = OverlayPalette.relativeLuminance(
+                red: brand.red, green: brand.green, blue: brand.blue
+            )
+
+            var luminances: [Double] = []
+            for tint in Self.everyHue {
+                let glass = palette.glassTint(for: tint, selected: true, scheme: scheme)
+                let resolved = components(glass)
+                let luminance = OverlayPalette.relativeLuminance(
+                    red: resolved.red, green: resolved.green, blue: resolved.blue
+                )
+                luminances.append(luminance)
+
+                // Never brighter than the cyan it stands in for. A wedge that outshone it would be
+                // a selection that got louder for yellow-iconed applications.
+                #expect(
+                    luminance <= reference + 0.01,
+                    "\(name) hue \(tint.hue) glass is brighter than the brand: \(luminance)"
+                )
+
+                // The hue arrives intact: the solve spends brightness and saturation, never hue.
+                var resolvedHue: CGFloat = 0
+                NSColor(glass).usingColorSpace(.sRGB)?.getHue(
+                    &resolvedHue, saturation: &unusedS, brightness: &unusedB, alpha: &unusedA
+                )
+                let drift = abs(Double(resolvedHue) - tint.hue)
+                #expect(
+                    min(drift, 1 - drift) < 0.02,
+                    "\(name) hue \(tint.hue) became \(resolvedHue)"
+                )
+
+                // Contrast must not get worse than the cyan this replaces.
+                //
+                // Compared against the brand rather than against 4.5:1, because this colour is not
+                // the surface the label finally sits on — a wedge washes it over a frosted substrate
+                // and lights both arcs, so absolute legibility is measured from the render, in
+                // `OverlayRenderingTests.wedgeColourSurvivesTheWallpaper`. Asserting 4.5 here would
+                // fail on the shipped cyan too, which measures 2.83:1 for secondary text in Dark
+                // Mode: it would be pinning the wrong surface. What this pins is the thing the change
+                // could actually break — that no hue is worse to read than the colour that was there
+                // before.
+                //
+                // The 7% allowance is measured, not chosen. Holding luminance does *not* hold
+                // contrast for translucent type: secondary text is white at 58%, so the blend happens
+                // per channel while luminance weights those channels 0.2126/0.7152/0.0722, and two
+                // colours of equal luminance and different hue composite to slightly different greys.
+                // Across the wheel that costs at most 5.7% — pure red in Dark Mode, 2.67 against the
+                // brand's 2.83. Primary text is opaque and so depends only on the luminance being
+                // held; it does not move at all, which is the other half of the same fact.
+                for (text, textName) in [
+                    (palette.text, "primary"), (palette.secondaryText, "secondary"),
+                ] {
+                    let value = ratio(text: text, on: glass, over: Self.black)
+                    let brandValue = ratio(text: text, on: fallback, over: Self.black)
+                    #expect(
+                        value >= brandValue * 0.93,
+                        """
+                        \(name) hue \(tint.hue) \(textName) on selected glass: \
+                        \(value) against the brand's \(brandValue)
+                        """
+                    )
+                }
+            }
+
+            // Cool hues cannot reach the brand's luminance at any brightness, so a spread survives.
+            // Bounded, and nowhere near the 2.3x that holding brightness would produce.
+            let spread = luminances.max()! / luminances.min()!
+            #expect(spread <= 1.4, "\(name) selected glass luminance spread is \(spread)")
+
+            // The point of the change: distinct windows get distinct selected wedges, where before
+            // every one of them was the same cyan.
+            let red = components(palette.glassTint(
+                for: IconTint(hue: 0, vividness: 1), selected: true, scheme: scheme
+            ))
+            let green = components(palette.glassTint(
+                for: IconTint(hue: 1.0 / 3, vividness: 1), selected: true, scheme: scheme
+            ))
+            #expect(red.red > green.red, "\(name) red selected glass is not redder")
+            #expect(green.green > red.green, "\(name) green selected glass is not greener")
+
+            // And it is still visibly *selected* at every hue, not merely tinted. This is the half
+            // that would break if the level were dropped along with the cyan: `glassWashOwnsTheCard`
+            // checks one hue, and selection has to hold across the wheel.
+            for tint in Self.everyHue {
+                let rest = components(palette.glassTint(for: tint, selected: false, scheme: scheme))
+                let chosen = components(palette.glassTint(for: tint, selected: true, scheme: scheme))
+                let distance = abs(rest.red - chosen.red)
+                    + abs(rest.green - chosen.green)
+                    + abs(rest.blue - chosen.blue)
+                #expect(
+                    distance > 0.10,
+                    "\(name) hue \(tint.hue) selected glass is not distinguishable: \(distance)"
+                )
+            }
+        }
+    }
+
     /// A selected radial wedge has to be a stronger self, not merely a different border.
     ///
     /// Compared as distance from the untinted base across all three channels: a red icon on a
