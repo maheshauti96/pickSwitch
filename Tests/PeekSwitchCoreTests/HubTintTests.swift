@@ -612,15 +612,30 @@ struct HubTintTests {
         )
         let coreChroma = Double(core.greenComponent) - Double(core.redComponent)
         let voidChroma = Double(through.greenComponent) - Double(through.redComponent)
-        #expect(
-            voidChroma > coreChroma + 0.20,
-            """
-            hub rim still reads as a plate
-            corner R=\(corner.redComponent) G=\(corner.greenComponent) B=\(corner.blueComponent)
+        let cornerChroma = Double(corner.greenComponent) - Double(corner.redComponent)
+        let report = """
+            corner R=\(corner.redComponent) G=\(corner.greenComponent) B=\(corner.blueComponent) chroma=\(cornerChroma)
             core R=\(core.redComponent) G=\(core.greenComponent) B=\(core.blueComponent) chroma=\(coreChroma)
             void R=\(through.redComponent) G=\(through.greenComponent) B=\(through.blueComponent) chroma=\(voidChroma)
             """
-        )
+
+        // Stated against the wallpaper's own chroma rather than as a fixed margin over the caption
+        // surface, because the fixed margin stopped measuring what this test is for.
+        //
+        // The void sample sits 5.6pt inside the rim, which is inside the rim's *glow* — necessarily,
+        // since the glow now crests on the centreline and decays inward, and the well's fade and
+        // that decay overlap by design. Glow is near-white in Light Mode, so it dilutes whatever hue
+        // is behind it, and a bound of "0.20 of chroma above the caption surface" was really a bound
+        // on how bright the rim was allowed to be. The references do the same thing and it is
+        // invisible in them only because their canvas is already light: at this radius the light
+        // reference is 74% of the way from its interior to its rim, and ours is 68%.
+        //
+        // What still distinguishes a void from a plate is that the wallpaper is *there* — a plate
+        // would pass none of it, and the caption surface next to it passes only what the scrim
+        // allows. So: a quarter of the desktop's own hue survives in the annulus, and the annulus is
+        // clearly more chromatic than the surface the type sits on.
+        #expect(voidChroma > cornerChroma * 0.22, "hub rim reads as a plate\n\(report)")
+        #expect(voidChroma > coreChroma + 0.12, "hub rim reads as a plate\n\(report)")
     }
 
     /// The reference halo has comparable radial reach on both sides of the rim. Render the real

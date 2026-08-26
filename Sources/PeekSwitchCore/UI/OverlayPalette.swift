@@ -466,9 +466,18 @@ struct OverlayPalette {
         // How much was measured rather than estimated. Rendering with icon tinting off, so the ring
         // paints this colour and nothing substitutes its hue, the drawn peak came out at luminance
         // 200 from a source of 224 — the missing 11% is the blur, and the earlier "about 10%, so
-        // start 5% above" halved the correction it had already worked out. Starting 8% above lands
-        // the drawn peak on the reference's 217 with saturation intact.
-        hubRing: Color(.sRGB, red: 206 / 255, green: 252 / 255, blue: 242 / 255, opacity: 1),
+        // start 5% above" halved the correction it had already worked out.
+        //
+        // The 8% overshoot that answer produced has now been given back, because the blur it was
+        // paying for is gone: `HubChrome.ringGlowBlur` is 0.7pt rather than 1.4pt, so almost none of
+        // the stroke's own value is thrown into its shoulders. Left at 206/252/242 the rendered rim
+        // measured luminance 234.6 against the reference's 209.6 and its green channel sat at 247,
+        // one hard shove from clipping — and because the halo and the inward bloom are painted in
+        // this same colour, the entire glow was 1.2 to 1.35x the reference's at every offset either
+        // side of the line, not just at the peak. So the correction is a single scale on the source
+        // rather than an adjustment to any one layer's opacity: 0.855 of the old value, which is
+        // what puts a rim drawn at 0.97 opacity on the reference's measured (176,220,209).
+        hubRing: Color(.sRGB, red: 192 / 255, green: 234 / 255, blue: 225 / 255, opacity: 1),
         radialSelectedStrengthScale: 1.55,
         wedgeShadowOpacity: 0.34
     )
@@ -526,11 +535,18 @@ struct OverlayPalette {
         // the reference gets +23. Raising the source to luminance 253 recovers most of the
         // difference and costs 5 points of the hue's already-slim chroma.
         //
-        // It cannot be closed entirely. Reaching the reference's 250 *on screen* needs a source
-        // above 270, which does not exist, and the hub's ambience is supposed to carry the hue of
-        // the window under the pointer, which a pure-white rim cannot do at all. Dark Mode has no
-        // such conflict: there the rim is bright against black rather than against white.
-        hubRing: Color(.sRGB, red: 246 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
+        // That gap has since closed, from the other end. It was never really the source's ceiling —
+        // it was that the glow around the rim had no shoulder, so the rim was a stroke sitting on
+        // bare canvas with nothing lifting it. With `HubRingHalo` and the well's inward bloom now
+        // cresting on the centreline instead of beside it, the rendered rim measures 252.4 against
+        // the reference's 252.9, and the per-bearing spread is 1.00 against its 0.99.
+        //
+        // Red is 4 points higher than the old value for a reason worth keeping: green and blue were
+        // already clipping at 255 on screen while red arrived at 244, so the brightest pixel of the
+        // overlay measured *more* saturated than the reference's (0.043 against 0.023) purely
+        // because the two channels that had run out of room could not keep up with the one that
+        // had. Raising the channel that was not clipping is the only direction that helps.
+        hubRing: Color(.sRGB, red: 250 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
         // Kept close to 1: every extra point of tint on a white card costs the secondary line,
         // and 1.85 failed 4.5:1 on blues. 1.3 is still visibly stronger than rest.
         radialSelectedStrengthScale: 1.3,

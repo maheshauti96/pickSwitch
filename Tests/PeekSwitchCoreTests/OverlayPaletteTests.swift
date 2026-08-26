@@ -418,6 +418,21 @@ struct OverlayPaletteTests {
     /// The binding constraint is the *secondary* line rather than the primary, which is not the
     /// intuition. `secondaryText` is translucent white in Dark Mode, so it composites brighter as its
     /// own surface brightens and gives up contrast about twice as fast as opaque white would.
+    /// How much of the rim's inward glow reaches the caption's outermost glyph, in Dark Mode.
+    ///
+    /// Taken at the tightest hub the layout will produce, where the caption is the largest fraction
+    /// of the radius and therefore sits furthest out into the glow. `captionFitsTheFlatScrim` is
+    /// what guarantees the caption stops at `wellOpaqueFraction`; this is the same radius expressed
+    /// as a distance in from the rim, which is the unit `HubHalo.decay` is written in.
+    private static var bloomUnderTheCaption: Double {
+        let hubRadius = RadialLayout.minimumHubRadius
+        let ringRadius = hubRadius - HubChrome.ringInset
+        let captionOuter = hubRadius * HubChrome.wellOpaqueFraction
+        let offset = Double((ringRadius - captionOuter) / HubChrome.haloSpread)
+        // `HubWell`'s Dark Mode crest.
+        return 0.55 * HubHalo.level(atSpreadOffset: offset)
+    }
+
     @Test("Caption text clears 4.5:1 over any wallpaper the well transmits")
     func captionSurvivesAnyWallpaperThroughTheWell() {
         for (name, palette, scheme) in [
@@ -441,7 +456,27 @@ struct OverlayPaletteTests {
 
                     var tint = components(palette.hubWellFill)
                     tint.alpha = scrim
-                    let surface = composite(tint, over: throughTheBlur)
+                    let scrimmed = composite(tint, over: throughTheBlur)
+
+                    // And then the rim's inward glow, which lands *on top of* the scrim and so is
+                    // the one thing here the scrim does not bound.
+                    //
+                    // It was previously left out because the bloom crested 8pt inside the rim and
+                    // faded to nothing well before the type. It still fades before the type, but it
+                    // is no longer safe to leave unstated: the bloom now crests on the centreline
+                    // and traces `HubHalo.decay` inward, so its value under the caption follows from
+                    // the same table that sets how far the glow reaches outward. Anything that
+                    // widens that reach walks light toward the caption, and this is where that has
+                    // to fail.
+                    //
+                    // Bounded with white rather than with `hubRing`, because the hub's ambience
+                    // takes the hue of the window under the pointer and white is the worst any hue
+                    // can composite to for translucent white type. In Light Mode the glow moves the
+                    // surface *away* from the ink, so the bound there is the glow's absence and
+                    // including it would only flatter the result.
+                    var glow = Self.white
+                    glow.alpha = scheme == .dark ? Self.bloomUnderTheCaption : 0
+                    let surface = composite(glow, over: scrimmed)
 
                     for (label, colour) in [
                         ("primary", palette.text),

@@ -46,7 +46,64 @@ struct HubChromeTests {
         #expect(HubChrome.innerGlowStartFraction > HubChrome.wellOpaqueFraction * 0.75)
         #expect(HubChrome.innerGlowStartFraction < HubChrome.innerGlowShoulderFraction)
         #expect(HubChrome.innerGlowShoulderFraction < HubChrome.innerGlowCrestFraction)
-        #expect(HubChrome.innerGlowBlurScale > 0.5)
+        // Small, and it used to be required to be large. The bloom is a measured curve now rather
+        // than four stops, and its steepest and most important section is the 8px just inside the
+        // rim — narrower than a 9.6px kernel, so at the old 0.60 the blur was flattening the shape
+        // the curve exists to draw. It is anti-banding, not spread.
+        #expect(HubChrome.innerGlowBlurScale > 0.2)
+        #expect(HubChrome.innerGlowBlurScale < 0.5)
+    }
+
+    /// The complaint this answers was that the rim's glow spread outward but not inward. It did:
+    /// the outward falloff crested 8px outside the centreline and the inward bloom crested 8px
+    /// inside it, from two separately hand-written tables that had drifted apart.
+    ///
+    /// Both now read `HubHalo.decay`, so equal distances either side of the rim carry equal light by
+    /// construction. This checks the construction actually holds through the two different
+    /// parameterisations — the outward gradient measures distance against a radius that runs past
+    /// the wedges, the inward one against a radius that ends on the rim.
+    @Test("The glow carries the same light inward as outward")
+    func glowIsSymmetricAboutTheRim() {
+        let ringRadius: CGFloat = 86.82
+        let bloom = HubHalo.inwardBloom(ring: .white, crest: 1, ringRadius: ringRadius)
+
+        func inwardLevel(atSpreadOffset offset: Double) -> Double {
+            let location = 1 - offset * Double(HubChrome.haloSpread / ringRadius)
+            let stops = bloom.stops.sorted { $0.location < $1.location }
+            func alpha(_ stop: Gradient.Stop) -> Double {
+                Double(NSColor(stop.color).alphaComponent)
+            }
+            guard let first = stops.first, location > Double(first.location) else {
+                return alpha(stops[0])
+            }
+            for (near, far) in zip(stops, stops.dropFirst())
+            where location <= Double(far.location) {
+                let span = Double(far.location - near.location)
+                let t = span <= 0 ? 0 : (location - Double(near.location)) / span
+                return alpha(near) + t * (alpha(far) - alpha(near))
+            }
+            return alpha(stops[stops.count - 1])
+        }
+
+        // Over the range that is visible on both sides. Further in than this the caption surface
+        // covers the bloom and `innerGlowStartFraction` has taken it to zero, which is a different
+        // requirement — `wellFadesBeforeTheRing` holds that one.
+        for offset in [0.05, 0.10, 0.15, 0.20, 0.25, 0.30] {
+            let outward = HubHalo.level(atSpreadOffset: offset)
+            let inward = inwardLevel(atSpreadOffset: offset)
+            let report = "at \(offset) of a spread: inward \(inward), outward \(outward)"
+            #expect(abs(inward - outward) < 0.06, "glow is lopsided \(report)")
+        }
+
+        // And it is a crest on the centreline, not a pair of edges beside it.
+        #expect(HubHalo.level(atSpreadOffset: 0) == 1)
+        for offset in [0.05, 0.15, 0.30, 0.60] {
+            #expect(HubHalo.level(atSpreadOffset: offset) < 1)
+            #expect(
+                HubHalo.level(atSpreadOffset: offset)
+                    == HubHalo.level(atSpreadOffset: -offset)
+            )
+        }
     }
 
     /// The inward bloom must crest *inside* the rim and fall back before it, or it spends the
@@ -84,10 +141,24 @@ struct HubChromeTests {
 
     /// The mock is a halo of light, not a filled torus. A band thicker than a few points
     /// is what made the running overlay look like a cyan donut on a plate.
-    @Test("The core stroke is a hairline, not a torus")
+    ///
+    /// This used to require the core to be *more* than four times `ringBandThickness`, which had it
+    /// backwards: it was guarding a lower bound on a constant whose whole problem was being too
+    /// large. What an eye reads as the thickness of a line is the band that looks fully lit, and by
+    /// that measure a 5pt stroke under a 1.4pt blur rendered 7.5px wide at 0.90 of its peak where
+    /// the reference's entire rim is 3.5px. Both assertions below are the properties that keep that
+    /// band narrow.
+    @Test("The core stroke is a crest, not the whole rim")
     func ringCoreIsAHairline() {
         #expect(HubChrome.ringBandThickness < 4)
-        #expect(HubChrome.ringGlowThickness > HubChrome.ringBandThickness * 4)
+        // Breadth belongs to the shoulder behind the cards. The reference's rim measures 0.105 of
+        // its ring radius at half maximum and only about a fifth of that at full value, so the
+        // crest is a small fraction of the spread rather than a multiple of anything.
+        #expect(HubChrome.ringGlowThickness < HubChrome.haloSpread / 10)
+        // The blur rounds the stroke's corners; it must not spread it. Once the blur approaches the
+        // stroke's own half-width it throws the peak into the shoulders, which costs brightness and
+        // widens the fully-lit band at the same time — the two halves of the same mistake.
+        #expect(HubChrome.ringGlowBlur < HubChrome.ringGlowThickness / 2)
     }
 
     @Test("Halo reach is the broad bloom, not the crisp core")

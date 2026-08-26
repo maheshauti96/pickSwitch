@@ -38,9 +38,23 @@ enum HubChrome {
     /// at +15px. A 16px stroke has 16px of full value in it however it is blurred, and a plateau with
     /// a cliff is the one shape light never makes.
     ///
-    /// 5pt under a 1.4pt blur is a crest: nearly all of the stroke's own brightness survives, and it
-    /// is narrow enough that the decay starts where the reference's does.
-    static let ringGlowThickness: CGFloat = 5
+    /// 5pt under a 1.4pt blur was the same mistake at a smaller scale, and it took the right
+    /// measurement to see it. Half maximum is the wrong place to look for thickness: at 5pt the
+    /// rendered rim measured 17.5px wide at half maximum against the reference's 18.0px, an
+    /// apparently exact match. What an eye reads as the thickness of a line is the band that looks
+    /// *fully lit*, and there the same render measured 7.5px wide at 0.90 of its peak where the
+    /// reference measures 3.5px. Rendered in isolation the core stroke alone accounted for all of
+    /// it — 7.5px at 0.90, 10.0px at 0.50 — because a 5pt stroke is 10 device pixels of constant
+    /// value and a 1.4pt blur only rounds its corners. The rim was twice as thick as the reference's
+    /// and the excess was all on the outward side (-2.0/+5.5 against the reference's -2.0/+1.5),
+    /// which is also why the glow looked like it spread outward only: the well's inward bloom pulled
+    /// the composite peak 4px inside the stroke's centreline, leaving the stroke's outer half
+    /// standing outside the peak as a shelf.
+    ///
+    /// 3pt is 6 device pixels, and the blur below is what keeps it from aliasing rather than what
+    /// spreads it. Both halves of the complaint move the same way: a narrower stroke under a lighter
+    /// blur is *brighter* at its centre, because less of its own mass is thrown into the shoulders.
+    static let ringGlowThickness: CGFloat = 2.2
 
     /// Blur on the core stroke only, which sets how far the *crisp* part of the rim spreads.
     ///
@@ -49,7 +63,13 @@ enum HubChrome {
     /// throws most of the peak into the shoulders — which is where the missing 25 luminance had
     /// been going. Breadth belongs to `haloSpread`, behind the cards, where it costs the crest
     /// nothing.
-    static let ringGlowBlur: CGFloat = 1.4
+    ///
+    /// Cut with `ringGlowThickness`, and for the same reason: this is anti-aliasing, not glow. At
+    /// 1.4pt the blur was 2.8 device pixels either side of a stroke that only needed its corners
+    /// taken off, and it widened the band that reads as fully lit without adding anything the
+    /// shoulder was not already providing better. 0.7pt keeps the edge smooth at Retina scale and
+    /// leaves the 0.90 band to be set by the stroke's own width.
+    static let ringGlowBlur: CGFloat = 0.7
 
     /// How far the broad rear bloom reaches either side of the ring's centreline.
     ///
@@ -193,21 +213,39 @@ enum HubChrome {
     static let innerGlowStartFraction: CGFloat = 0.58
     static let innerGlowShoulderFraction: CGFloat = 0.86
 
-    /// Where the inward bloom crests, short of the rim.
+    /// Where the inward bloom crests, and how much of that crest survives at the rim itself.
     ///
-    /// This exists because additive layers add. The rim's own centreline already carries the rear
-    /// halo, its selection lobe, and the ring's core stroke; a bloom that also crested exactly
-    /// there took the green and blue channels past 255 all the way round the circle, so the
-    /// brightest thing on screen was flat white and the only channel still carrying information
-    /// was red. The reference's rim is bright *and* still measurably mint — 213 luminance at 0.196
-    /// saturation — which is only possible below clipping.
+    /// Effectively monotone now: the bloom climbs to the rim and stops there. It used to crest 8pt
+    /// inside and fall back to 0.30 at the centreline, which was the correct answer to a problem
+    /// that no longer exists and the cause of one that did.
     ///
-    /// So this crests 8pt inside, where the reference's inward falloff peaks anyway, and falls back
-    /// to `innerGlowCrestFalloff` at the centreline to leave the core stroke its headroom.
-    static let innerGlowCrestFraction: CGFloat = 0.955
-    static let innerGlowCrestFalloff: Double = 0.30
+    /// The problem it solved: while the core stroke composited additively, the centreline already
+    /// carried the rear halo, the selection lobe and the stroke, and a bloom cresting there too took
+    /// green and blue past 255 all the way round — a flat white rim with only red still carrying
+    /// information. The core blends normally now, so nothing is racing anything to 255.
+    ///
+    /// The problem it caused: a second maximum 8pt inside the stroke, blurred across 9 device pixels,
+    /// pulled the *composite* peak 4px inward of the stroke's own centreline. Everything measured
+    /// from that peak then looked lopsided — the rendered rim held 0.98 of its peak at +4px and
+    /// 0.89 at +6px where the reference is at 0.58 and 0.51, not because there was extra light
+    /// outward but because the peak had moved inward and the stroke's outer half was being read as a
+    /// shelf beside it. Two crests 8pt apart is also just a wider bright band than one crest: 7.5px
+    /// at 0.90 against the reference's 3.5px.
+    ///
+    /// The reference settles the shape directly. Sweeping inward from its rim it decays smoothly and
+    /// monotonically — 0.885, 0.781, 0.684, 0.608 of peak at 2, 4, 6 and 8px — with no interior
+    /// maximum anywhere. So the bloom crests at the rim and only decays going in.
+    static let innerGlowCrestFraction: CGFloat = 0.99
+    static let innerGlowCrestFalloff: Double = 0.92
 
-    static let innerGlowBlurScale: CGFloat = 0.60
+    /// Blur on the inward bloom, as a share of `haloBlur`.
+    ///
+    /// Cut from 0.60 when the bloom stopped being four stops and became a measured curve. At 0.60
+    /// this was 9.6 device pixels of Gaussian over a gradient whose steepest and most important
+    /// section — the 8px just inside the rim — is narrower than the kernel, so the blur was
+    /// flattening the very part of the shape the curve exists to draw. 0.35 is enough to keep the
+    /// gradient from banding and small enough to leave the curve its slope.
+    static let innerGlowBlurScale: CGFloat = 0.35
 
     /// How far the coupling tongue reaches *into* the selected wedge, from that wedge's inner arc.
     ///

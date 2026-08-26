@@ -54,15 +54,27 @@ struct HubWell: View {
         // light rather than like a painted torus.
         //
         // What matters as much as the level is the *shape*: a smooth climb, not a plateau then a
-        // step. `innerGlowStartFraction` is where that climb begins, and it has to start inside
-        // the well's opaque core or the core's flat fill and the bloom meet at a visible edge.
-        // Solved rather than guessed: as a fraction of the ring's own peak the reference reads
-        // 0.605 / 0.313 / 0.190 / 0.135 at 8, 20, 32 and 48px inside the rim. Subtracting the
-        // well's own floor, hitting those needs about 1.6x what a first pass at 0.20 produced.
-        // The caption's longest line reaches 0.805 of the hub radius, where this gradient is still
-        // only a third of the way up, so the 9pt secondary line measures about 6.3:1 over it —
-        // `HubTintTests` holds that from the render rather than trusting the arithmetic.
-        let bloom = colorScheme == .dark ? 0.45 : 0.24
+        // step. `HubHalo.inwardBloom` is that shape, mirrored from the outward falloff so the rim
+        // reads as one glow rather than as a line with different weather on each side.
+        //
+        // This is the value at the rim, where the mirror makes it comparable to `HubRingHalo`'s
+        // `even`. Dark went up: the rendered inward side ran 15-25 luminance short of the reference
+        // over the first 8px inside the rim while matching it further in, so what was missing was
+        // concentrated exactly where a mirrored crest puts it.
+        //
+        // Light went down, and the difference between the two is the well's own annulus. The scrim
+        // stops 8.5px short of the rim, so in that band the core stroke's inward edge and the rear
+        // halo are both visible underneath this layer rather than hidden by it. Solving for the
+        // reference's lift over its interior — 20, 15 and 10 luminance at 4, 8 and 12px in — as
+        // though this layer supplied all of it gave 0.80, which rendered at about twice the
+        // reference the whole way in and left a 10.5px band at 0.90 of peak where the reference has
+        // 4.4px. 0.38 is the same solve with the underneath accounted for.
+        //
+        // The caption is unaffected, which is the point of buying the shape here rather than by
+        // raising the level everywhere: at the radii the longest title line actually reaches, the
+        // new curve is within a hundredth of the one it replaces. `HubTintTests` measures that from
+        // the render rather than trusting this note.
+        let bloom = colorScheme == .dark ? 0.55 : 0.38
 
         ZStack {
             // A lens rather than a plate, and that is a correction rather than a preference.
@@ -143,32 +155,11 @@ struct HubWell: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        gradient: Gradient(stops: [
-                            // Nothing until 0.70. The caption's longest line reaches about
-                            // 0.805 of the hub radius, and the 9pt secondary line is white at
-                            // 58% — putting that on lit cyan measures ~4.1:1, under the bar the
-                            // palette holds. So the bloom lights the inner edge of the rim and
-                            // leaves the type on the flat well.
-                            .init(color: ambience.opacity(0), location: 0),
-                            .init(
-                                color: ambience.opacity(0),
-                                location: HubChrome.innerGlowStartFraction
-                            ),
-                            .init(
-                                color: ambience.opacity(bloom * 0.34),
-                                location: HubChrome.innerGlowShoulderFraction
-                            ),
-                            // Crests inside the rim, not on it. See `innerGlowCrestFraction`:
-                            // the centreline is already carrying three other additive layers.
-                            .init(
-                                color: ambience.opacity(bloom),
-                                location: HubChrome.innerGlowCrestFraction
-                            ),
-                            .init(
-                                color: ambience.opacity(bloom * HubChrome.innerGlowCrestFalloff),
-                                location: 1
-                            )
-                        ]),
+                        gradient: HubHalo.inwardBloom(
+                            ring: ambience,
+                            crest: bloom,
+                            ringRadius: ringSide / 2
+                        ),
                         center: .center,
                         startRadius: 0,
                         endRadius: ringSide / 2
@@ -297,12 +288,20 @@ struct HubRingHalo: View {
         // held 0.32 and 0.11 — half again as much light in the band the cards sit against, which is
         // what thickened the rim into a torus rather than leaving it a line with a tail.
         //
-        // Raised back to 0.30 in Dark Mode once the core stopped being wide. The reason it was cut
-        // to 0.22 — that it "thickened the rim into a torus" — was true of a 16px flat-topped core
-        // with this shoulder piled on top of it. With a 10px crest the shoulder is the only thing
-        // between +10px and the first card, and at 0.22 the profile read 0.21 there against the
-        // reference's 0.44: not a rim with a tail, a rim with a step down to a faint ring.
-        let even = colorScheme == .dark ? 0.30 : 0.20
+        // Raised again, and this time it is the *shape* in `HubHalo.falloff` that made the level
+        // affordable. While that gradient crested 8px outside the rim, every increase here widened
+        // the bright band before it filled the shoulder — which is the "torus" the earlier cut to
+        // 0.22 was reacting to. With the crest on the centreline the level sets how far the glow
+        // reaches and the curve sets how quickly it gets there, so they stopped fighting.
+        //
+        // Both numbers are the reference's own decay divided by this layer's colour. Dark: 126 of
+        // 241 at +4px is 0.52, and 0.55 is that with the crest's 0.95 shape factor taken out. Light
+        // is the same solve against a much smaller range — the light reference lifts its canvas by
+        // about 10 luminance at +8px and 6 at +16px, and over a 232 canvas with a 253 rim there are
+        // only 21 luminance available, so it needs most of them. That is why the light value went up
+        // nearly three times: at 0.20 the rendered glow was gone 8px out, and the light reference's
+        // is still going at +20.
+        let even = colorScheme == .dark ? 0.55 : 0.55
 
         ZStack {
             Circle()
@@ -610,44 +609,118 @@ enum HubHalo {
             min(1, max(0, ringStop + offset * spread))
         }
 
+        // Inward first, then outward, so the stops ascend. The two halves meet at `at(0)` with the
+        // same value, which is what makes the rim a crest rather than a pair of edges.
+        let inward = decay.reversed().map { offset, level in
+            Gradient.Stop(color: ring.opacity(peak * level), location: at(-offset))
+        }
+        let outward = decay.map { offset, level in
+            Gradient.Stop(color: ring.opacity(peak * level), location: at(offset))
+        }
+
         return RadialGradient(
-            gradient: Gradient(stops: [
-                .init(color: ring.opacity(0), location: 0),
-                .init(color: ring.opacity(0), location: at(-1.0)),
-                .init(color: ring.opacity(peak * 0.16), location: at(-0.65)),
-                .init(color: ring.opacity(peak * 0.42), location: at(-0.30)),
-                // Crests just outside the centreline, but only just, and that distance is the whole
-                // shape of the rim's outward side.
-                //
-                // A previous pass put the crest at `at(0.22)` — 26px out at Retina scale — on the
-                // grounds that the centreline had no additive headroom left. Profiled, that drew a
-                // plateau and then a cliff: the rendered rim held 0.96 of its peak 5px out where the
-                // reference is at 0.57, fell to 0.30 by 10px where the reference is at 0.44, and
-                // then stayed flat at 0.28 out to 30px where the reference has decayed to 0.23. Two
-                // separate crests, the core's and the halo's, with a trough between them. Light does
-                // not do that.
-                //
-                // What it should crest at instead follows from the crest not being this layer's job.
-                // `HubChrome.ringGlowThickness` draws a sharp core that has decayed by +10px; this
-                // is the shoulder that takes over there and holds until the first card. So it crests
-                // a little outside the rim — far enough not to add to the core's own peak, near
-                // enough that the two decays join without a trough — and then traces the
-                // reference's measured tail: 0.44 of the ring's peak at +10px, 0.34 at +15, 0.26 at
-                // +20 and 0.23 flat out to +30.
-                //
-                // The headroom argument that put the crest at `at(0.22)` no longer applies: the core
-                // stroke blends normally now, so nothing here is racing it to 255.
-                .init(color: ring.opacity(peak * 0.66), location: at(0)),
-                .init(color: ring.opacity(peak), location: at(0.14)),
-                .init(color: ring.opacity(peak * 0.86), location: at(0.25)),
-                .init(color: ring.opacity(peak * 0.62), location: at(0.45)),
-                .init(color: ring.opacity(peak * 0.40), location: at(0.65)),
-                .init(color: ring.opacity(peak * 0.18), location: at(0.85)),
-                .init(color: ring.opacity(0), location: 1),
-            ]),
+            gradient: Gradient(stops:
+                [Gradient.Stop(color: ring.opacity(0), location: 0)]
+                + inward + outward
+                + [Gradient.Stop(color: ring.opacity(0), location: 1)]
+            ),
             center: .center,
             startRadius: 0,
             endRadius: outer
+        )
+    }
+
+    /// How the glow falls away from the rim, as a fraction of its crest, at a distance measured in
+    /// fractions of `HubChrome.haloSpread`.
+    ///
+    /// One table, used in both directions, and that is the whole point of it. The rim crests *on*
+    /// the centreline and decays the same way inward and outward, which is both what a glow is and
+    /// what the references measure: sweeping either side of the dark reference's rim, the inward
+    /// side runs 1.05 to 1.38 times the outward side over the first 20px and the two reach 5% of
+    /// peak at 54 and 55px respectively.
+    ///
+    /// Ours did not, and it took two wrong answers to see why. The outward falloff crested 26px out,
+    /// then 8px out, on the reasoning that the core stroke owned the centreline and this layer
+    /// should take over where the core had decayed; the inward bloom, painted separately by
+    /// `HubWell`, crested 8px *in*. Two crests either side of a line is not a glow, it is three
+    /// bright rings, and it measured that way — a trough at +4px reading 0.36 of peak where the
+    /// reference is at 0.58, and a composite peak pulled 4px off the stroke's own centreline by the
+    /// inward crest, which is what made the outward side look like a shelf. Deriving both sides from
+    /// one table is what makes the symmetry structural rather than a coincidence that survives until
+    /// the next adjustment. `HubChromeTests` compares the two directions at equal distances.
+    ///
+    /// The levels are the dark reference's own decay, read as absolute luminance over its black
+    /// canvas and divided by this layer's colour: 126 at 4px from the rim, 101 at 8, 81 at 12, 62 at
+    /// 16, 50 at 20, then a tail that is still lit where the first wedge begins.
+    static let decay: [(Double, Double)] = [
+        (0, 1.00),
+        (0.067, 0.95),
+        (0.133, 0.76),
+        (0.200, 0.61),
+        (0.267, 0.47),
+        (0.333, 0.38),
+        (0.500, 0.17),
+        (0.667, 0.08),
+        (0.833, 0.03),
+        (1.000, 0),
+    ]
+
+    /// `decay`, interpolated.
+    static func level(atSpreadOffset offset: Double) -> Double {
+        let distance = abs(offset)
+        guard let last = decay.last, distance < last.0 else { return 0 }
+        for (near, far) in zip(decay, decay.dropFirst()) where distance <= far.0 {
+            let span = far.0 - near.0
+            let t = span <= 0 ? 0 : (distance - near.0) / span
+            return near.1 + t * (far.1 - near.1)
+        }
+        return 0
+    }
+
+    /// The same glow, inward, painted by `HubWell` because the caption surface covers the real
+    /// thing. Locations are fractions of the ring's own centreline radius, so `1` *is* the rim.
+    ///
+    /// Sampled from `decay` rather than written out, so this cannot drift from the outward side.
+    /// `ringRadius` is what converts between the two parameterisations: the outward falloff measures
+    /// distance in fractions of `haloSpread` against a gradient that ends past the wedges, and this
+    /// one measures it against a gradient that ends on the rim.
+    ///
+    /// Stops below `HubChrome.innerGlowStartFraction` are dropped. The bloom has to reach zero
+    /// before the caption surface's own edge or the flat scrim and the glow meet at a visible step —
+    /// and at the hub's proportions the shared decay has faded to a few percent by then anyway.
+    static func inwardBloom(ring: Color, crest: Double, ringRadius: CGFloat) -> Gradient {
+        let spread = Double(HubChrome.haloSpread / max(ringRadius, 1))
+        var stops = [Gradient.Stop]()
+        for (offset, level) in decay.reversed() {
+            let location = 1 - offset * spread
+            guard location > Double(HubChrome.innerGlowStartFraction) else { continue }
+            stops.append(
+                Gradient.Stop(color: ring.opacity(crest * level), location: CGFloat(location))
+            )
+        }
+        // The crest itself, held from just inside the rim to the rim, and the shoulder the tests
+        // name. Both are `HubChrome` constants so the caption's contrast bound stays expressible
+        // in the same terms it was solved in.
+        stops.append(
+            Gradient.Stop(
+                color: ring.opacity(crest),
+                location: HubChrome.innerGlowCrestFraction
+            )
+        )
+        stops.append(
+            Gradient.Stop(
+                color: ring.opacity(crest * HubChrome.innerGlowCrestFalloff),
+                location: 1
+            )
+        )
+        return Gradient(stops:
+            [
+                Gradient.Stop(color: ring.opacity(0), location: 0),
+                Gradient.Stop(
+                    color: ring.opacity(0),
+                    location: HubChrome.innerGlowStartFraction
+                ),
+            ] + stops
         )
     }
 
@@ -666,8 +739,19 @@ enum HubHalo {
         angle: .degrees(0)
     )
 
+    /// Angular shape of the rim's own brightness: a little hotter toward the selection, and
+    /// otherwise a line of even light.
+    ///
+    /// `far` is what the side opposite the pointer keeps, and 0.70 was too little. Sweeping every
+    /// bearing's own peak, the references' rims are close to uniform — the dimmest bearing is 0.92
+    /// of the brightest in the dark image and 0.99 in the light one — while ours measured 0.74, with
+    /// the dim side at luminance 190 against a median of 230. A rim that is a quarter darker for a
+    /// third of its length does not read as a brighter rim with a hotspot; it reads as a dim rim,
+    /// because the eye judges a closed line by its weakest arc. That is most of what "not bright
+    /// enough" was pointing at, and it costs nothing to fix: the selection still gets its lift from
+    /// `peak` here and from `HubRingHalo`'s lobe behind the cards.
     static func gradient(ring: Color, even: Double, peak: Double) -> AngularGradient {
-        let far = even * 0.70
+        let far = even * 0.90
         return AngularGradient(
             gradient: Gradient(stops: [
                 .init(color: ring.opacity(peak), location: 0),
