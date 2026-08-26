@@ -147,6 +147,26 @@ public final class SwitcherController {
     private var activeTransition: TransitionPanel?
 
     private var hoverTimer: Timer?
+
+    /// Where the pointer was when something other than the pointer last chose the selection.
+    ///
+    /// The hover sampler runs on a 60 Hz timer against the pointer's *current* position, and it
+    /// sets the selection as well as the highlight. So a stationary pointer re-asserts its own card
+    /// on the very next tick — which is what made the arrow keys look inert rather than merely
+    /// fighting the mouse: the selection moved and was dragged back inside 16ms, before the screen
+    /// had a chance to show it. Nothing was broken about the arrows at all.
+    ///
+    /// Holding here rather than suppressing hover outright, because hover should resume the moment
+    /// the pointer is actually used again — it is only the *stale* position that has no business
+    /// overriding a deliberate keystroke.
+    private var hoverHoldPoint: CGPoint?
+
+    /// How far the pointer must travel to take the selection back.
+    ///
+    /// Small, because the only thing being filtered out is a pointer that has not moved at all.
+    /// Mouse coordinates arrive with sub-point jitter and a display can report a fractional change
+    /// with nothing touching the desk, so zero would not hold.
+    private static let hoverReleaseDistance: CGFloat = 3
     private var localClickMonitor: Any?
     private var globalClickMonitor: Any?
     private var screenObserver: NSObjectProtocol?
@@ -412,6 +432,9 @@ public final class SwitcherController {
         activateAsSoonAsReady = false
         scrollAccumulator.reset()
         hoveredIndex = nil
+        // A fresh presentation belongs to the pointer again: the card under the cursor should light
+        // up without the user having to jiggle the mouse first.
+        hoverHoldPoint = nil
 
         let stopwatch = Stopwatch("overlay presentation", logger: Log.overlay)
 
@@ -1061,6 +1084,7 @@ public final class SwitcherController {
         stopHoverTracking()
         removeClickMonitors()
         hoveredIndex = nil
+        hoverHoldPoint = nil
         invalidateBrowserTabLoad()
         pendingSearchConfirmation = nil
         activateAsSoonAsReady = false
@@ -1337,6 +1361,15 @@ public final class SwitcherController {
 
         updateCloseButtonHover(at: point, panel: panel)
 
+        // A keystroke has chosen the selection and the pointer has not moved since, so this sample
+        // is the old position speaking again rather than the user pointing at anything.
+        if let hold = hoverHoldPoint {
+            guard abs(point.x - hold.x) >= Self.hoverReleaseDistance
+                    || abs(point.y - hold.y) >= Self.hoverReleaseDistance
+            else { return }
+            hoverHoldPoint = nil
+        }
+
         guard index != hoveredIndex else { return }
         hoveredIndex = index
 
@@ -1519,8 +1552,10 @@ public final class SwitcherController {
         }
 
         // The card under the cursor has changed, so re-resolve hover and refresh the
-        // preview for whatever is now selected.
+        // preview for whatever is now selected. The cards moved rather than the pointer, so any
+        // hold is released: what is under the cursor now is genuinely different.
         hoveredIndex = nil
+        hoverHoldPoint = nil
         resizePanelForCurrentLayout()
         sampleHover()
         onSelectionChanged()
@@ -1735,7 +1770,16 @@ extension SwitcherController: TriggerMonitorDelegate {
         // The keyboard has taken over; a highlight left under a stationary pointer would now be
         // claiming a selection that has moved on.
         hoveredIndex = nil
+        holdHoverUntilPointerMoves()
         onSelectionChanged()
+    }
+
+    /// Stop the pointer's current position from re-choosing the selection until it is moved.
+    ///
+    /// Called from wherever something that is not the pointer decides the selection. See
+    /// `hoverHoldPoint`.
+    private func holdHoverUntilPointerMoves() {
+        hoverHoldPoint = NSEvent.mouseLocation
     }
 
     /// The shortcut pressed again while the overlay is up.
@@ -1939,6 +1983,10 @@ extension SwitcherController: TriggerMonitorDelegate {
     /// Re-fit and re-capture after the visible list changes.
     private func afterSearchChanged() {
         hoveredIndex = nil
+        // Typing put the selection on the best match. A pointer that happens to be resting over a
+        // card would otherwise take it straight back, so the search would filter the list and then
+        // select something other than what it had ranked first.
+        holdHoverUntilPointerMoves()
         resizePanelForCurrentLayout()
         refreshTabIcons()
 
