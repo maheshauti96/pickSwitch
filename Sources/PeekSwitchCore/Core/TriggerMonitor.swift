@@ -25,6 +25,10 @@ protocol TriggerMonitorDelegate: AnyObject {
     func searchCharactersTyped(_ characters: String)
     /// Backspace or forward delete, to shorten the search query.
     func searchBackspacePressed()
+    /// Command with a delete key, to wipe the whole query at once.
+    func searchClearPressed()
+    /// Command-A with a query active, to select all of it.
+    func searchSelectAllPressed()
     /// Requirement 5.13: repeated tap disables mean the trigger is unreliable.
     func eventTapBecameUnstable(_ unstable: Bool)
     /// A button was pressed while the monitor was in capture mode, so Settings can
@@ -130,6 +134,17 @@ final class TriggerMonitor {
     /// hotkey in the pipeline, so consuming the keystroke as a search character means the hotkey
     /// never fires. See `KeyResponse`.
     var keyboardShortcut: HotKeyShortcut?
+
+    /// Whether a search query is currently active.
+    ///
+    /// Written on main when the query changes, read on the tap thread. `Atomic`-by-convention for
+    /// the same reason as `triggerButton`: it is a single word, and the worst a stale read can do
+    /// is send one Command-A to the wrong place.
+    ///
+    /// Needed because Command-A's meaning depends on it — with a query up it selects the query,
+    /// and with nothing typed it has to keep reaching the application underneath. `KeyResponse`
+    /// is a pure function and has no view of the overlay's state, so the state comes to it.
+    var isSearchActive = false
 
     private(set) var isInstalled = false
     /// Which pipeline position the button tap ended up at. Surfaced in diagnostics
@@ -480,7 +495,8 @@ final class TriggerMonitor {
                 characters: Self.characters(from: event),
                 isAutorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                 shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) },
-                shortcutModifiers: monitor.keyboardShortcut?.eventFlags ?? []
+                shortcutModifiers: monitor.keyboardShortcut?.eventFlags ?? [],
+                isSearching: monitor.isSearchActive
             ) {
             case .dismiss:
                 monitor.dispatch { $0.escapePressed() }
@@ -497,6 +513,16 @@ final class TriggerMonitor {
                 return nil
             case .deleteSearchCharacter:
                 monitor.dispatch { $0.searchBackspacePressed() }
+                return nil
+            case .clearSearchQuery:
+                monitor.dispatch { $0.searchClearPressed() }
+                return nil
+            case .selectAllSearchQuery:
+                // Consumed. Only reached with a query active, and in that case the selection
+                // belongs to the overlay — letting it through as well would select all of the
+                // document behind it, which is precisely the behaviour that was reported as
+                // Command-A "not working".
+                monitor.dispatch { $0.searchSelectAllPressed() }
                 return nil
             case .moveSelection(let direction):
                 // Consumed, like a typed character. The overlay is in front and the arrow is

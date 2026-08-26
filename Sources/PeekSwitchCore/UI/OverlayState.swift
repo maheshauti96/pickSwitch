@@ -48,6 +48,16 @@ final class OverlayState: ObservableObject {
 
     var isSearching: Bool { !searchQuery.isEmpty }
 
+    /// Whether the whole query is selected, so the next edit replaces it.
+    ///
+    /// The overlay has no text field, no caret and no selection range — the query is one string —
+    /// so select-all cannot be a range here. It is this flag, and the next edit consumes it. That
+    /// is enough for the two gestures people actually reach for: Command-A then delete wipes the
+    /// query, and Command-A then typing replaces it, both matching every other text field on the
+    /// system. Anything more would mean a caret model in here and a caret drawn in the pill, for
+    /// a field that only ever grows at one end.
+    @Published private(set) var isQuerySelected = false
+
     /// The visible results that are somewhere on this machine.
     ///
     /// Distinguished from `entries` because a query also offers the web, and the web is never a
@@ -265,13 +275,16 @@ final class OverlayState: ObservableObject {
     ///   panel needs re-fitting.
     @discardableResult
     func appendToSearch(_ characters: String) -> Bool {
-        applySearch(searchQuery + characters)
+        // Typing over a selection replaces it, which is what every other text field does.
+        guard !isQuerySelected else { return applySearch(characters) }
+        return applySearch(searchQuery + characters)
     }
 
-    /// Drop the last character of the query.
+    /// Drop the last character of the query, or all of it when it is selected.
     @discardableResult
     func backspaceSearch() -> Bool {
         guard !searchQuery.isEmpty else { return false }
+        guard !isQuerySelected else { return applySearch("") }
         return applySearch(String(searchQuery.dropLast()))
     }
 
@@ -279,6 +292,18 @@ final class OverlayState: ObservableObject {
     func clearSearch() -> Bool {
         guard !searchQuery.isEmpty else { return false }
         return applySearch("")
+    }
+
+    /// Select the whole query, so the next edit replaces it.
+    ///
+    /// - Returns: `true` when this changed anything, so the caller knows whether to redraw. Note
+    ///   this is the *only* search mutation whose return value is not about the result list: there
+    ///   is no filtering to redo, because selecting text does not change what matched.
+    @discardableResult
+    func selectAllSearch() -> Bool {
+        guard isSearching, !isQuerySelected else { return false }
+        isQuerySelected = true
+        return true
     }
 
     /// Add the tabs found for this presentation, and fold them into any active query.
@@ -314,6 +339,11 @@ final class OverlayState: ObservableObject {
     @discardableResult
     private func applySearch(_ query: String) -> Bool {
         searchQuery = query
+        // Every edit consumes the selection, including the ones that arrive from elsewhere —
+        // tabs landing, the application catalogue settling, a result being removed. A selection
+        // that outlived the string it referred to would make the next keystroke wipe a query the
+        // user had since retyped.
+        isQuerySelected = false
 
         let matches: [WindowEntry]
         if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -373,6 +403,7 @@ final class OverlayState: ObservableObject {
         tabEntries = []
         hasLoadedTabs = false
         searchQuery = ""
+        isQuerySelected = false
         // A native window id can be reused, and its active tab can change between invocations.
         // Never carry a per-window favicon, or the tint taken from it, across presentations
         // without rematching it.
@@ -453,7 +484,9 @@ final class OverlayState: ObservableObject {
     /// the corner it uses is free precisely because these windows have no site icon. Tabs and
     /// installed applications have no native window id and likewise keep their own supplied icon.
     func displayIcon(for entry: WindowEntry) -> NSImage? {
-        if entry.isTab {
+        // Tabs and assistant prompts both borrow the same store: an icon fetched from the network
+        // after the entry already existed, falling back to whatever the entry was built with.
+        if entry.isTab || entry.isWebSearch {
             return siteIconsByEntryID[entry.id] ?? entry.applicationIcon
         }
         guard entry.isWindow else { return entry.applicationIcon }
@@ -506,6 +539,31 @@ final class OverlayState: ObservableObject {
               tabEntries.contains(where: { $0.id == entryID })
         else { return false }
 
+        siteIconsByEntryID[entryID] = image
+        if let tint, siteTintsByEntryID[entryID] != tint {
+            siteTintsByEntryID[entryID] = tint
+            recomputeTints()
+        }
+        return true
+    }
+
+    /// Publish an assistant's logo, if it still belongs to the visible presentation.
+    ///
+    /// Separate from `setTabIcon` only because of the guard: that one requires the entry to be one
+    /// of `tabEntries`, and a web result is not — it is synthesised per query and lives only in
+    /// `entries`. Same store underneath, since from `displayIcon`'s point of view both are "an icon
+    /// that arrived from the network after the entry was built".
+    @discardableResult
+    func setWebResultIcon(
+        _ image: NSImage,
+        tint: IconTint?,
+        for entryID: String,
+        presentationID expectedPresentationID: Int
+    ) -> Bool {
+        guard isVisible,
+              presentationID == expectedPresentationID,
+              entries.contains(where: { $0.id == entryID && $0.isWebSearch })
+        else { return false }
         siteIconsByEntryID[entryID] = image
         if let tint, siteTintsByEntryID[entryID] != tint {
             siteTintsByEntryID[entryID] = tint

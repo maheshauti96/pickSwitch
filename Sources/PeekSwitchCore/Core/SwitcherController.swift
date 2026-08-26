@@ -560,6 +560,7 @@ public final class SwitcherController {
         // Requirement 5.6: scroll, keys, and reliable primary-card clicks become
         // interesting only now. Passing the panel frame lets the HID-level tap consume
         // clicks on the overlay while preserving normal click-through outside it.
+        triggerMonitor.isSearchActive = state.isSearching
         triggerMonitor.setOverlayTapEnabled(true, clickRegion: panel.frame)
         startHoverTracking()
         installClickMonitors()
@@ -1054,6 +1055,7 @@ public final class SwitcherController {
         // the switch reads as instant.
         panel?.dismiss()
         state.isVisible = false
+        triggerMonitor.isSearchActive = false
         triggerMonitor.setOverlayTapEnabled(false)
         triggerMonitor.clearHeldState()
         stopHoverTracking()
@@ -1758,6 +1760,7 @@ extension SwitcherController: TriggerMonitorDelegate {
         // overlay on a mistyped letter would be a harsh way to learn that.
         if state.clearSearch() {
             pendingSearchConfirmation = nil
+            publishSearchActive()
             Log.overlay.debug("search cleared")
             afterSearchChanged()
             return
@@ -1769,6 +1772,7 @@ extension SwitcherController: TriggerMonitorDelegate {
         guard state.isVisible else { return }
         pendingSearchConfirmation = nil
         let changed = state.appendToSearch(characters)
+        publishSearchActive()
         // Shape only, never content: the query is the user's own typing. Enough to tell a stray
         // space that the switcher inserted from one the user meant, which is the only way to
         // separate "the caret is drawn too far right" from "a space really is in there".
@@ -1897,8 +1901,43 @@ extension SwitcherController: TriggerMonitorDelegate {
     func searchBackspacePressed() {
         guard state.isVisible else { return }
         pendingSearchConfirmation = nil
-        guard state.backspaceSearch() else { return }
+        let changed = state.backspaceSearch()
+        publishSearchActive()
+        guard changed else { return }
         afterSearchChanged()
+    }
+
+    /// Command with a delete key: the whole query goes.
+    ///
+    /// Deliberately not routed into `escapePressed()`, which clears the query too. Escape falls
+    /// through to dismissing the overlay when there is nothing to clear, and a delete key must
+    /// never close the switcher — a user wiping a query they mistyped would lose the overlay along
+    /// with it.
+    func searchClearPressed() {
+        guard state.isVisible else { return }
+        pendingSearchConfirmation = nil
+        let changed = state.clearSearch()
+        publishSearchActive()
+        guard changed else { return }
+        afterSearchChanged()
+    }
+
+    /// Command-A: select the whole query so the next edit replaces it.
+    ///
+    /// No re-filtering and no re-fitting, because selecting text changes nothing about what
+    /// matched — only the pill's own appearance changes, and that follows from the published flag.
+    func searchSelectAllPressed() {
+        guard state.isVisible else { return }
+        state.selectAllSearch()
+    }
+
+    /// Tell the tap whether a query is active, since that decides what Command-A means.
+    ///
+    /// Called from every path that can change the answer rather than from `afterSearchChanged()`,
+    /// which is skipped whenever the visible list happens not to have changed — and the query can
+    /// change without the list changing, most obviously when it goes from one space to none.
+    private func publishSearchActive() {
+        triggerMonitor.isSearchActive = state.isSearching
     }
 
     /// Re-fit and re-capture after the visible list changes.
@@ -1911,6 +1950,8 @@ extension SwitcherController: TriggerMonitorDelegate {
         // because capture is scoped to what was on screen. Tabs are skipped: they have no
         // window to capture, and a browser screenshot would show whichever tab is currently
         // frontmost rather than the one being offered.
+        refreshPromptIcons()
+
         let capturable = state.entries.filter(\.isWindow)
         guard !capturable.isEmpty else { return }
         let scale = panel?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
@@ -1923,6 +1964,53 @@ extension SwitcherController: TriggerMonitorDelegate {
     /// match dozens of tabs, and a browser with forty of them would otherwise fan out forty
     /// requests for a list the user is about to narrow further with the next keystroke. The service
     /// deduplicates by origin underneath, so ten tabs on one site cost one request.
+    /// Resolve the assistants' own logos for the prompt results on screen.
+    ///
+    /// The same service the tab results use, for the same reason: a brand mark cannot be an SF
+    /// Symbol, and shipping three logos as assets would mean carrying someone else's trademark in
+    /// the bundle and re-shipping the app whenever one of them is restyled. Their own favicon is
+    /// the version they are currently using, by definition.
+    ///
+    /// What goes on the wire is `logoSourceURL` — the provider's front page and nothing else. The
+    /// prompt URL is never fetched, so what the user typed does not leave the machine until they
+    /// actually pick one of these results. The service deduplicates by origin and caches, so three
+    /// providers cost three requests once rather than three per keystroke.
+    private func refreshPromptIcons() {
+        guard state.isVisible else { return }
+        let presentationID = state.presentationID
+
+        let pending = state.entries.filter { entry in
+            entry.webSearch?.logoSourceURL != nil && !state.hasSiteIcon(for: entry)
+        }
+
+        for entry in pending {
+            guard let source = entry.webSearch?.logoSourceURL else { continue }
+            let entryID = entry.id
+
+            Task { [weak self, browserFavicons] in
+                guard let self,
+                      let logo = await browserFavicons.favicon(for: source)
+                else { return }
+
+                let image = NSImage(
+                    cgImage: logo,
+                    size: NSSize(width: logo.width, height: logo.height)
+                )
+                // Not a template: these are brand marks, and recolouring them to the palette's
+                // text colour would turn three distinguishable logos into three identical
+                // silhouettes — which is the whole reason they are worth fetching.
+                image.isTemplate = false
+
+                self.state.setWebResultIcon(
+                    image,
+                    tint: IconTint.sampled(from: image),
+                    for: entryID,
+                    presentationID: presentationID
+                )
+            }
+        }
+    }
+
     private func refreshTabIcons() {
         guard state.isVisible else { return }
         let presentationID = state.presentationID
@@ -1983,6 +2071,10 @@ extension SwitcherController: TriggerMonitorDelegate {
             Log.overlay.info("opening the query as an address")
         case .search:
             Log.overlay.info("searching the web for the query")
+        case .prompt(let provider, _):
+            // Shape only, never the prompt itself: what the user typed is theirs, and a log is a
+            // place it has no reason to end up.
+            Log.overlay.info("handing the query to \(provider.rawValue, privacy: .public) as a prompt")
         }
 
         // Dismissed first, so the overlay is gone before the browser comes forward rather than

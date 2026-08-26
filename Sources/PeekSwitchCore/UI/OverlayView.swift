@@ -126,10 +126,22 @@ struct OverlayView: View {
                     Text(visibleSearchQuery)
                         .font(.system(size: metrics.queryFontSize, weight: .semibold))
                         .lineLimit(1)
+                        // Selected text has to look selected, or Command-A is a keystroke with no
+                        // visible answer — which is how it came to be reported as broken in the
+                        // first place. Drawn as a highlight behind the glyphs, tight to them, the
+                        // way selected text looks everywhere else.
+                        .padding(.horizontal, state.isQuerySelected ? 3 : 0)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(palette.accent.opacity(state.isQuerySelected ? 0.32 : 0))
+                        )
                     // A caret, so an empty-looking field still reads as one being typed into.
+                    // Hidden while the query is selected: a selection and an insertion point are
+                    // different states and showing both would say the next keystroke appends.
                     Rectangle()
                         .fill(palette.accent)
                         .frame(width: metrics.caretWidth, height: metrics.caretHeight)
+                        .opacity(state.isQuerySelected ? 0 : 1)
                 }
             }
             .foregroundStyle(palette.text)
@@ -771,6 +783,7 @@ struct OverlayView: View {
         switch destination {
         case .address: return "to open \(shown)"
         case .search: return "to search the web for \(shown)"
+        case .prompt(let provider, _): return "to ask \(provider.displayName) about \(shown)"
         }
     }
 }

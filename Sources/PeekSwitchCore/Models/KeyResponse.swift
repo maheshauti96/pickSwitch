@@ -65,6 +65,23 @@ enum KeyResponse: Equatable, Sendable {
     case triggerShortcut
     case confirm
     case deleteSearchCharacter
+    /// Wipe the whole query in one go: Command with either delete key.
+    ///
+    /// The delete case above used to be modifier-blind, which is how the reported bug came about.
+    /// A user reaching for the two ways macOS has always meant "get rid of all of this" — Command
+    /// with delete, or select-all then delete — got a one-character backspace from the first and
+    /// nothing at all from the second, since Command chords were passed straight through to the
+    /// application underneath. The overlay has no text field and no responder chain, so neither
+    /// gesture arrives with any meaning attached; both have to be spelled out here.
+    case clearSearchQuery
+    /// Command-A with a query active: select all of it, so the next delete or keystroke replaces
+    /// the lot.
+    ///
+    /// There is no caret and no selection range to act on — the query is one string — so this is
+    /// select-all in the only sense that is meaningful here: a flag saying the whole query is
+    /// spoken for, which the next edit consumes. That is enough to make the two gestures users
+    /// actually reach for behave the way they do in every other text field.
+    case selectAllSearchQuery
     case typeIntoSearch(String)
     /// An arrow key, reported as the direction pressed rather than as a change of selection.
     ///
@@ -81,6 +98,7 @@ enum KeyResponse: Equatable, Sendable {
     static let keypadEnterKeyCode: Int64 = 76
     static let deleteKeyCode: Int64 = 51
     static let forwardDeleteKeyCode: Int64 = 117
+    static let letterAKeyCode: Int64 = 0
     static let leftArrowKeyCode: Int64 = 123
     static let rightArrowKeyCode: Int64 = 124
     static let downArrowKeyCode: Int64 = 125
@@ -101,13 +119,17 @@ enum KeyResponse: Equatable, Sendable {
     ///   - shortcutKeyCode: the key code of the registered global shortcut, when there is one.
     ///   - shortcutModifiers: the modifiers that shortcut requires. Empty for a shortcut that needs
     ///     none, such as F13.
+    ///   - isSearching: whether a query is currently active. Consulted only for Command-A, which
+    ///     must keep meaning select-all *in the application underneath* when the overlay is up
+    ///     with nothing typed — the overlay has no claim on it until there is a query to select.
     static func forKeyDown(
         keyCode: Int64,
         activeModifiers: CGEventFlags,
         characters: String?,
         isAutorepeat: Bool = false,
         shortcutKeyCode: Int64?,
-        shortcutModifiers: CGEventFlags = []
+        shortcutModifiers: CGEventFlags = [],
+        isSearching: Bool = false
     ) -> KeyResponse {
         switch keyCode {
         case escapeKeyCode:
@@ -115,7 +137,13 @@ enum KeyResponse: Equatable, Sendable {
         case returnKeyCode, keypadEnterKeyCode:
             return .confirm
         case deleteKeyCode, forwardDeleteKeyCode:
-            return .deleteSearchCharacter
+            // Command with delete means "all of it" wherever else macOS accepts text, and this is
+            // the only place the distinction can be drawn: by the time the delete reaches the
+            // state it is one character or the whole string, and nothing downstream still knows
+            // which modifiers were held.
+            return activeModifiers.contains(.maskCommand)
+                ? .clearSearchQuery
+                : .deleteSearchCharacter
         case leftArrowKeyCode:
             return .moveSelection(.left)
         case rightArrowKeyCode:
@@ -142,6 +170,19 @@ enum KeyResponse: Equatable, Sendable {
             if activeModifiers.isSuperset(of: shortcutModifiers) {
                 return .triggerShortcut
             }
+        }
+
+        // Command-A, and only while there is something to select. Placed after the shortcut check
+        // so a user who has registered ⌘A as their trigger still gets their trigger, and before
+        // the chord guard below, which would otherwise hand it to the application underneath —
+        // which is exactly what it was doing: the reported symptom was Command-A appearing to do
+        // nothing, and it was in fact selecting all of the user's document behind the overlay.
+        if keyCode == letterAKeyCode,
+           isSearching,
+           activeModifiers.contains(.maskCommand),
+           !activeModifiers.contains(.maskControl),
+           !activeModifiers.contains(.maskAlternate) {
+            return .selectAllSearchQuery
         }
 
         // A command or control chord is a shortcut, not typing — passing those through is what

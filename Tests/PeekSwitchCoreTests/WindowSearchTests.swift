@@ -253,6 +253,63 @@ struct WindowSearchTests {
         }
     }
 
+    // MARK: - Select all
+
+    /// The gesture that was reported broken: Command-A, then delete, clears the query.
+    @Test("select all then delete wipes the query")
+    @MainActor
+    func selectAllThenDeleteClears() {
+        let subject = OverlayState()
+        subject.load(entries: Self.windows, selectedIndex: 0)
+        subject.appendToSearch("saf")
+        #expect(subject.searchQuery == "saf")
+        #expect(subject.isQuerySelected == false)
+
+        #expect(subject.selectAllSearch())
+        #expect(subject.isQuerySelected)
+        // Selecting changes nothing about what matched, so nothing is re-filtered.
+        #expect(subject.searchQuery == "saf")
+
+        subject.backspaceSearch()
+        #expect(subject.searchQuery.isEmpty)
+        #expect(subject.isQuerySelected == false)
+    }
+
+    /// Typing over a selection replaces it, as it does in every other text field.
+    @Test("typing over a selected query replaces it")
+    @MainActor
+    func typingOverSelectionReplaces() {
+        let subject = OverlayState()
+        subject.load(entries: Self.windows, selectedIndex: 0)
+        subject.appendToSearch("saf")
+        #expect(subject.selectAllSearch())
+
+        subject.appendToSearch("cur")
+        #expect(subject.searchQuery == "cur")
+        #expect(subject.isQuerySelected == false)
+    }
+
+    /// A selection may not outlive the string it referred to. Sources settling mid-selection is
+    /// the realistic way that happens: tabs and the application catalogue both arrive late.
+    @Test("any edit drops the selection")
+    @MainActor
+    func editsDropTheSelection() {
+        let subject = OverlayState()
+        subject.load(entries: Self.windows, selectedIndex: 0)
+        subject.appendToSearch("saf")
+
+        #expect(subject.selectAllSearch())
+        subject.setTabs([])
+        #expect(subject.isQuerySelected == false)
+
+        // Nothing to select when nothing is typed, and selecting twice is not a change.
+        #expect(subject.clearSearch())
+        #expect(subject.selectAllSearch() == false)
+        subject.appendToSearch("x")
+        #expect(subject.selectAllSearch())
+        #expect(subject.selectAllSearch() == false)
+    }
+
     /// The band has to hold the pill that is drawn in it.
     ///
     /// These were two unrelated literals until the pill was enlarged — a 12pt query inside a

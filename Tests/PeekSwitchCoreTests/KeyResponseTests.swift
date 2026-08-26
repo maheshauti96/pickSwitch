@@ -272,6 +272,98 @@ struct KeyResponseTests {
         )
     }
 
+    /// The reported bug, from both directions.
+    ///
+    /// Command with delete used to fall into the modifier-blind delete case and remove exactly one
+    /// character, and Command-A used to reach the chord guard and be handed to the application
+    /// underneath — so "select all, then delete" removed one character and silently select-all'd
+    /// the user's document on the way.
+    @Test("command with either delete key wipes the whole query", arguments: [
+        KeyResponse.deleteKeyCode, KeyResponse.forwardDeleteKeyCode,
+    ])
+    func commandDeleteClearsTheQuery(keyCode: Int64) {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: keyCode,
+                activeModifiers: Self.command,
+                characters: nil,
+                shortcutKeyCode: nil,
+                isSearching: true
+            ) == .clearSearchQuery
+        )
+        // And without Command it is still one character, searching or not.
+        for searching in [true, false] {
+            #expect(
+                KeyResponse.forKeyDown(
+                    keyCode: keyCode,
+                    activeModifiers: Self.noModifiers,
+                    characters: nil,
+                    shortcutKeyCode: nil,
+                    isSearching: searching
+                ) == .deleteSearchCharacter
+            )
+        }
+    }
+
+    @Test("command-A selects the query, but only when there is one")
+    func commandASelectsTheQuery() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: KeyResponse.letterAKeyCode,
+                activeModifiers: Self.command,
+                characters: "a",
+                shortcutKeyCode: nil,
+                isSearching: true
+            ) == .selectAllSearchQuery
+        )
+
+        // Nothing typed yet, so Command-A still belongs to whatever is behind the overlay.
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: KeyResponse.letterAKeyCode,
+                activeModifiers: Self.command,
+                characters: "a",
+                shortcutKeyCode: nil,
+                isSearching: false
+            ) == .passThrough
+        )
+
+        // A plain "a" is still typing, and Control- or Option-A are still someone else's chord.
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: KeyResponse.letterAKeyCode,
+                activeModifiers: Self.noModifiers,
+                characters: "a",
+                shortcutKeyCode: nil,
+                isSearching: true
+            ) == .typeIntoSearch("a")
+        )
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: KeyResponse.letterAKeyCode,
+                activeModifiers: Self.option,
+                characters: "å",
+                shortcutKeyCode: nil,
+                isSearching: true
+            ) == .passThrough
+        )
+    }
+
+    /// A user who has registered ⌘A as their trigger still gets their trigger.
+    @Test("the shortcut outranks select-all when they are the same chord")
+    func shortcutWinsOverSelectAll() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: KeyResponse.letterAKeyCode,
+                activeModifiers: Self.command,
+                characters: "a",
+                shortcutKeyCode: KeyResponse.letterAKeyCode,
+                shortcutModifiers: Self.command,
+                isSearching: true
+            ) == .triggerShortcut
+        )
+    }
+
     // MARK: - Arrow keys
 
     /// All four arrows steer the overlay. They report a direction rather than a change of
