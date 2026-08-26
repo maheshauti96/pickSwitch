@@ -128,7 +128,7 @@ public final class SwitcherController {
     private var isBrowserAuthorizationInFlight = false
     private static let browserAuthorizationDelayNanoseconds: UInt64 = 250_000_000
 
-    private enum ConfirmationIntent {
+    private enum ConfirmationIntent: Equatable {
         case selection
         case returnKey
     }
@@ -1185,28 +1185,24 @@ public final class SwitcherController {
         }
         pendingSearchConfirmation = nil
 
-        // Return owns the final web fallback. Mouse/trigger confirmation still means a selected
-        // local target, so if there is none it retains the established dismiss-without-action
-        // behaviour rather than unexpectedly opening a browser.
-        if case .returnKey = intent,
-           state.canOfferWebSearch,
-           let destination = WebSearch.destination(for: state.searchQuery) {
+        // Decided by `ConfirmationTarget` rather than by a chain of conditions here. The chain it
+        // replaces put the Return-only web fallback ahead of the selected entry, so a selected
+        // "Prompt on ChatGPT" opened a Google search instead — see that type for the full account.
+        let entry: WindowEntry
+        switch ConfirmationTarget.resolve(
+            isReturn: intent == .returnKey,
+            selectedEntry: state.selectedEntry,
+            canOfferWebSearch: state.canOfferWebSearch,
+            query: state.searchQuery
+        ) {
+        case .open(let destination):
             openInDefaultBrowser(destination)
             return
-        }
-
-        guard let entry = state.selectedEntry else {
+        case .dismiss:
             dismiss(activating: nil)
             return
-        }
-
-        // A web-search result leaves the machine rather than raising anything on it, so it is
-        // handled before the activation path that assumes a target to bring forward. Unlike the
-        // empty-state offer above, this one is reachable whatever else matched — which is the whole
-        // point of it being a result — so it is not restricted to Return.
-        if let webSearch = entry.webSearch {
-            openInDefaultBrowser(webSearch.destination)
-            return
+        case .activate(let selected):
+            entry = selected
         }
 
         // Planned before dismissal, because it needs the card's frame while the panel is still
