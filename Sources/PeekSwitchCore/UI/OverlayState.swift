@@ -169,6 +169,27 @@ final class OverlayState: ObservableObject {
         entry.isWindow && incognitoWindowIDs.contains(entry.windowID)
     }
 
+    /// Which applications are on the speakers or the microphone.
+    ///
+    /// Sampled after the panel is up rather than with it, like `incognitoWindowIDs` — see
+    /// `AudioActivityService` for the measurement that decided that.
+    @Published var audioActivity: AudioActivity = .silent
+
+    /// Whether this entry's application is playing audio.
+    ///
+    /// Windows only, and that exclusion is the point. A tab entry carries its browser's pid, so
+    /// asking this of one would answer "is this browser playing anything" and mark all forty tabs
+    /// of a browser playing one video. The window at least narrows it to an application the user
+    /// can go and look at; a tab badge would be a claim about the tab, and a false one.
+    func isPlayingAudio(_ entry: WindowEntry) -> Bool {
+        entry.isWindow && audioActivity.isPlaying(entry.processID)
+    }
+
+    /// Whether this entry's application is capturing from the microphone. Windows only, as above.
+    func isUsingMicrophone(_ entry: WindowEntry) -> Bool {
+        entry.isWindow && audioActivity.isRecording(entry.processID)
+    }
+
     /// Whether the cards have been let in yet.
     ///
     /// Defaults to `true`, and that direction matters: any path that forgets to run the

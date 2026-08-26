@@ -602,6 +602,7 @@ public final class SwitcherController {
         }
 
         applyKnownIncognitoWindows(to: ordered)
+        refreshAudioActivity(for: ordered, presentationID: revealToken)
         // Costs nothing and needs no browser: any window still showing the tab its icon was
         // verified against gets that icon in the first frame instead of waiting for an Apple
         // Event that may take seconds.
@@ -629,6 +630,44 @@ public final class SwitcherController {
         let resolved = knownIncognitoWindowIDs.intersection(onScreen)
         guard resolved != state.incognitoWindowIDs else { return }
         state.incognitoWindowIDs = resolved
+    }
+
+    /// Ask CoreAudio what is playing, off the presentation path.
+    ///
+    /// Off it because of the outlier: the query's median is 6 ms but its measured worst case is
+    /// 57 ms, and spending a third of the 150 ms presentation budget (Requirement 14.1) on a badge
+    /// is the wrong trade. The panel is already on screen by the time this runs, and the badge
+    /// appears a frame or two later — the same deal `refreshBrowserWindows` makes for favicons.
+    ///
+    /// Stamped with the presentation so a slow answer cannot land on the next one and badge a
+    /// window that reused the pid of something that has since quit.
+    private func refreshAudioActivity(for entries: [WindowEntry], presentationID: Int) {
+        // Restricted to the processes on screen: it is what stops the daemons that permanently hold
+        // the input device open from being attributed to anything, and it keeps the ancestor walk
+        // short.
+        let candidates = Set(entries.filter(\.isWindow).map(\.processID).filter { $0 > 0 })
+        guard !candidates.isEmpty else {
+            state.audioActivity = .silent
+            return
+        }
+
+        workQueue.async { [weak self] in
+            let activity = AudioActivityService.current(attributedTo: candidates)
+            if !activity.isSilent {
+                Log.overlay.info(
+                    """
+                    audio activity: \(activity.playing.count, privacy: .public) playing, \
+                    \(activity.recording.count, privacy: .public) recording, \
+                    of \(candidates.count, privacy: .public) windowed processes
+                    """
+                )
+            }
+            DispatchQueue.main.async {
+                guard let self, self.state.presentationID == presentationID else { return }
+                guard self.state.audioActivity != activity else { return }
+                self.state.audioActivity = activity
+            }
+        }
     }
 
     /// Restore already-verified browser icons for windows whose active tab has not changed.

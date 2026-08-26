@@ -74,6 +74,17 @@ struct OverlayPalette {
     let onAccentText: Color
     let onAccentSecondaryText: Color
     let liveIndicator: Color
+    /// Marks a window whose application is capturing from the microphone.
+    ///
+    /// Orange because that is what macOS itself uses for the microphone in the menu bar, and a user
+    /// who has learned "orange means something is listening" from the system should not have to
+    /// learn a second colour here. Chrome draws this red on its own tab strip; the platform's
+    /// convention wins over one browser's.
+    ///
+    /// Dark and light are genuinely different values rather than one colour reused. The light card
+    /// is white, and the shade that measures 6.5:1 on a dark card measures 2.2:1 on white — under
+    /// the 3:1 an icon has to clear.
+    let microphoneIndicator: Color
     /// How far a card's fill may be pushed toward its window's icon hue, `0...1`.
     ///
     /// Small on purpose, and owned here rather than by the icon: the fill still has to carry text
@@ -431,6 +442,8 @@ struct OverlayPalette {
         onAccentText: .white,
         onAccentSecondaryText: Color(.sRGB, white: 1, opacity: 0.85),
         liveIndicator: Color(.sRGB, red: 98 / 255, green: 197 / 255, blue: 238 / 255, opacity: 1),
+        // 6.5:1 against the dark card fill.
+        microphoneIndicator: Color(.sRGB, red: 255 / 255, green: 159 / 255, blue: 10 / 255, opacity: 1),
         // Fully saturated but dark, which matters more here than it looks. Mixing a *bright* hue
         // into a near-black card raises its luminance, and the secondary line is white at 58% —
         // measured against yellows it fell to 4.4:1, just under the bar. Keeping the hue dark lets
@@ -507,6 +520,9 @@ struct OverlayPalette {
         onAccentText: .white,
         onAccentSecondaryText: Color(.sRGB, white: 1, opacity: 0.85),
         liveIndicator: Color(.sRGB, red: 0 / 255, green: 106 / 255, blue: 141 / 255, opacity: 1),
+        // Burnt rather than bright: the system's own orange measures 2.2:1 on a white card, so it
+        // is darkened until it clears 3:1 with room to spare. 5.1:1 as written.
+        microphoneIndicator: Color(.sRGB, red: 176 / 255, green: 84 / 255, blue: 0 / 255, opacity: 1),
         // A light card is white, so every point of tint costs luminance the secondary line is
         // measured against. This is the value the hue sweep in `OverlayPaletteTests` clears with
         // room to spare, and it is still enough to tell a ring of Chrome windows apart.

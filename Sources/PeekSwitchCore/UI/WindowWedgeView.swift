@@ -39,6 +39,11 @@ struct WindowWedgeView: View {
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
+    /// Whether this window's application is playing audio right now. See `AudioActivity` for why
+    /// this is per application and cannot be per tab.
+    var isPlayingAudio: Bool = false
+    /// Whether this window's application is capturing from the microphone right now.
+    var isUsingMicrophone: Bool = false
     /// Hue taken from this window's icon, so a ring of same-application wedges is still
     /// distinguishable. `nil` leaves the flat palette fill.
     var tint: IconTint?
@@ -395,9 +400,31 @@ struct WindowWedgeView: View {
             if entry.isMinimized {
                 minimizedBadge
             }
+
+            audioBadge
         }
         .frame(height: iconBandHeight)
         .scaleEffect(iconScale)
+    }
+
+    /// On the icon band rather than in the badge row, and that is not for symmetry with the card.
+    ///
+    /// The badge row is dropped first whenever the wedge is short of height — see `showsBadges` —
+    /// which is the right call for the tab and application markers, and the wrong one here. Those
+    /// two describe what a result *is*, and it will still be that on the next trigger. This one
+    /// describes what is happening now, and a scaled-down ring is not a reason to stop saying it.
+    private var audioBadge: some View {
+        VStack {
+            HStack {
+                Spacer()
+                AudioActivityBadge(
+                    isPlaying: isPlayingAudio,
+                    isRecording: isUsingMicrophone,
+                    isOverArtwork: true
+                )
+            }
+            Spacer()
+        }
     }
 
     /// The application name, plus whichever markers apply.
@@ -496,6 +523,12 @@ struct WindowWedgeView: View {
         // raises something already open, and a screen reader user has no other way to tell.
         if entry.isWebSearch { parts.append("opens in your browser") }
         if isIncognito { parts.append("incognito") }
+        parts.append(
+            contentsOf: AudioActivityBadge.accessibilityPhrases(
+                isPlaying: isPlayingAudio,
+                isRecording: isUsingMicrophone
+            )
+        )
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }
         if let badgeCount { parts.append("\(badgeCount) windows") }

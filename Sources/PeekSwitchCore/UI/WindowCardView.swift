@@ -23,6 +23,11 @@ struct WindowCardView: View {
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
+    /// Whether this window's application is playing audio right now. See `AudioActivity` for why
+    /// this is per application and cannot be per tab.
+    var isPlayingAudio: Bool = false
+    /// Whether this window's application is capturing from the microphone right now.
+    var isUsingMicrophone: Bool = false
     /// Hue taken from this window's icon, so cards of different applications are separable at a
     /// glance. `nil` leaves the flat palette fill.
     var tint: IconTint?
@@ -115,6 +120,8 @@ struct WindowCardView: View {
             if entry.isMinimized {
                 minimizedBadge
             }
+
+            audioBadge
         }
         .frame(width: metrics.size.width, height: metrics.artworkHeight)
         .clipped()
@@ -143,6 +150,8 @@ struct WindowCardView: View {
             if entry.isMinimized {
                 minimizedBadge
             }
+
+            audioBadge
         }
         .frame(width: metrics.size.width, height: metrics.artworkHeight)
         .clipped()
@@ -165,6 +174,25 @@ struct WindowCardView: View {
                     .font(.system(size: side * 0.67, weight: .light))
                     .foregroundStyle(palette.secondaryText)
             }
+        }
+    }
+
+    /// Top-right of the artwork, which is where the minimized badge is not.
+    ///
+    /// Sharing a corner with it would have been fine most of the time and unreadable exactly when it
+    /// mattered — a minimized window playing audio is precisely the one a user is hunting for.
+    private var audioBadge: some View {
+        VStack {
+            HStack {
+                Spacer()
+                AudioActivityBadge(
+                    isPlaying: isPlayingAudio,
+                    isRecording: isUsingMicrophone,
+                    isOverArtwork: true
+                )
+                .padding(6)
+            }
+            Spacer()
         }
     }
 
@@ -264,6 +292,12 @@ struct WindowCardView: View {
         // raises something already open, and a screen reader user has no other way to tell.
         if entry.isWebSearch { parts.append("opens in your browser") }
         if isIncognito { parts.append("incognito") }
+        parts.append(
+            contentsOf: AudioActivityBadge.accessibilityPhrases(
+                isPlaying: isPlayingAudio,
+                isRecording: isUsingMicrophone
+            )
+        )
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }
         if let badgeCount { parts.append("\(badgeCount) windows") }

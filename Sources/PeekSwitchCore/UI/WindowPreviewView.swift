@@ -28,6 +28,11 @@ struct WindowPreviewView: View {
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
+    /// Whether the previewed window's application is playing audio right now. See `AudioActivity`
+    /// for why this is per application and cannot be per tab.
+    var isPlayingAudio: Bool = false
+    /// Whether the previewed window's application is capturing from the microphone right now.
+    var isUsingMicrophone: Bool = false
 
     @Environment(\.overlayPalette) private var palette
 
@@ -35,14 +40,23 @@ struct WindowPreviewView: View {
         Group {
             if overlaysCaption {
                 ZStack(alignment: .bottom) {
-                    image
+                    ZStack(alignment: .topTrailing) {
+                        image
+                        audioBadge.padding(10)
+                    }
                     captionOverlay
                 }
             } else {
                 VStack(spacing: 12) {
                     ZStack(alignment: .topTrailing) {
                         image
-                        if showsLiveBadge, thumbnail != nil { liveBadge.padding(12) }
+                        // One row, so a window that is both playing and being captured does not
+                        // stack two plates on top of the LIVE badge.
+                        HStack(spacing: 6) {
+                            audioBadge
+                            if showsLiveBadge, thumbnail != nil { liveBadge }
+                        }
+                        .padding(12)
                     }
                     caption
                 }
@@ -88,6 +102,14 @@ struct WindowPreviewView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(palette.border, lineWidth: 1)
+        )
+    }
+
+    private var audioBadge: some View {
+        AudioActivityBadge(
+            isPlaying: isPlayingAudio,
+            isRecording: isUsingMicrophone,
+            isOverArtwork: true
         )
     }
 
@@ -210,6 +232,12 @@ struct WindowPreviewView: View {
         }
         var label = "Preview of \(entry.applicationName), \(entry.displayTitle)"
         if isIncognito { label += ", incognito" }
+        for phrase in AudioActivityBadge.accessibilityPhrases(
+            isPlaying: isPlayingAudio,
+            isRecording: isUsingMicrophone
+        ) {
+            label += ", \(phrase)"
+        }
         if let display { label += ", \(display.label)" }
         return label
     }

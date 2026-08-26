@@ -19,6 +19,11 @@ struct WindowRowView: View {
     var display: DisplayInfo?
     /// Whether this is a private browsing window.
     var isIncognito: Bool = false
+    /// Whether this window's application is playing audio right now. See `AudioActivity` for why
+    /// this is per application and cannot be per tab.
+    var isPlayingAudio: Bool = false
+    /// Whether this window's application is capturing from the microphone right now.
+    var isUsingMicrophone: Bool = false
     /// Hue taken from this window's icon. `nil` leaves the row transparent as before.
     var tint: IconTint?
 
@@ -85,6 +90,14 @@ struct WindowRowView: View {
 
             // Private browsing is marked on the icon by `PrivateWindowIcon`, not in this row.
 
+            // Ahead of the minimized glyph and the window count: this is the only one of the three
+            // that is describing something happening right now.
+            AudioActivityBadge(
+                isPlaying: isPlayingAudio,
+                isRecording: isUsingMicrophone,
+                isOnAccent: isSelected
+            )
+
             if entry.isMinimized {
                 Image(systemName: "arrow.down.right.and.arrow.up.left")
                     .font(.system(size: 9, weight: .semibold))
@@ -117,6 +130,12 @@ struct WindowRowView: View {
         // raises something already open, and a screen reader user has no other way to tell.
         if entry.isWebSearch { parts.append("opens in your browser") }
         if isIncognito { parts.append("incognito") }
+        parts.append(
+            contentsOf: AudioActivityBadge.accessibilityPhrases(
+                isPlaying: isPlayingAudio,
+                isRecording: isUsingMicrophone
+            )
+        )
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }
         if let badgeCount { parts.append("\(badgeCount) windows") }

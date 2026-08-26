@@ -193,6 +193,8 @@ struct OverlayView: View {
             metrics: state.cardMetrics,
             display: state.display(for: entry),
             isIncognito: state.isIncognito(entry),
+            isPlayingAudio: state.isPlayingAudio(entry),
+            isUsingMicrophone: state.isUsingMicrophone(entry),
             tint: state.tint(for: entry)
         )
         .scaleEffect(isSelected ? state.selectedScale : 1.0)
@@ -222,6 +224,8 @@ struct OverlayView: View {
             badgeCount: state.badgeCount(for: entry),
             display: state.display(for: entry),
             isIncognito: state.isIncognito(entry),
+            isPlayingAudio: state.isPlayingAudio(entry),
+            isUsingMicrophone: state.isUsingMicrophone(entry),
             tint: state.tint(for: entry)
         )
         .frame(width: card.frame.width, height: card.frame.height)
@@ -313,7 +317,9 @@ struct OverlayView: View {
                 showsIconInsteadOfThumbnail: !state.viewMode.usesThumbnails
                     || state.selectedEntry?.isApplication == true,
                 display: selectedDisplay,
-                isIncognito: state.selectedEntry.map(state.isIncognito) ?? false
+                isIncognito: state.selectedEntry.map(state.isIncognito) ?? false,
+                isPlayingAudio: state.selectedEntry.map(state.isPlayingAudio) ?? false,
+                isUsingMicrophone: state.selectedEntry.map(state.isUsingMicrophone) ?? false
             )
             .frame(width: layout.listDetailFrame.width, height: layout.listDetailFrame.height)
             .position(x: layout.listDetailFrame.midX, y: layout.listDetailFrame.midY)
@@ -417,6 +423,8 @@ struct OverlayView: View {
             metrics: state.cardMetrics.scaled(by: layout.radialScale),
             display: state.display(for: entry),
             isIncognito: state.isIncognito(entry),
+            isPlayingAudio: state.isPlayingAudio(entry),
+            isUsingMicrophone: state.isUsingMicrophone(entry),
             tint: state.tint(for: entry),
             // Scaled with the arrangement: a flat 9pt blur on a 48pt hub is 19% of the
             // radius, and even with the well in front the outer edge would swallow a
