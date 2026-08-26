@@ -128,6 +128,361 @@ struct OverlayPaletteTests {
 
     // MARK: - Chrome
 
+    @Test("Hub well text is legible over any desktop")
+    func hubWellTextIsLegible() {
+        for (name, palette) in palettes {
+            for (desktop, label) in [(Self.black, "black"), (Self.white, "white")] {
+                let primary = ratio(text: palette.text, on: palette.hubWellFill, over: desktop)
+                #expect(
+                    primary >= Self.minimumRatio,
+                    "\(name) hub well primary over \(label): \(primary)"
+                )
+                let secondary = ratio(
+                    text: palette.secondaryText,
+                    on: palette.hubWellFill,
+                    over: desktop
+                )
+                #expect(
+                    secondary >= Self.minimumRatio,
+                    "\(name) hub well secondary over \(label): \(secondary)"
+                )
+            }
+        }
+    }
+
+    /// The well is a hole, not another card: it must not pick up the selected window's hue,
+    /// or the caption's surface would shift every time the pointer moved.
+    @Test("Glass tint follows the icon hue and stays chromatic")
+    func glassTintIsChromatic() {
+        let red = components(OverlayPalette.dark.glassTint(
+            for: IconTint(hue: 0, vividness: 1),
+            selected: false,
+            scheme: .dark
+        ))
+        let green = components(OverlayPalette.dark.glassTint(
+            for: IconTint(hue: 1.0 / 3, vividness: 1),
+            selected: false,
+            scheme: .dark
+        ))
+        #expect(red.red > green.red)
+        #expect(green.green > red.green)
+
+        // Relative chroma, not the raw channel spread. The two only agree at a fixed brightness,
+        // and this tint's brightness is set by how dark the reference's card bodies measure —
+        // raising it to match them widens the spread without the colour becoming any purer, so a
+        // spread threshold would pass or fail on the wrong quantity.
+        func chroma(_ colour: RGBA) -> Double {
+            let high = max(colour.red, colour.green, colour.blue)
+            let low = min(colour.red, colour.green, colour.blue)
+            return high == 0 ? 0 : (high - low) / high
+        }
+
+        #expect(
+            chroma(red) > 0.30,
+            "dark glass tint is too grey to match the mock: chroma \(chroma(red))"
+        )
+
+        // A pastel, not a saturated colour worn thin. Light Mode composites this at near-full
+        // opacity, so its chroma *is* the card's chroma — and the reference's light card bodies
+        // measure 0.053. A tint of 0.24 was correct only while the wash was 0.24 and the wallpaper
+        // supplied the rest; drawn at full strength it would be four times the reference.
+        let lightRed = components(OverlayPalette.light.glassTint(
+            for: IconTint(hue: 0, vividness: 1),
+            selected: false,
+            scheme: .light
+        ))
+        #expect(
+            chroma(lightRed) > 0.04,
+            "light glass tint has no hue left: chroma \(chroma(lightRed))"
+        )
+        #expect(
+            chroma(lightRed) < 0.16,
+            "light glass tint is no longer a pastel: chroma \(chroma(lightRed))"
+        )
+    }
+
+    /// A dark wedge is a dark floor with the icon's light added on top, not a fixed grey stained to
+    /// order — and the difference is measurable in two directions at once.
+    ///
+    /// The references' dark cards share a floor: the minimum channel is 17–34 on every wedge,
+    /// greyscale and vivid alike, while the dominant channels climb from 0 chroma on ChatGPT and
+    /// Cursor to 32 on Brave. That makes a vivid card a *brighter* card there. Built the other way —
+    /// one brightness for all, saturation carrying vividness — a vivid card is a darker one, and the
+    /// whole ring collapses into the same narrow band: rendered, the field measured chroma 0 at its
+    /// 25th percentile and 24 at its 90th against the references' 6 and 52, which is the "the glass
+    /// looks less tinted than the mock" complaint expressed as numbers.
+    @Test("A dark wedge adds the icon's light to a common floor")
+    func darkGlassTintAddsToAFloor() {
+        let plate = components(OverlayPalette.dark.glassTint(for: nil, selected: false, scheme: .dark))
+
+        // The untinted plate is one of the reference's dark bodies, not a mid grey. At 0.18 the
+        // greyscale-iconed wedges were the *brightest* on a dark ring instead of the darkest.
+        #expect(
+            plate.red < 0.13,
+            "dark untinted glass is a mid grey rather than a dark plate: \(plate.red)"
+        )
+
+        var previousPeak = 0.0
+        var previousFloor = -1.0
+        for vividness in [0.3, 0.5, 0.7, 1.0] {
+            let colour = components(OverlayPalette.dark.glassTint(
+                for: IconTint(hue: 1.0 / 3, vividness: vividness),
+                selected: false,
+                scheme: .dark
+            ))
+            let peak = max(colour.red, colour.green, colour.blue)
+            let floor = min(colour.red, colour.green, colour.blue)
+
+            // More vivid is brighter, not just purer.
+            #expect(
+                peak > previousPeak,
+                "vividness \(vividness) is no brighter than the step below it: \(peak)"
+            )
+            // And it climbs from the same floor the greyscale wedges sit on, within the drift the
+            // reference itself shows.
+            #expect(
+                abs(floor - plate.red) < 0.05,
+                "vividness \(vividness) floor \(floor) has left the untinted plate at \(plate.red)"
+            )
+            #expect(floor >= previousFloor, "the floor fell as vividness rose: \(floor)")
+            previousPeak = peak
+            previousFloor = floor
+        }
+    }
+
+    /// The wash is the card, not a hint added to whatever is behind it.
+    ///
+    /// A wedge draws no opaque plate, so whatever the frosted substrate transmits is the card. At
+    /// the previous values — 0.76 in Dark Mode and 0.24 in Light — the wallpaper was supplying most
+    /// of it: the same window measured luminance 205 over a bright desktop and 68 over a dark one,
+    /// which made the card's identity, its lightness *and* the contrast of its own label properties
+    /// of the user's wallpaper rather than of the window. `OverlayRenderingTests` measures that from
+    /// the render; this pins the constant that decides it.
+    @Test("The glass wash owns the card rather than hinting at it")
+    func glassWashOwnsTheCard() {
+        for (name, palette) in palettes {
+            let scheme: ColorScheme = name == "dark" ? .dark : .light
+            for selected in [true, false] {
+                let wash = palette.glassWashOpacity(selected: selected, scheme: scheme)
+                #expect(
+                    wash >= 0.85,
+                    "\(name) \(selected ? "selected" : "rest") wash \(wash) leaves the card to the desktop"
+                )
+                // Not entirely opaque: the remainder is what lets the desktop modulate the surface
+                // and what the macOS 26 material needs to behave like a material at its edges.
+                #expect(wash < 1, "\(name) \(selected ? "selected" : "rest") wash admits no light at all")
+            }
+        }
+
+        // Selection is carried by the tint's own colour rather than by how hard it is washed on,
+        // which is what lets both be near-opaque without the two becoming indistinguishable.
+        for (name, palette) in palettes {
+            let scheme: ColorScheme = name == "dark" ? .dark : .light
+            let tint = IconTint(hue: 1.0 / 3, vividness: 1)
+            let rest = components(palette.glassTint(for: tint, selected: false, scheme: scheme))
+            let chosen = components(palette.glassTint(for: tint, selected: true, scheme: scheme))
+            let distance = abs(rest.red - chosen.red)
+                + abs(rest.green - chosen.green)
+                + abs(rest.blue - chosen.blue)
+            #expect(distance > 0.10, "\(name) selected glass is not distinguishable: \(distance)")
+        }
+    }
+
+    @Test("Glass rim colour follows the icon, and selection follows the hub's ambience")
+    func glassRimTracksTheIcon() {
+        let red = components(OverlayPalette.dark.glassRim(
+            for: IconTint(hue: 0, vividness: 1),
+            selected: false,
+            scheme: .dark
+        ))
+        let green = components(OverlayPalette.dark.glassRim(
+            for: IconTint(hue: 1.0 / 3, vividness: 1),
+            selected: false,
+            scheme: .dark
+        ))
+        #expect(red.red > green.red)
+        #expect(green.green > red.green)
+
+        // The coupling tongue lands on this arc, so the two have to be one light. With no hue to
+        // take it falls back to the resting ring colour; with one it follows the ambience.
+        let tint = IconTint(hue: 0, vividness: 1)
+        let selected = OverlayPalette.dark.glassRim(for: tint, selected: true, scheme: .dark)
+        #expect(selected == OverlayPalette.dark.hubAmbience(for: tint))
+        #expect(
+            OverlayPalette.dark.glassRim(for: nil, selected: true, scheme: .dark)
+                == OverlayPalette.dark.hubRing
+        )
+    }
+
+    @Test("Radial wedge shadows live on the palette")
+    func wedgeShadowOpacityIsAPaletteValue() {
+        #expect(OverlayPalette.dark.wedgeShadowOpacity > 0)
+        #expect(OverlayPalette.light.wedgeShadowOpacity > OverlayPalette.dark.wedgeShadowOpacity)
+        #expect(OverlayPalette.light.wedgeShadowOpacity <= 0.5)
+        #expect(OverlayPalette.dark.wedgeShadowOpacity <= OverlayPalette.light.wedgeShadowOpacity)
+    }
+
+    /// The ambience lights four compositing layers at once, so what has to stay put across hues is
+    /// its *perceived* luminance — not its HSB brightness, which is a different quantity.
+    ///
+    /// This is the regression the test exists for. Holding saturation and brightness fixed and
+    /// letting only the hue move looks correct and measures wrong: yellow arrived at a relative
+    /// luminance of 0.742 against purple's 0.325, a 2.3x spread, so the hub's brightness depended
+    /// on which application was under the pointer and a yellow-iconed one turned the rim into a
+    /// glaring torus. Brightness is now solved per hue, so it is brightness that moves and
+    /// luminance that holds.
+    @Test("The hub ambience holds its luminance across the colour wheel")
+    func hubAmbienceHoldsItsLuminance() {
+        for (name, palette) in palettes {
+            #expect(palette.hubAmbience(for: nil) == palette.hubRing, "\(name) lost its fallback")
+
+            let ring = components(palette.hubRing)
+            let reference = OverlayPalette.relativeLuminance(
+                red: ring.red,
+                green: ring.green,
+                blue: ring.blue
+            )
+
+            var luminances: [Double] = []
+            for step in 0..<12 {
+                let hue = Double(step) / 12
+                let ambience = palette.hubAmbience(for: IconTint(hue: hue, vividness: 1))
+                let resolved = components(ambience)
+                let luminance = OverlayPalette.relativeLuminance(
+                    red: resolved.red,
+                    green: resolved.green,
+                    blue: resolved.blue
+                )
+                luminances.append(luminance)
+
+                // Never brighter than the brand it stands in for. This is the half that was
+                // producing the glare.
+                #expect(
+                    luminance <= reference + 0.01,
+                    "\(name) hue \(hue) is brighter than the ring: \(luminance) vs \(reference)"
+                )
+                #expect(resolved.alpha == ring.alpha, "\(name) alpha moved at hue \(hue)")
+
+                // The hue itself still arrives intact — the solve spends brightness and
+                // saturation, never hue.
+                var resolvedHue: CGFloat = 0
+                var resolvedSaturation: CGFloat = 0
+                var resolvedBrightness: CGFloat = 0
+                var resolvedAlpha: CGFloat = 0
+                NSColor(ambience).usingColorSpace(.sRGB)?.getHue(
+                    &resolvedHue,
+                    saturation: &resolvedSaturation,
+                    brightness: &resolvedBrightness,
+                    alpha: &resolvedAlpha
+                )
+                let drift = abs(Double(resolvedHue) - hue)
+                #expect(min(drift, 1 - drift) < 0.02, "\(name) hue \(hue) became \(resolvedHue)")
+            }
+
+            // Cool hues cannot reach the reference at any brightness, so a spread survives — but a
+            // bounded one, and far from the 2.3x that shipped.
+            let spread = luminances.max()! / luminances.min()!
+            #expect(spread <= 1.4, "\(name) ambience luminance spread is \(spread)")
+            #expect(
+                luminances.min()! >= reference * 0.70,
+                "\(name) dimmest ambience is \(luminances.min()!) against \(reference)"
+            )
+
+            // And distinct hues stay distinguishable after all that bounding.
+            let red = components(palette.hubAmbience(for: IconTint(hue: 0, vividness: 1)))
+            let green = components(palette.hubAmbience(for: IconTint(hue: 1.0 / 3, vividness: 1)))
+            #expect(red.red > green.red, "\(name) red ambience is not redder")
+            #expect(green.green > red.green, "\(name) green ambience is not greener")
+        }
+    }
+
+    /// The well transmits some of the wallpaper on purpose, so the caption's surface is a *range*
+    /// rather than a colour — and this is where that range is pinned.
+    ///
+    /// It has to be stated here rather than measured from a render, and that is a real limitation
+    /// rather than a preference. The blur is `NSVisualEffectView` with `.behindWindow` blending,
+    /// composited by the window server behind the layer; inside `cacheDisplay` there is no window and
+    /// no desktop, so it resolves to a fallback tint. A render test would measure that fallback and
+    /// learn nothing about the wallpaper case, which is the only case that can fail.
+    ///
+    /// So the arithmetic is done over the extremes instead, and deliberately pessimistically: the
+    /// material is assumed to pass the desktop through *untouched*, which no real material does. If
+    /// the ratio holds for pure white and pure black behind the glass then it holds for every
+    /// wallpaper and every material tint in between.
+    ///
+    /// The watermark is folded in at the same point because it is in the same place — under the
+    /// scrim, over the blur. That stacking is what lets it be drawn at 0.85 instead of 0.05: it is
+    /// bounded by the same layer that bounds the wallpaper, so a uniformly white icon in Dark Mode is
+    /// not a worse case than a white desktop, it is the same case.
+    ///
+    /// The binding constraint is the *secondary* line rather than the primary, which is not the
+    /// intuition. `secondaryText` is translucent white in Dark Mode, so it composites brighter as its
+    /// own surface brightens and gives up contrast about twice as fast as opaque white would.
+    @Test("Caption text clears 4.5:1 over any wallpaper the well transmits")
+    func captionSurvivesAnyWallpaperThroughTheWell() {
+        for (name, palette, scheme) in [
+            ("dark", OverlayPalette.dark, ColorScheme.dark),
+            ("light", OverlayPalette.light, .light),
+        ] {
+            let scrim = scheme == .dark
+                ? HubChrome.wellScrimOpacityDark
+                : HubChrome.wellScrimOpacityLight
+            let iconOpacity = scheme == .dark
+                ? HubChrome.backdropIconOpacityDark
+                : HubChrome.backdropIconOpacityLight
+
+            // Both extremes, for the desktop and for the icon over it. Sweeping all four states the
+            // property rather than the answer.
+            for (desktopName, desktop) in [("white", Self.white), ("black", Self.black)] {
+                for (iconName, iconColour) in [("white", Self.white), ("black", Self.black)] {
+                    var icon = iconColour
+                    icon.alpha = iconOpacity
+                    let throughTheBlur = composite(icon, over: desktop)
+
+                    var tint = components(palette.hubWellFill)
+                    tint.alpha = scrim
+                    let surface = composite(tint, over: throughTheBlur)
+
+                    for (label, colour) in [
+                        ("primary", palette.text),
+                        // The hub's own secondary weight, not the card one. This is the line that
+                        // sets the bound, so testing the wrong one would pass while shipping
+                        // unreadable type — or fail while nothing was wrong.
+                        ("secondary", palette.hubSecondaryText),
+                    ] {
+                        let value = ratio(composite(components(colour), over: surface), surface)
+                        #expect(
+                            value >= Self.minimumRatio,
+                            """
+                            \(name) \(label) is \(value):1 on a well transmitting a \(desktopName) \
+                            desktop under a \(iconName) watermark — scrim \(scrim), icon \(iconOpacity)
+                            """
+                        )
+                    }
+                }
+            }
+
+            // And the scrim is not so heavy that the feature is gone. Past this the well is a plate
+            // again with extra steps, which is the thing being fixed.
+            #expect(
+                scrim <= 0.86,
+                "\(name) scrim \(scrim) transmits too little for the well to read as glass"
+            )
+        }
+    }
+
+    @Test("The hub well is not the selected-card tint")
+    func hubWellIsNotATintedCard() {
+        for (name, palette) in palettes {
+            let red = palette.selectedCardFill(tintedBy: IconTint(hue: 0, vividness: 1))
+            #expect(
+                components(palette.hubWellFill).red != components(red).red
+                    || components(palette.hubWellFill).green != components(red).green,
+                "\(name) hub well matches a red-tinted selected card"
+            )
+        }
+    }
+
     @Test("Caption chips are legible with no plate behind them")
     func captionChipsAreLegible() {
         for (name, palette) in palettes {
@@ -196,6 +551,7 @@ struct OverlayPaletteTests {
                 (palette.selectedCardFill, "selectedCardFill"),
                 (palette.chipFill, "chipFill"),
                 (palette.thumbnailFill, "thumbnailFill"),
+                (palette.hubWellFill, "hubWellFill"),
             ] {
                 #expect(
                     components(fill).alpha == 1,
@@ -240,6 +596,7 @@ struct OverlayPaletteTests {
                     for (fill, fillName) in [
                         (palette.cardFill(tintedBy: tint), "cardFill"),
                         (palette.selectedCardFill(tintedBy: tint), "selectedCardFill"),
+                        (palette.radialSelectedFill(tintedBy: tint), "radialSelectedFill"),
                     ] {
                         let primary = ratio(text: palette.text, on: fill, over: desktop)
                         #expect(
@@ -285,6 +642,7 @@ struct OverlayPaletteTests {
         for (_, palette) in palettes {
             #expect(palette.cardFill(tintedBy: nil) == palette.cardFill)
             #expect(palette.selectedCardFill(tintedBy: nil) == palette.selectedCardFill)
+            #expect(palette.radialSelectedFill(tintedBy: nil) == palette.selectedCardFill)
         }
     }
 
@@ -299,6 +657,31 @@ struct OverlayPaletteTests {
             #expect(abs(red.red - green.red) > 0.02, "\(name) red and green fills are too close")
             #expect(abs(green.green - blue.green) > 0.02, "\(name) green and blue fills are too close")
             #expect(abs(blue.blue - red.blue) > 0.02, "\(name) blue and red fills are too close")
+        }
+    }
+
+    /// A selected radial wedge has to be a stronger self, not merely a different border.
+    ///
+    /// Compared as distance from the untinted base across all three channels: a red icon on a
+    /// white card only moves green and blue, so looking at the red channel alone reports no tint.
+    @Test("A selected radial wedge is more tinted than an unselected one")
+    func radialSelectedIsStronger() {
+        for (name, palette) in palettes {
+            let tint = IconTint(hue: 0, vividness: 1)
+            let rest = components(palette.cardFill(tintedBy: tint))
+            let restBase = components(palette.cardFill)
+            let selected = components(palette.radialSelectedFill(tintedBy: tint))
+            let selectedBase = components(palette.selectedCardFill)
+            let restDelta = abs(rest.red - restBase.red)
+                + abs(rest.green - restBase.green)
+                + abs(rest.blue - restBase.blue)
+            let selectedDelta = abs(selected.red - selectedBase.red)
+                + abs(selected.green - selectedBase.green)
+                + abs(selected.blue - selectedBase.blue)
+            #expect(
+                selectedDelta > restDelta,
+                "\(name) selected radial tint \(selectedDelta) is not stronger than rest \(restDelta)"
+            )
         }
     }
 
@@ -514,187 +897,5 @@ struct OverlayPaletteTests {
         // Selection colour is intentionally shared: it is the product's colour, not a
         // system accent that would desaturate in a window that is never key.
         #expect(OverlayPalette.dark.accent == OverlayPalette.light.accent)
-    }
-}
-
-/// The guarantee extended to cover artwork showing through the spiral's middle.
-///
-/// Everything the main suite proves about the hub's text assumes a flat fill behind it. Once the
-/// selected window's icon shows through, that stops being true — and an icon has no luminance to
-/// reason about, because it can be GitHub's near-black mark or a near-white one.
-///
-/// The first attempt bounded the damage with a low opacity, and the measurement killed it: holding
-/// 4.5:1 for the 9-point secondary line allowed 0.06 in the dark theme and 0.10 in the light one,
-/// too faint to be worth drawing. So the artwork is now blended in the only direction that cannot
-/// hurt — darkening where the text is light, lightening where it is dark — and what these tests
-/// check is that property rather than a chosen number.
-///
-/// Stated as a comparison against the flat fill, not against 4.5:1 directly. That is the stronger
-/// claim and the one the design actually relies on: whatever the icon contains, the text is at least
-/// as legible as it was before any artwork existed. The absolute bar is then inherited from the main
-/// suite, which already sweeps every hue in both themes.
-@Suite("Hub artwork contrast")
-struct HubArtworkContrastTests {
-
-    private static let minimumRatio = 4.5
-
-    private var palettes: [(String, OverlayPalette)] {
-        [("dark", .dark), ("light", .light)]
-    }
-
-    private static let everyHue: [IconTint] = (0..<24).map {
-        IconTint(hue: Double($0) / 24, vividness: 1)
-    }
-
-    private static let black = RGBA(red: 0, green: 0, blue: 0, alpha: 1)
-    private static let white = RGBA(red: 1, green: 1, blue: 1, alpha: 1)
-
-    /// The two extremes an icon can put behind the text.
-    private static let artworkExtremes: [(String, RGBA)] = [
-        ("solid white artwork", RGBA(red: 1, green: 1, blue: 1, alpha: 1)),
-        ("solid black artwork", RGBA(red: 0, green: 0, blue: 0, alpha: 1)),
-    ]
-
-    /// The bound: whatever the icon contains, the hub's text still clears 4.5:1. Checked at both
-    /// extremes an icon can reach, every hue, both themes, both desktops. Nothing an icon can hold is
-    /// worse than solid white or solid black, which makes this a real bound rather than a sample.
-    @Test("hub text clears 4.5:1 with any artwork behind it")
-    func hubTextClearsTheBar() {
-        for (name, palette) in palettes {
-            for tint in Self.everyHue {
-                let fill = components(palette.selectedCardFill(tintedBy: tint))
-
-                for (artworkName, artwork) in Self.artworkExtremes {
-                    let surface = blend(artwork, over: fill, opacity: palette.hubArtworkOpacity)
-
-                    for (desktop, desktopName) in [(Self.black, "black"), (Self.white, "white")] {
-                        for (textName, text) in [
-                            ("primary", palette.text), ("secondary", palette.secondaryText)
-                        ] {
-                            let value = ratio(text: text, on: surface, over: desktop)
-                            #expect(
-                                value >= Self.minimumRatio,
-                                """
-                                \(name) hue \(tint.hue) \(textName) with \(artworkName) over \
-                                \(desktopName): \(value) < \(Self.minimumRatio)
-                                """
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// And the other half, which is the one a bound alone cannot give: the value is near the largest
-    /// that still clears the bar.
-    ///
-    /// Without this the safest opacity is zero and the watermark silently does nothing — a palette
-    /// change that tightened the margin could reduce it to invisible and every other test here would
-    /// still pass. Together the two say "as strong as legibility allows, and no stronger".
-    @Test("the artwork is as strong as the contrast guarantee allows")
-    func artworkIsAsStrongAsAllowed() {
-        for (name, palette) in palettes {
-            let largestSafe = largestSafeOpacity(for: palette)
-            #expect(
-                palette.hubArtworkOpacity <= largestSafe + 0.0001,
-                "\(name) uses \(palette.hubArtworkOpacity) but only \(largestSafe) is legible"
-            )
-            #expect(
-                palette.hubArtworkOpacity >= largestSafe - 0.02,
-                """
-                \(name) uses \(palette.hubArtworkOpacity) where \(largestSafe) would still be \
-                legible; the watermark is fainter than it needs to be
-                """
-            )
-            // A watermark nobody can see is not worth the code that draws it.
-            #expect(palette.hubArtworkOpacity >= 0.04, "\(name) artwork is too faint to see at all")
-        }
-    }
-
-    /// The largest opacity, to 0.01, at which every hue and both text colours still clear the bar.
-    private func largestSafeOpacity(for palette: OverlayPalette) -> Double {
-        var largest = 0.0
-        for step in 1...100 {
-            let candidate = Double(step) / 100
-            var safe = true
-            for tint in Self.everyHue {
-                let fill = components(palette.selectedCardFill(tintedBy: tint))
-                for (_, artwork) in Self.artworkExtremes {
-                    let surface = blend(artwork, over: fill, opacity: candidate)
-                    for desktop in [Self.black, Self.white] {
-                        for text in [palette.text, palette.secondaryText] {
-                            if ratio(text: text, on: surface, over: desktop) < Self.minimumRatio {
-                                safe = false
-                            }
-                        }
-                    }
-                }
-            }
-            if safe { largest = candidate } else { break }
-        }
-        return largest
-    }
-
-    // MARK: - Colour arithmetic
-
-    private struct RGBA {
-        let red: Double
-        let green: Double
-        let blue: Double
-        let alpha: Double
-    }
-
-    private func components(_ color: Color) -> RGBA {
-        guard let resolved = NSColor(color).usingColorSpace(.sRGB) else {
-            return RGBA(red: 0, green: 0, blue: 0, alpha: 1)
-        }
-        return RGBA(
-            red: Double(resolved.redComponent),
-            green: Double(resolved.greenComponent),
-            blue: Double(resolved.blueComponent),
-            alpha: Double(resolved.alphaComponent)
-        )
-    }
-
-    /// `top` drawn over `bottom` at `opacity`.
-    private func blend(_ top: RGBA, over bottom: RGBA, opacity: Double) -> RGBA {
-        RGBA(
-            red: bottom.red * (1 - opacity) + top.red * opacity,
-            green: bottom.green * (1 - opacity) + top.green * opacity,
-            blue: bottom.blue * (1 - opacity) + top.blue * opacity,
-            alpha: bottom.alpha
-        )
-    }
-
-    private func composite(_ top: RGBA, over bottom: RGBA) -> RGBA {
-        let alpha = top.alpha
-        return RGBA(
-            red: top.red * alpha + bottom.red * (1 - alpha),
-            green: top.green * alpha + bottom.green * (1 - alpha),
-            blue: top.blue * alpha + bottom.blue * (1 - alpha),
-            alpha: 1
-        )
-    }
-
-    private func ratio(text: Color, on fill: RGBA, over desktop: RGBA) -> Double {
-        let surface = composite(fill, over: desktop)
-        let resolved = composite(components(text), over: surface)
-        return ratio(resolved, surface)
-    }
-
-    private func ratio(_ first: RGBA, _ second: RGBA) -> Double {
-        let a = luminance(first)
-        let b = luminance(second)
-        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
-    }
-
-    private func luminance(_ colour: RGBA) -> Double {
-        func channel(_ value: Double) -> Double {
-            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * channel(colour.red)
-            + 0.7152 * channel(colour.green)
-            + 0.0722 * channel(colour.blue)
     }
 }

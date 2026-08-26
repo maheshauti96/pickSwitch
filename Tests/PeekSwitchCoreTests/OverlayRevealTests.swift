@@ -67,12 +67,41 @@ struct OverlayRevealTests {
         #expect(OverlayReveal.delay(forOffset: 99, count: 8, reduceMotion: false) == last)
     }
 
-    /// The hub follows the wedges in rather than arriving with them, and still lands inside
-    /// the same budget.
+    /// The well is the caption's surface, so it cannot wait on a fade: contrast would
+    /// depend on the desktop for the first frames.
+    @Test("The well arrives with the first wedge")
+    func wellHasNoDelay() {
+        #expect(OverlayReveal.wellDelay == 0)
+    }
+
+    /// The hub caption trails the well rather than competing with the ring ignition,
+    /// and still lands inside the same budget.
     @Test("The hub caption trails the wedges")
     func hubTrailsTheWedges() {
         #expect(OverlayReveal.hubDelay > 0)
         #expect(OverlayReveal.hubDelay <= OverlayReveal.totalWindow)
+    }
+
+    /// The 10-second beauty reel is not a timing spec. Ring and coupling have to finish
+    /// inside the same window as the wedges, or the switcher gets slower as it looks prettier.
+    @Test("Ring ignition stays inside the reveal budget")
+    func ringStaysWithinBudget() {
+        #expect(OverlayReveal.ringDuration > 0)
+        #expect(OverlayReveal.ringDuration <= OverlayReveal.duration)
+        #expect(
+            OverlayReveal.ringDuration <= OverlayReveal.totalWindow + OverlayReveal.duration
+        )
+    }
+
+    @Test("Coupling trails the ring and still lands inside the budget")
+    func couplingTrailsTheRing() {
+        #expect(OverlayReveal.couplingDelay > 0)
+        #expect(OverlayReveal.couplingDelay <= OverlayReveal.totalWindow)
+        #expect(OverlayReveal.couplingDuration > 0)
+        #expect(
+            OverlayReveal.couplingDelay + OverlayReveal.couplingDuration
+                <= OverlayReveal.totalWindow + OverlayReveal.duration + 0.0001
+        )
     }
 
     /// Cards grow into place from slightly small. Zero would be a card that appears from a

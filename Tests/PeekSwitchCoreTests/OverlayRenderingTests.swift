@@ -203,6 +203,21 @@ struct OverlayRenderingTests {
     /// cards are still held back. So the hidden state is a real frame that ships, not a
     /// transient — it has to render, and it has to render at the same size as the visible one,
     /// or the panel would resize the instant the cards arrived.
+    /// The ring and coupling are visual-only. If they started moving seats, a click during the
+    /// ignition would miss the wedge the pointer was on.
+    @Test("Radial chrome does not move seats or the hub", arguments: [OverlayLayoutStyle.circular, .spiral])
+    func radialChromeDoesNotMoveGeometry(style: OverlayLayoutStyle) {
+        let subject = state(style: style, count: 12, selected: 1)
+        let seats = subject.layout.radialSeats
+        let hub = subject.layout.radialHubFrame
+        _ = render(subject)
+        #expect(subject.layout.radialSeats == seats)
+        #expect(subject.layout.radialHubFrame == hub)
+        #expect(subject.layout.commitsSelection(
+            atPanelPoint: CGPoint(x: hub.midX, y: subject.layout.panelSize.height - hub.midY)
+        ))
+    }
+
     @Test("Both halves of the entrance render at the same size", arguments: OverlayLayoutStyle.allCases)
     func entranceRendersAtAConstantSize(style: OverlayLayoutStyle) {
         for count in [0, 1, 6, 25] {
@@ -264,7 +279,7 @@ struct OverlayRenderingTests {
     func incognitoBadgesRender(style: OverlayLayoutStyle) {
         let subject = state(style: style, count: 8, selected: 0)
         // Every other window, so both the badged and unbadged paths are drawn, and the selected
-        // one is badged so the on-accent colours are exercised too.
+        // one is badged so the selected-wedge chrome is exercised too.
         subject.incognitoWindowIDs = Set(
             subject.entries.enumerated()
                 .filter { $0.offset.isMultiple(of: 2) }
@@ -497,6 +512,323 @@ struct OverlayRenderingTests {
 
         #expect(subject.entries.count == 6)
         #expect(Set(subject.entries.map(\.windowID)).count == 6)
+    }
+
+    // MARK: - The card, not the wallpaper
+
+    /// A wedge's colour has to be the wedge's own.
+    ///
+    /// This is the test that was missing, and its absence let a real defect ship. The wedges draw
+    /// no opaque plate, so whatever the frosted substrate transmits *is* the card — and every
+    /// previous calibration of the glass was done by rendering over flat black or flat cream, which
+    /// is not a condition any user is in. Over a genuine desktop the same constants measured a Dark
+    /// Mode card at luminance 106–119 against the reference's 55 with its chroma cut from 0.34 to
+    /// 0.20, and a Light Mode card over a *dark* desktop at luminance 68, where its near-black label
+    /// clears only 1.70:1.
+    ///
+    /// So this renders the same overlay over the darkest and the brightest desktop it can be given
+    /// and requires three things of every wedge: that it lands near the reference's own body, that
+    /// the wallpaper cannot move it far, and that its label stays legible either way.
+    @Test("A wedge's colour and contrast survive any wallpaper", arguments: [OverlayLayoutStyle.spiral, .circular])
+    func wedgeColourSurvivesTheWallpaper(style: OverlayLayoutStyle) throws {
+        /// Measured off the references: their card bodies, sampled clear of the icon.
+        ///
+        /// Re-measured per card rather than as one figure for the whole ring, which is what the
+        /// previous 55 was. Averaging an annulus folds in every card's rim light and both of its
+        /// arcs, and those run four to seven times the body — so the "body" it reported was mostly
+        /// edge. Card by card, the dark reference's bodies are 19 (ChatGPT), 21 (Cursor), 27 (Grok
+        /// Bot), 29 (Finder), 38 (Slack), 40 (Chrome), 41 (Claude) and 74 (Brave, its most vivid),
+        /// median 27. The light reference's are 230–247, median 240.
+        ///
+        /// The tolerance stays wide on purpose, and the spread above is why: these fixtures use
+        /// fully saturated solid icons, which is the top of that range rather than the middle, and a
+        /// hue's own luminance varies by more than a factor of two at fixed saturation.
+        let reference: [ColorScheme: (luminance: Double, saturation: Double)] = [
+            .dark: (27, 0.34),
+            .light: (240, 0.06),
+        ]
+
+        for (appearance, scheme) in [
+            (NSAppearance.Name.darkAqua, ColorScheme.dark),
+            (.aqua, .light),
+        ] {
+            var sampledByDesktop: [String: [(luminance: Double, saturation: Double)]] = [:]
+
+            for (desktopName, desktop) in [
+                ("black", Color.black),
+                ("white", Color.white),
+            ] {
+                // Built here rather than through the shared fixture, which supplies icon-less
+                // entries and so caches "this application has no hue" against its names for the
+                // rest of the session — a sampled hue is keyed by application, because an icon
+                // does not change while the app runs.
+                let subject = OverlayState()
+                subject.availableContentWidth = 1400
+                subject.availableContentHeight = 860
+                subject.layoutStyle = style
+                subject.load(
+                    entries: (0..<12).map { index in
+                        WindowEntry(
+                            windowID: CGWindowID(4_100 + index),
+                            processID: pid_t(index + 1),
+                            // Strongly coloured, so any loss of chroma is the compositing rather
+                            // than a fixture that was grey to begin with.
+                            applicationName: "Hued \(index)",
+                            applicationIcon: Self.solidIcon(
+                                NSColor(
+                                    hue: CGFloat(index) / 12,
+                                    saturation: 1,
+                                    brightness: 1,
+                                    alpha: 1
+                                )
+                            ),
+                            title: "Window \(index)",
+                            frame: CGRect(x: 100, y: 100, width: 800, height: 600),
+                            isMinimized: false,
+                            zOrder: index,
+                            axElement: nil
+                        )
+                    },
+                    selectedIndex: 0
+                )
+
+                let size = subject.layout.panelSize
+                let hosting = NSHostingView(rootView: ZStack {
+                    desktop
+                    OverlayView(state: subject, hoveredIndex: nil)
+                }.frame(width: size.width, height: size.height))
+                hosting.appearance = NSAppearance(named: appearance)
+                hosting.frame = CGRect(origin: .zero, size: size)
+                hosting.layoutSubtreeIfNeeded()
+                let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+                hosting.cacheDisplay(in: hosting.bounds, to: rep)
+
+                let geometry = try #require(subject.layout.radial)
+                let centre = subject.layout.radialCentre
+                let scaleX = Double(rep.pixelsWide) / Double(size.width)
+                let scaleY = Double(rep.pixelsHigh) / Double(size.height)
+
+                var sampled: [(luminance: Double, saturation: Double)] = []
+                // Skips seat 0, which is the selection and deliberately a stronger colour.
+                for offset in 1..<min(8, geometry.seats) {
+                    let seat = geometry.seat(at: offset)
+                    // Off the mid-angle and mid-depth, so the sample is body rather than the
+                    // content box, either rim light, or the icon.
+                    let angle = seat.startAngle + (seat.endAngle - seat.startAngle) * 0.14
+                    let radius = seat.innerRadius
+                        + (seat.outerRadius - seat.innerRadius) * 0.55
+                    let colour = try #require(
+                        rep.colorAt(
+                            x: Int(Double(centre.x + radius * CGFloat(cos(angle))) * scaleX),
+                            y: Int(Double(centre.y + radius * CGFloat(sin(angle))) * scaleY)
+                        )?.usingColorSpace(.sRGB)
+                    )
+                    let red = Double(colour.redComponent) * 255
+                    let green = Double(colour.greenComponent) * 255
+                    let blue = Double(colour.blueComponent) * 255
+                    let peak = max(red, green, blue)
+                    sampled.append((
+                        luminance: 0.2126 * red + 0.7152 * green + 0.0722 * blue,
+                        saturation: peak == 0 ? 0 : (peak - min(red, green, blue)) / peak
+                    ))
+                }
+                try #require(!sampled.isEmpty)
+                sampledByDesktop[desktopName] = sampled
+
+                let target = try #require(reference[scheme])
+                for (offset, sample) in sampled.enumerated() {
+                    // Near the reference's own body. Generous, because a hue's own luminance
+                    // varies; tight enough that "the wallpaper won" fails.
+                    #expect(
+                        abs(sample.luminance - target.luminance) <= 45,
+                        """
+                        \(style) \(scheme) over \(desktopName): seat \(offset + 1) body luminance \
+                        \(Int(sample.luminance)) against the reference's \(Int(target.luminance))
+                        """
+                    )
+                    // The label has to be readable on it, which is what failed at 1.70:1.
+                    let text = try #require(
+                        NSColor(OverlayPalette.forScheme(scheme).text).usingColorSpace(.sRGB)
+                    )
+                    let ratio = Self.contrast(
+                        text: text,
+                        againstLuminanceOf255: sample.luminance
+                    )
+                    #expect(
+                        ratio >= 4.5,
+                        """
+                        \(style) \(scheme) over \(desktopName): seat \(offset + 1) label is \
+                        \(String(format: "%.2f", ratio)):1 on a body of \(Int(sample.luminance))
+                        """
+                    )
+                }
+
+                if scheme == .dark {
+                    // Dark cards are stained glass in the references. Chroma is the whole point of
+                    // the tint, and diluting it is what made the live overlay look untinted.
+                    let weakest = sampled.map(\.saturation).min() ?? 0
+                    #expect(
+                        weakest >= 0.18,
+                        "\(style) dark over \(desktopName): weakest body chroma is \(weakest)"
+                    )
+                }
+            }
+
+            // And the wallpaper barely moves it. This is the property that makes a card's colour
+            // an identity rather than a coincidence: the same window is the same colour on any
+            // desktop, which is what lets a ring of Chrome windows be told apart by hue at all.
+            let onBlack = try #require(sampledByDesktop["black"])
+            let onWhite = try #require(sampledByDesktop["white"])
+            for (offset, pair) in zip(onBlack, onWhite).enumerated() {
+                #expect(
+                    abs(pair.0.luminance - pair.1.luminance) <= 30,
+                    """
+                    \(style) \(scheme): seat \(offset + 1) moved \
+                    \(Int(abs(pair.0.luminance - pair.1.luminance))) luminance between a black \
+                    and a white desktop
+                    """
+                )
+            }
+        }
+    }
+
+    /// A dark wedge is a slab of glass lit on both arcs, brighter on the one facing the hub.
+    ///
+    /// Measured with one routine over both references — the peak of each card's inner arc against
+    /// the darkest point of that same card's own body — the dark reference catches 6.8x on the inner
+    /// arc and 4.0x on the outer, so the hub-facing face is decisively the brighter of the two. This
+    /// overlay drew 3.8x and 3.6x: half the light inward, and the two arcs within one luminance of
+    /// each other, which is what made the wedges read as evenly lit tiles rather than as volumes.
+    ///
+    /// Both halves of that are guarded, because both were wrong for different reasons. The level was
+    /// wrong because a 6.5pt blur over a 3.2pt stroke throws most of a stroke's brightness into the
+    /// haze either side of it — the same arithmetic that was costing the hub ring its peak. The
+    /// *ordering* was wrong because opacity on a fixed-saturation hue cannot make one arc both
+    /// brighter and paler than the other; that takes the white core inside the hued catch.
+    @Test("A dark wedge is lit hardest on the arc facing the hub")
+    func darkWedgeIsLitFromTheHub() throws {
+        // One full turn, circular, so no seat has a radial neighbour. On a spiral the seat eight
+        // places along sits directly outside this one, and its inner arc is a few points beyond this
+        // one's outer arc — sampling out there measures the wrong card's light.
+        let subject = OverlayState()
+        subject.availableContentWidth = 1400
+        subject.availableContentHeight = 860
+        subject.layoutStyle = .circular
+        subject.load(
+            entries: (0..<8).map { index in
+                WindowEntry(
+                    windowID: CGWindowID(4_300 + index),
+                    processID: pid_t(index + 1),
+                    applicationName: "Lit \(index)",
+                    applicationIcon: Self.solidIcon(
+                        NSColor(hue: CGFloat(index) / 8, saturation: 1, brightness: 1, alpha: 1)
+                    ),
+                    title: "Window \(index)",
+                    frame: CGRect(x: 100, y: 100, width: 800, height: 600),
+                    isMinimized: false,
+                    zOrder: index,
+                    axElement: nil
+                )
+            },
+            selectedIndex: 0
+        )
+
+        let size = subject.layout.panelSize
+        let hosting = NSHostingView(rootView: ZStack {
+            Color.black
+            OverlayView(state: subject, hoveredIndex: nil)
+        }.frame(width: size.width, height: size.height))
+        hosting.appearance = NSAppearance(named: .darkAqua)
+        hosting.frame = CGRect(origin: .zero, size: size)
+        hosting.layoutSubtreeIfNeeded()
+        let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+
+        let geometry = try #require(subject.layout.radial)
+        let centre = subject.layout.radialCentre
+        let scaleX = Double(rep.pixelsWide) / Double(size.width)
+        let scaleY = Double(rep.pixelsHigh) / Double(size.height)
+
+        func luminance(radius: CGFloat, angle: Double) throws -> Double {
+            let colour = try #require(
+                rep.colorAt(
+                    x: Int(Double(centre.x + radius * CGFloat(cos(angle))) * scaleX),
+                    y: Int(Double(centre.y + radius * CGFloat(sin(angle))) * scaleY)
+                )?.usingColorSpace(.sRGB)
+            )
+            return 0.2126 * Double(colour.redComponent) * 255
+                + 0.7152 * Double(colour.greenComponent) * 255
+                + 0.0722 * Double(colour.blueComponent) * 255
+        }
+
+        // Skips seat 0, which is the selection and carries extra chrome of its own.
+        for offset in 1..<geometry.seats {
+            let seat = geometry.seat(at: offset)
+            let sweep = seat.endAngle - seat.startAngle
+            let depth = seat.outerRadius - seat.innerRadius
+
+            // The arcs are blurred catches rather than strokes at a known radius, so each is the
+            // peak over the band it occupies. Sampled a quarter and three quarters of the way round
+            // the sweep: clear of the icon and label at the middle, and clear of the corner radius
+            // at the ends, where there is no arc to measure.
+            var innerArc = 0.0
+            var outerArc = 0.0
+            var body = Double.greatestFiniteMagnitude
+            for fraction in [0.25, 0.75] {
+                let angle = seat.startAngle + sweep * fraction
+                for step in 0...12 {
+                    let t = CGFloat(step) / 12
+                    innerArc = max(innerArc, try luminance(
+                        radius: seat.innerRadius - depth * 0.03 + t * depth * 0.15,
+                        angle: angle
+                    ))
+                    outerArc = max(outerArc, try luminance(
+                        radius: seat.outerRadius + depth * 0.03 - t * depth * 0.15,
+                        angle: angle
+                    ))
+                }
+                for step in 0...8 {
+                    let t = 0.36 + CGFloat(step) / 8 * 0.28
+                    body = min(body, try luminance(
+                        radius: seat.innerRadius + t * depth,
+                        angle: angle
+                    ))
+                }
+            }
+
+            #expect(
+                innerArc > body * 2.5,
+                "seat \(offset): inner arc \(Int(innerArc)) is only \(innerArc / body)x its body"
+            )
+            #expect(
+                outerArc > body * 2.0,
+                "seat \(offset): outer arc \(Int(outerArc)) is only \(outerArc / body)x its body"
+            )
+            #expect(
+                innerArc > outerArc,
+                "seat \(offset): outer arc \(Int(outerArc)) out-lights the inner \(Int(innerArc))"
+            )
+        }
+    }
+
+    private static func contrast(text: NSColor, againstLuminanceOf255 luminance: Double) -> Double {
+        func channel(_ value: Double) -> Double {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let background = channel(luminance / 255)
+        let foreground = 0.2126 * channel(Double(text.redComponent))
+            + 0.7152 * channel(Double(text.greenComponent))
+            + 0.0722 * channel(Double(text.blueComponent))
+        return (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+    }
+
+    private static func solidIcon(_ colour: NSColor) -> NSImage {
+        let image = NSImage(size: NSSize(width: 32, height: 32))
+        image.lockFocus()
+        colour.setFill()
+        NSRect(x: 0, y: 0, width: 32, height: 32).fill()
+        image.unlockFocus()
+        return image
     }
 
     private func makeTestImage() -> CGImage? {

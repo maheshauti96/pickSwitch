@@ -263,14 +263,27 @@ extension OverlayPalette {
         blend(cardFill, toward: tint)
     }
 
-    /// The hovered and selected card fill, tinted to match. Selection on the radial and list
-    /// styles is drawn with `accentFill` instead, which is deliberately never tinted: it is the
-    /// one thing on screen that must not be ambiguous.
+    /// The hovered card fill, tinted to match. List selection still uses `accentFill`, which is
+    /// never tinted: a selected row carries inverted text and must not shift hue. Radial
+    /// selection uses `radialSelectedFill(tintedBy:)` instead — a stronger self, not a recolor.
     func selectedCardFill(tintedBy tint: IconTint?) -> Color {
         blend(selectedCardFill, toward: tint)
     }
 
-    private func blend(_ base: Color, toward tint: IconTint?) -> Color {
+    /// A selected radial wedge: the same hue as the unselected tile, pushed further.
+    ///
+    /// Still not the brand. The wedge is a surface that carries text, so it is bound by the same
+    /// luminance band as every other fill; the hub's light is what takes the window's colour, via
+    /// `hubAmbience(for:)`.
+    func radialSelectedFill(tintedBy tint: IconTint?) -> Color {
+        blend(selectedCardFill, toward: tint, strengthScale: radialSelectedStrengthScale)
+    }
+
+    private func blend(
+        _ base: Color,
+        toward tint: IconTint?,
+        strengthScale: Double = 1
+    ) -> Color {
         guard let tint else { return base }
 
         let hueColor = NSColor(
@@ -285,7 +298,7 @@ extension OverlayPalette {
 
         // A washed-out icon gets proportionally less tint, so a pastel app does not end up
         // looking as emphatic as a vivid one.
-        let strength = tintStrength * min(1, max(0.4, tint.vividness))
+        let strength = min(1, tintStrength * strengthScale * min(1, max(0.4, tint.vividness)))
 
         return Color(
             .sRGB,

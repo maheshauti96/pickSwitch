@@ -424,9 +424,13 @@ struct OverlayLayout: Equatable {
         return firstRow * columns
     }
 
-    /// Windows not currently on screen. Not displayed anywhere — the counter caption was
-    /// removed as noise — but it is the invariant that says paging is working, and the
-    /// tests hold the windowing logic to it.
+    /// Windows not currently on screen.
+    ///
+    /// The invariant that says paging is working, and the tests hold the windowing logic to
+    /// it. Shown to the user in exactly one place — the round arrangements' hub — because
+    /// those are the two styles whose whole argument is that everything is visible at once;
+    /// see `RadialLayout`'s note on the cap. The grid and list page visibly by their nature
+    /// and need no counter for it.
     var hiddenCount: Int { max(0, cardCount - visibleRange.count) }
 
     private static func clamp(_ value: Int, lower: Int, upper: Int) -> Int {
@@ -622,8 +626,26 @@ struct OverlayLayout: Equatable {
 
     /// Whether a click at this AppKit panel point should switch to the selection.
     func commitsSelection(atPanelPoint pointInPanel: CGPoint) -> Bool {
-        guard let region = confirmRegion else { return false }
-        return region.contains(topLeftPoint(pointInPanel))
+        guard cardCount > 0 else { return false }
+        switch style {
+        case .strip, .grid:
+            return false
+        case .list:
+            guard let region = confirmRegion else { return false }
+            return region.contains(topLeftPoint(pointInPanel))
+        case .circular, .spiral:
+            // Circular, not the hub's bounding square. The square's corners already reached
+            // into the first ring; the halo now paints a band just outside the circle, and a
+            // click on that painted band over an empty slot has to confirm — it looks like
+            // hub, not like desktop. Distance is from `radialCentre`, which already includes
+            // search chrome, matching `radialHubFrame`.
+            let point = topLeftPoint(pointInPanel)
+            let centre = radialCentre
+            let dx = point.x - centre.x
+            let dy = point.y - centre.y
+            let radius = (dx * dx + dy * dy).squareRoot()
+            return radius <= radialHubFrame.width / 2 + HubChrome.haloReach
+        }
     }
 
     // MARK: - Hit testing

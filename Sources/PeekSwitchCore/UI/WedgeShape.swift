@@ -122,6 +122,105 @@ struct WedgeShape: Shape {
     }
 }
 
+/// The inner arc of a wedge, for the glass highlight that faces the hub.
+///
+/// A full `WedgeShape` stroke puts a highlight on every edge, including the seams between
+/// neighbours. The inner arc is the only edge that reads as glass: it is the one that catches
+/// light from the hub, and on the selected wedge it is the half of the coupling the tile itself
+/// draws. Positioned with the same centre and radii as the wedge, so the highlight cannot drift
+/// off the fill it is meant to sit on.
+struct WedgeInnerArc: Shape {
+
+    let centre: CGPoint
+    let startAngle: Double
+    let endAngle: Double
+    let innerRadius: CGFloat
+    var cornerRadius: CGFloat = 9
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let thicknessGuess: CGFloat = 40
+        guard endAngle > startAngle, innerRadius > 0 else { return path }
+
+        let innerArc = innerRadius * CGFloat(endAngle - startAngle)
+        let corner = max(0, min(cornerRadius, min(thicknessGuess / 2, innerArc / 2)))
+        let innerInset = corner / innerRadius
+        let innerStart = startAngle + Double(innerInset)
+        let innerEnd = endAngle - Double(innerInset)
+        guard innerStart < innerEnd else { return path }
+
+        // Sit the highlight on the fill, not in the hub gap: a hair outside the true inner radius.
+        let radius = innerRadius + 2
+        path.addArc(
+            center: centre,
+            radius: radius,
+            startAngle: .radians(innerStart),
+            endAngle: .radians(innerEnd),
+            clockwise: false
+        )
+        return path
+    }
+}
+
+/// The outer arc of a wedge, for the faint rim light that makes glass read as a
+/// volume rather than as a stroked card.
+struct WedgeOuterArc: Shape {
+
+    let centre: CGPoint
+    let startAngle: Double
+    let endAngle: Double
+    let outerRadius: CGFloat
+    var cornerRadius: CGFloat = 9
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard endAngle > startAngle, outerRadius > 4 else { return path }
+
+        let outerArc = outerRadius * CGFloat(endAngle - startAngle)
+        let corner = max(0, min(cornerRadius, outerArc / 2))
+        let outerInset = corner / outerRadius
+        let outerStart = startAngle + Double(outerInset)
+        let outerEnd = endAngle - Double(outerInset)
+        guard outerStart < outerEnd else { return path }
+
+        let radius = outerRadius - 1.5
+        path.addArc(
+            center: centre,
+            radius: radius,
+            startAngle: .radians(outerEnd),
+            endAngle: .radians(outerStart),
+            clockwise: true
+        )
+        return path
+    }
+}
+
+extension WedgeOuterArc {
+
+    init(seat: RadialLayout.Seat, centre: CGPoint, cornerRadius: CGFloat = 9) {
+        self.init(
+            centre: centre,
+            startAngle: seat.startAngle,
+            endAngle: seat.endAngle,
+            outerRadius: seat.outerRadius,
+            cornerRadius: cornerRadius
+        )
+    }
+}
+
+extension WedgeInnerArc {
+
+    init(seat: RadialLayout.Seat, centre: CGPoint, cornerRadius: CGFloat = 9) {
+        self.init(
+            centre: centre,
+            startAngle: seat.startAngle,
+            endAngle: seat.endAngle,
+            innerRadius: seat.innerRadius,
+            cornerRadius: cornerRadius
+        )
+    }
+}
+
 extension WedgeShape {
 
     /// Builds the shape for a seat, so callers do not restate its five fields.

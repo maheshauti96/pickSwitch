@@ -68,6 +68,14 @@ final class OverlayState: ObservableObject {
     /// Web search is the final fallback, only after every local source has settled empty.
     var canOfferWebSearch: Bool { hasNoSearchMatches && !isResolvingSearch }
     @Published var selectedIndex: Int?
+
+    /// Hub-ring hotspot angle, unwrapped so a spring travels the short arc.
+    ///
+    /// A raw seat `midAngle` jumps across the branch cut when the pointer crosses the top of
+    /// the ring. Interpolating that jump would send the glow the long way around. Held here
+    /// rather than in the view so Command Line Tools can build it — `@State` is a SwiftUI
+    /// macro that this toolchain does not load — and so a test can snap and follow it.
+    @Published var radialRingAngle: Double = RadialLayout.startAngle
     @Published var thumbnails: [CGWindowID: CGImage] = [:]
     /// Site icons that arrived after presentation, associated with native browser windows.
     /// `WindowEntry.applicationIcon` remains the immutable fallback and is always used for
@@ -402,6 +410,7 @@ final class OverlayState: ObservableObject {
         visibleStart = 0
         visibleStart = layout.visibleStart(keepingSelectionVisible: 0)
         scrollOffset = layout.scrollOffset(keepingSelectionVisible: 0)
+        syncRingAngle(snap: true)
     }
 
     func setSelection(_ index: Int?) {
@@ -411,6 +420,25 @@ final class OverlayState: ObservableObject {
         // arrangement exactly where it is.
         visibleStart = layout.visibleStart(keepingSelectionVisible: visibleStart)
         scrollOffset = layout.scrollOffset(keepingSelectionVisible: scrollOffset)
+        syncRingAngle(snap: false)
+    }
+
+    /// Keep the ring hotspot on the selected seat.
+    ///
+    /// - Parameter snap: `true` for a new list (load, search), where the previous angle is
+    ///   not a motion the pointer made. `false` for a selection change, which unwraps so
+    ///   the hotspot follows the short arc.
+    private func syncRingAngle(snap: Bool) {
+        guard layoutStyle.radialWinding != nil,
+              let index = selectedIndex,
+              let positioned = layout.radialSeats.first(where: { $0.index == index })
+        else { return }
+        let target = positioned.seat.midAngle
+        if snap || reduceMotion {
+            radialRingAngle = target
+        } else {
+            radialRingAngle = AngleMath.unwrap(target, relativeTo: radialRingAngle)
+        }
     }
 
     func setThumbnail(_ image: CGImage, for windowID: CGWindowID) {

@@ -420,15 +420,19 @@ public final class SwitcherController {
         let screen = Self.screen(containing: cursor)
         let visibleFrame = screen?.visibleFrame ?? .zero
         let backingScale = screen?.backingScaleFactor ?? 2
+        // Read once per presentation, so changing the style in Settings takes effect on
+        // the next trigger without a restart (Requirement 12.3). It also chooses the
+        // style-specific display budget: radial layouts use more of the display than cards.
+        let layoutStyle = settings.overlayLayoutStyle
         let contentWidth = OverlayPlacement.availableContentWidth(visibleFrame: visibleFrame)
-        let contentHeight = OverlayPlacement.availableContentHeight(visibleFrame: visibleFrame)
+        let contentHeight = OverlayPlacement.availableContentHeight(
+            visibleFrame: visibleFrame,
+            style: layoutStyle
+        )
         // Captured here because it reads `NSScreen` for display names, and sampled per
         // presentation so plugging in or unplugging a monitor is picked up on the next
         // trigger rather than needing a restart.
         let displayLayout = DisplayLayout.current()
-        // Read once per presentation, so changing the style in Settings takes effect on
-        // the next trigger without a restart (Requirement 12.3).
-        let layoutStyle = settings.overlayLayoutStyle
         let viewMode = settings.overlayViewMode
         let pinned = settings.pinnedApplications
         let depth = settings.historyDepth

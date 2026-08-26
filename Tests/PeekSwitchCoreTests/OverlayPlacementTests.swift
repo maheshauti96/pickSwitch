@@ -225,12 +225,37 @@ struct OverlayPlacementTests {
 
     @Test("Available content height leaves room and stays on the display")
     func availableContentHeightFitsDisplay() {
-        let height = OverlayPlacement.availableContentHeight(visibleFrame: primary)
+        let height = OverlayPlacement.availableContentHeight(
+            visibleFrame: primary,
+            style: .grid
+        )
         #expect(height > 0)
         #expect(height <= primary.height)
 
         // Never so small that a single card cannot be drawn.
         let tiny = CGRect(x: 0, y: 0, width: 400, height: 120)
-        #expect(OverlayPlacement.availableContentHeight(visibleFrame: tiny) >= StripLayout.cardSize.height)
+        #expect(
+            OverlayPlacement.availableContentHeight(visibleFrame: tiny, style: .grid)
+                >= StripLayout.cardSize.height
+        )
+    }
+
+    @Test("Radial layouts receive 94% of display height without changing card layouts")
+    func radialHeightBudgetMatchesTheReference() {
+        let builtIn = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let compact = OverlayPlacement.availableContentHeight(
+            visibleFrame: builtIn,
+            style: .grid
+        )
+
+        for style in [OverlayLayoutStyle.circular, .spiral] {
+            let radial = OverlayPlacement.availableContentHeight(
+                visibleFrame: builtIn,
+                style: style
+            )
+            #expect(isClose(radial, builtIn.height * 0.94, tolerance: 0.001))
+            #expect(radial > compact)
+            #expect(radial + OverlayLayout.searchFieldHeight <= builtIn.height + 0.001)
+        }
     }
 }

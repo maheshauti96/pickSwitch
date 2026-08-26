@@ -17,13 +17,25 @@ import Foundation
 ///
 /// Neither is better, which is why both are offered rather than one being chosen.
 ///
-/// ## Why nothing is paged
+/// ## Why the ring is capped rather than shrunk indefinitely
 ///
-/// Unlike the grid and list, these seat *every* window. A round arrangement paged onto a second
-/// screenful is the worst of both: you lose the "everything at a glance" that justifies the
-/// shape, and you still have to page. So when the count outgrows the space the whole
-/// arrangement is scaled down instead — see `scale`. Paging survives only as a floor for
-/// pathological counts, where shrinking further would leave the icons unreadable.
+/// These used to seat *every* window, on the argument that a round arrangement paged onto a
+/// second screenful is the worst of both worlds. The argument was right about paging and wrong
+/// about the alternative, which is not "the same arrangement, smaller" — it is a different and
+/// worse arrangement.
+///
+/// Measured on a 1512x950 display, holding the references' proportions: at 15 windows a card is
+/// 1.26x the hub's radius deep, which is what the references show and what makes a wedge read as
+/// a card. At 25 it is 0.95x — shallower than the hub is wide — and the content box has lost 40%
+/// of its area, taking the icon and its label with it. Nothing about that is the same
+/// arrangement scaled down; the cards stop being cards, and the icon is the only thing that
+/// identifies a window at ring distance.
+///
+/// So the ring now seats as many windows as hold `minimumDepthRatio` and pages the rest. This is
+/// a real loss — "everything at a glance" is the reason to choose a ring — and it is why the
+/// floor is a named, tested constant rather than a count: it says exactly what is being traded
+/// and at what point. `OverlayLayout.hiddenCount` is what is left over, and the hub says so,
+/// because a ring that silently omits a third of the windows is worse than one that admits it.
 ///
 /// ## Why angular hit-testing
 ///
@@ -54,13 +66,55 @@ struct RadialLayout: Equatable, Sendable {
     /// Big enough to caption the selected window inside it, which the arrangement needs:
     /// wedges are too narrow for a window title, so three windows of one application are three
     /// identical icons until something spells out which is which.
+    ///
+    /// Not larger than that. The reference hub measures about 92pt (a 172px ring radius at 2×,
+    /// plus the inset), and the wedges there are deeper than the hub's radius rather than equal
+    /// to it. Enlarging this instead flattens that proportion: the caption disc wins radius that
+    /// the cards need, and the icons shrink to pay for it.
     static let baseHubRadius: CGFloat = 96
 
+    /// Physical seam between the caption well and the first turn of wedges.
+    ///
+    /// Measured off the 1408px references, per angle rather than at one guessed bearing. The
+    /// bright ring centreline sits at r=172px; sweeping all 360° and taking the nearest sustained
+    /// card fill puts the innermost wedge's inner arc at r=196–200px. So the void is 28px — 0.16
+    /// of the ring radius, and 15pt at this hub, which is a 8pt seam on top of the 7pt ring inset.
+    ///
+    /// A previous pass read that distance as 53px by sampling a bearing that happened to fall in a
+    /// seam and landing on a *second-turn* card instead of the first. That doubled the seam to 20pt
+    /// and pushed the cards visibly away from the hub, which is the opposite of what the references
+    /// show. The reliable instrument is the per-angle minimum, because a spiral only places one
+    /// seat at the innermost radius and every other bearing is further out by design.
+    ///
+    /// The failure mode on the other side is real too: reserving the halo's whole blur extent
+    /// (0.55 of the ring radius) detaches the cards entirely. The glow keeps decaying across this
+    /// seam and under the wedges, which is why its extent is not the measurement that matters.
+    static let baseHubGap: CGFloat = 8
+
+    /// Inner radius of the first turn — where wedges actually start.
+    ///
+    /// Every seat radius derives from this rather than from `baseHubRadius`, which now describes
+    /// only the caption's disc and the halo drawn on its rim.
+    static var baseFirstRingRadius: CGFloat { baseHubRadius + baseHubGap }
+
     /// Radial depth of a seat — an icon plus a line of text, plus breathing room.
+    ///
+    /// The reference wedges measure 219px against a 172px ring radius, so depth is about 1.27x
+    /// the hub's radius. That ratio is what makes the cards read as cards; at parity they read
+    /// as a thin band, and the icon is the thing that identifies a window at ring distance.
     static let baseRingThickness: CGFloat = 120
 
     /// Clearance between one turn and the next.
-    static let baseTurnGap: CGFloat = 9
+    ///
+    /// Measured off the references: their inter-turn gap is 0.169 of a card's depth, where 9pt
+    /// against a 120pt card was 0.075 — less than half — and that is what made two turns read as
+    /// one dense band rather than as separate rings.
+    ///
+    /// Not raised all the way to the reference proportion. Every point here is a point of radius
+    /// the wedge stack does not get, and because the hub is protected from scaling the cost lands
+    /// entirely on card depth: at 0.169 the depth-to-ring ratio fell under its floor at 25 windows.
+    /// 16pt reaches 0.133 while keeping that margin.
+    static let baseTurnGap: CGFloat = 16
 
     /// Clearance between a seat's contents and the wedge that draws them.
     static let baseContentMargin: CGFloat = 4
@@ -89,7 +143,7 @@ struct RadialLayout: Equatable, Sendable {
 
     /// Angular gap between neighbouring wedges, so they read as separate cards rather than as
     /// one striped disc. Roughly 1.4°.
-    static let wedgeGap: Double = 0.024
+    static let wedgeGap: Double = 0.05
 
     /// Angle of the first seat. Straight up: the top of a ring is the one position a user can
     /// find without looking, and the list is ordered by recency, so the most recent window
@@ -142,9 +196,10 @@ struct RadialLayout: Equatable, Sendable {
         let offset = max(0, offset)
         switch winding {
         case .circular:
-            return baseHubRadius + CGFloat(turn(ofSeat: offset)) * (baseRingThickness + baseTurnGap)
+            return baseFirstRingRadius
+                + CGFloat(turn(ofSeat: offset)) * (baseRingThickness + baseTurnGap)
         case .spiral:
-            return baseHubRadius + CGFloat(offset) * baseRadialStep
+            return baseFirstRingRadius + CGFloat(offset) * baseRadialStep
         }
     }
 
@@ -154,11 +209,12 @@ struct RadialLayout: Equatable, Sendable {
     /// radius is snapped per turn, so an unfilled slot frees no radius, and pretending
     /// otherwise would leave a ring of empty space around the arrangement.
     static func baseOuterRadius(forSeats seats: Int, winding: Winding) -> CGFloat {
-        guard seats > 0 else { return baseHubRadius + baseRingThickness }
+        guard seats > 0 else { return baseFirstRingRadius + baseRingThickness }
         switch winding {
         case .circular:
             let turns = turns(forSeats: seats)
-            return baseHubRadius + CGFloat(turns) * (baseRingThickness + baseTurnGap) - baseTurnGap
+            return baseFirstRingRadius
+                + CGFloat(turns) * (baseRingThickness + baseTurnGap) - baseTurnGap
         case .spiral:
             return baseInnerRadius(atSeat: seats - 1, winding: winding) + baseRingThickness
         }
@@ -171,45 +227,171 @@ struct RadialLayout: Equatable, Sendable {
         max(1, min(availableContentWidth, availableContentHeight) / 2 - Self.padding)
     }
 
-    /// The scale `seats` seats would need in order to fit, uncapped by `minimumScale`.
+    /// Fraction of the scale-1 hub that survives even when the card stack has to shrink.
+    ///
+    /// Card count changes how much radial room the wedges need; it does not make the selected
+    /// window's caption shorter. Keeping 74% fixed leaves an 89–94pt hub throughout realistic
+    /// 15–20-window layouts — the reference's ~92pt — while still letting unusually small
+    /// displays compress it.
+    private static let preservedHubFraction: CGFloat = 0.74
+
+    /// Smallest hub the caption survives.
+    ///
+    /// Softening the hub is not enough on its own. On a 1440x875 display with 25 windows the
+    /// softened radius reached 85.2pt, whose opaque core is 122.7pt — under the 124pt the caption
+    /// is laid out for, so the type crossed onto the transparent part of the panel and the desktop
+    /// read through it. Shrinking stops here; the wedge stack gives up the remaining radius, and
+    /// pages if it must.
+    static var minimumHubRadius: CGFloat {
+        HubTypography.captionDiameter / (2 * HubChrome.wellOpaqueFraction)
+    }
+
+    private static func physicalHubRadius(atScale scale: CGFloat) -> CGFloat {
+        let clamped = min(1, max(0, scale))
+        let scalable = 1 - preservedHubFraction
+        let softened = baseHubRadius * (preservedHubFraction + scalable * clamped)
+        return max(minimumHubRadius, softened)
+    }
+
+    /// Part of the arrangement outside the first inner arc. This is the only radial span the
+    /// fitter scales linearly: ring depth, inter-turn gaps, and spiral advancement.
+    private static func baseScalableSpan(forSeats seats: Int, winding: Winding) -> CGFloat {
+        max(0, baseOuterRadius(forSeats: seats, winding: winding) - baseFirstRingRadius)
+    }
+
+    /// Outer radius while protecting the physical hub-to-wedge seam.
+    private func protectedOuterRadius(forSeats seats: Int, scale: CGFloat) -> CGFloat {
+        Self.physicalHubRadius(atScale: scale)
+            + Self.baseHubGap
+            + Self.baseScalableSpan(forSeats: seats, winding: winding) * scale
+    }
+
+    /// Largest scale at which `seats` fit while preserving the physical hub and direct seam.
+    ///
+    /// The previous `radiusLimit / baseOuterRadius` normalized changes near the centre away:
+    /// every point added there reduced the global scale, so the live first ring barely moved.
+    /// This monotonic solve scales only the wedge stack around the protected centre geometry.
     private func requiredScale(forSeats seats: Int) -> CGFloat {
-        let needed = Self.baseOuterRadius(forSeats: seats, winding: winding)
-        guard needed > 0 else { return 1 }
-        return min(1, radiusLimit / needed)
+        guard protectedOuterRadius(forSeats: seats, scale: 1) > radiusLimit else { return 1 }
+        guard protectedOuterRadius(forSeats: seats, scale: 0) < radiusLimit else { return 0 }
+
+        var lower: CGFloat = 0
+        var upper: CGFloat = 1
+        for _ in 0..<36 {
+            let candidate = (lower + upper) / 2
+            if protectedOuterRadius(forSeats: seats, scale: candidate) <= radiusLimit {
+                lower = candidate
+            } else {
+                upper = candidate
+            }
+        }
+        return lower
+    }
+
+    /// Whether the wedge stack still fits at the legibility floor after the small hub seam has
+    /// yielded. Paging is allowed only after this fails: preserving every window is more
+    /// important than preserving all 8pt of separation on unusually small displays.
+    private func fitsWithoutHubGapAtMinimumScale(_ seats: Int) -> Bool {
+        let minimumOuter = Self.physicalHubRadius(atScale: Self.minimumScale)
+            + Self.baseScalableSpan(forSeats: seats, winding: winding) * Self.minimumScale
+        return minimumOuter <= radiusLimit
+    }
+
+    /// Shallowest card, as a multiple of the hub's ring radius, that still reads as a card.
+    ///
+    /// The references measure 1.267 — a 219px card against a 172px ring radius. That exact value
+    /// is not the floor, because it would cost two more seats than it is worth: on a 1512x950
+    /// display 1.267 seats 15 windows where 1.20 seats 17, and the difference between those two
+    /// proportions is not visible side by side while two more windows on the ring plainly are.
+    ///
+    /// Below about 1.0 the card is shallower than the hub's radius and the arrangement inverts —
+    /// the hollow middle becomes the largest thing on screen and the wedges read as a thin striped
+    /// collar around it, which is the opposite of the references. 1.20 keeps a margin above that
+    /// while staying close enough to 1.267 to hold the proportion a person compares.
+    static let minimumDepthRatio: CGFloat = 1.20
+
+    /// Whether seating `seats` leaves the cards deep enough to still be cards.
+    ///
+    /// Monotonic in the seat count, because fewer seats need less radius and so resolve to a
+    /// larger scale, which is what lets `seats` find the cap by walking down.
+    private func holdsCardProportion(_ seats: Int) -> Bool {
+        let scale = max(Self.minimumScale, requiredScale(forSeats: seats))
+        let ring = Self.physicalHubRadius(atScale: scale) - HubChrome.ringInset
+        guard ring > 0 else { return false }
+        return (Self.baseRingThickness * scale) / ring >= Self.minimumDepthRatio
     }
 
     /// How many windows are seated.
     ///
-    /// Every one of them, in every case that matters: the arrangement shrinks to make room
-    /// rather than paging. Seats are only given up once shrinking has bottomed out at
-    /// `minimumScale`, and then `visibleRange` pages through the remainder.
+    /// Two independent reasons to seat fewer than were asked for, both of them about the
+    /// arrangement ceasing to be itself rather than about arithmetic:
+    ///
+    /// - the wedge stack no longer fits even at the legibility floor, which is the tiny-display
+    ///   case and was always here;
+    /// - the cards would be shallower than `minimumDepthRatio`, which is the crowded-ring case.
+    ///
+    /// Never below one full turn. Eight wedges is the smallest thing that is still recognisably a
+    /// ring, and paging down past it would trade the shape away to protect a proportion that only
+    /// matters because of the shape.
     var seats: Int {
         guard cardCount > 0 else { return 0 }
         var fitted = cardCount
-        while fitted > Self.seatsPerTurn, requiredScale(forSeats: fitted) < Self.minimumScale {
+        while fitted > Self.seatsPerTurn,
+              !fitsWithoutHubGapAtMinimumScale(fitted) || !holdsCardProportion(fitted) {
             fitted -= 1
         }
         return fitted
     }
 
-    /// How much the whole arrangement is shrunk so its seats fit the display.
+    /// Scale of wedge depth, turn gaps, content, and radial advancement.
     ///
-    /// One factor applied to every length, so the proportions the design was drawn at survive
-    /// at any size. Never above 1: a handful of windows gets the arrangement at its intended
-    /// size rather than a bloated version of it.
+    /// The hub and its direct seam to the wedges are physical chrome, not card content, and
+    /// therefore use their protected metrics below instead of being multiplied by this value.
     var scale: CGFloat {
         max(Self.minimumScale, requiredScale(forSeats: seats))
     }
 
-    // MARK: - Scaled metrics
+    // MARK: - Resolved metrics
 
-    var hubRadius: CGFloat { Self.baseHubRadius * scale }
+    /// Radius of the hollow caption well. Softened rather than linearly scaled so opening more
+    /// windows cannot collapse the most information-dense part of the arrangement.
+    var hubRadius: CGFloat { Self.physicalHubRadius(atScale: scale) }
+
+    private var scalableSpan: CGFloat {
+        Self.baseScalableSpan(forSeats: seats, winding: winding) * scale
+    }
+
+    /// Where the first turn begins. On realistic displays this is exactly 8pt beyond the
+    /// physical hub; the rear halo is allowed to paint beneath the wedges rather than reserving
+    /// its mathematical blur extent as empty layout space. If even the minimum-scale arrangement
+    /// cannot fit an unusually tiny display, only this seam yields; hub and wedges do not overlap.
+    var firstRingRadius: CGFloat {
+        let protected = hubRadius + Self.baseHubGap
+        let roomAfterWedges = radiusLimit - scalableSpan
+        return max(hubRadius, min(protected, roomAfterWedges))
+    }
+
+    /// Actual physical seam from the hub edge to seat zero's inner arc.
+    var hubGap: CGFloat {
+        max(0, firstRingRadius - hubRadius)
+    }
+
+    /// Distance from the bright ring centreline to seat zero's inner arc.
+    ///
+    /// This is the perceived spacing measured in the reference images: ring inset plus hub seam,
+    /// independent of the halo's soft painted extent underneath the wedges.
+    var ringCentreToFirstRingGap: CGFloat {
+        firstRingRadius - (hubRadius - HubChrome.ringInset)
+    }
+
     var ringThickness: CGFloat { Self.baseRingThickness * scale }
     var turnGap: CGFloat { Self.baseTurnGap * scale }
     var turns: Int { Self.turns(forSeats: seats) }
 
     func innerRadius(atSeat offset: Int) -> CGFloat {
-        Self.baseInnerRadius(atSeat: offset, winding: winding) * scale
+        let baseOffset = Self.baseInnerRadius(atSeat: offset, winding: winding)
+            - Self.baseFirstRingRadius
+        return firstRingRadius + baseOffset * scale
     }
 
     func outerRadius(atSeat offset: Int) -> CGFloat {
@@ -217,9 +399,7 @@ struct RadialLayout: Equatable, Sendable {
     }
 
     /// Radius of the outermost seated wedge.
-    var outerRadius: CGFloat {
-        Self.baseOuterRadius(forSeats: seats, winding: winding) * scale
-    }
+    var outerRadius: CGFloat { firstRingRadius + scalableSpan }
 
     /// Square, because the arrangement is only ever as wide as it is tall.
     var panelSize: CGSize {
@@ -265,7 +445,7 @@ struct RadialLayout: Equatable, Sendable {
     /// hub, so a box that fits there fits everywhere further out.
     var contentRadius: CGFloat {
         Self.contentRadius(
-            hubRadius: hubRadius,
+            hubRadius: firstRingRadius,
             ringThickness: ringThickness,
             margin: Self.baseContentMargin * scale
         )
@@ -274,7 +454,7 @@ struct RadialLayout: Equatable, Sendable {
     /// The upright box a seat's contents are drawn in. The same for every seat.
     var contentSize: CGSize {
         Self.contentSize(
-            hubRadius: hubRadius,
+            hubRadius: firstRingRadius,
             ringThickness: ringThickness,
             margin: Self.baseContentMargin * scale,
             preferredHeight: Self.basePreferredContentHeight * scale
@@ -287,7 +467,7 @@ struct RadialLayout: Equatable, Sendable {
     /// cannot drift apart; the view scales those metrics by `scale` at draw time.
     static var baseContentSize: CGSize {
         contentSize(
-            hubRadius: baseHubRadius,
+            hubRadius: baseFirstRingRadius,
             ringThickness: baseRingThickness,
             margin: baseContentMargin,
             preferredHeight: basePreferredContentHeight

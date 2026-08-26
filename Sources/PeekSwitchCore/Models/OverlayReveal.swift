@@ -29,8 +29,22 @@ enum OverlayReveal {
     /// Cards start slightly small, so they read as arriving rather than merely fading.
     static let initialScale: CGFloat = 0.86
 
-    /// The hub caption follows the wedges in rather than competing with them.
+    /// The caption follows the well rather than competing with the ring ignition.
     static let hubDelay: Double = 0.08
+
+    /// The well is up from the first revealed frame, so caption contrast never waits on a fade.
+    static let wellDelay: Double = 0
+
+    /// How long the hub ring takes to ignite. Kept inside the same budget as the wedges:
+    /// a beauty-reel ignition that ran for seconds would make the switcher feel slower
+    /// the one moment it has to be fast.
+    static let ringDuration: Double = 0.18
+
+    /// Coupling trails the ring so the well is readable before the spark appears.
+    static let couplingDelay: Double = 0.08
+
+    /// How long the coupling tongue takes to appear.
+    static let couplingDuration: Double = 0.18
 
     /// How long the hub takes to cross-fade from one window's title to the next.
     ///

@@ -32,6 +32,15 @@ struct HubTypography: Equatable {
     /// Smallest a secondary label may be drawn.
     static let secondaryFloor: CGFloat = 9
 
+    /// The disc the caption is laid out inside: a source line, three title lines and a status
+    /// line, at their floors, in the tightest case.
+    ///
+    /// Lives here rather than in the layout because it is a property of the type. `RadialLayout`
+    /// reads it to floor how far the hub may shrink — the caption is drawn on the well's opaque
+    /// core, and a hub small enough to push the type past that core spills it onto a transparent
+    /// panel, where the desktop reads straight through the glyphs.
+    static let captionDiameter: CGFloat = 124
+
     let titleSize: CGFloat
     let titleLines: Int
     let sourceSize: CGFloat

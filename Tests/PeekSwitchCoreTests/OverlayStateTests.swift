@@ -396,4 +396,37 @@ struct HubFactsTests {
         #expect(subject.windowPosition(for: entry) == nil)
         #expect(subject.hubSummary(for: entry).sourceLine == nil)
     }
+
+    // MARK: - Radial ring angle
+
+    @Test("A fresh spiral snaps the ring onto the selected seat")
+    func loadSnapsTheRingAngle() throws {
+        let subject = OverlayState()
+        subject.availableContentWidth = 1400
+        subject.availableContentHeight = 860
+        subject.layoutStyle = .spiral
+        subject.load(
+            entries: (0..<8).map { Fixture.entry(id: CGWindowID($0 + 1), zOrder: $0) },
+            selectedIndex: 1
+        )
+
+        let seat = try #require(subject.layout.radialSeats.first { $0.index == 1 }?.seat)
+        #expect(abs(subject.radialRingAngle - seat.midAngle) < 0.0001)
+    }
+
+    @Test("Moving the selection across the top of the ring takes the short arc")
+    func selectionFollowsTheShortArc() {
+        let subject = OverlayState()
+        subject.availableContentWidth = 1400
+        subject.availableContentHeight = 860
+        subject.layoutStyle = .circular
+        subject.load(
+            entries: (0..<8).map { Fixture.entry(id: CGWindowID($0 + 1), zOrder: $0) },
+            selectedIndex: 7
+        )
+        let last = subject.radialRingAngle
+        subject.setSelection(0)
+        let hop = subject.radialRingAngle - last
+        #expect(abs(hop) < .pi / 2, "crossing the top should be a short step, got \(hop)")
+    }
 }

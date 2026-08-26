@@ -34,6 +34,26 @@ struct OverlayPalette {
     let strongBorder: Color
     let text: Color
     let secondaryText: Color
+
+    /// `secondaryText` for the hub's caption only, weighted for a surface that is not a known colour.
+    ///
+    /// The hub is the one place in the overlay whose background is partly the user's wallpaper. Every
+    /// other secondary line sits on a card fill this palette chose, so `secondaryText` can be tuned
+    /// for hierarchy there; here it has to survive a range.
+    ///
+    /// And it is the line that sets that range, which is worth being explicit about because it is not
+    /// the intuition: a *translucent* white line composites brighter as its own surface brightens, so
+    /// it loses contrast about twice as fast as opaque white does. At `secondaryText`'s 0.58 in Dark
+    /// Mode the well could only transmit 20% of the wallpaper before this line fell under 4.5:1 —
+    /// enough to tint the middle, not enough for it to read as glass. The primary title, being
+    /// opaque, was nowhere near binding.
+    ///
+    /// So the hub's secondary lines give up some of their opacity difference and the well buys
+    /// transmission with it: 0.85 here takes the dark ceiling from luminance 66 to about 100, which is
+    /// what `HubChrome.wellScrimOpacityDark` spends. The hierarchy is not lost with it, because in the
+    /// hub it was never carried by opacity alone — the title is 15pt semibold against 11pt and 10pt
+    /// medium, and those sizes are doing most of the work.
+    let hubSecondaryText: Color
     /// Backing for captions that float with no plate behind them.
     let chipFill: Color
     /// Selection colour, for borders and glows.
@@ -66,23 +86,330 @@ struct OverlayPalette {
     let tintSaturation: Double
     let tintBrightness: Double
 
-    /// How strongly the selected window's own icon shows through the spiral's middle, `0...1`.
+    /// Colour under the radial caption.
     ///
-    /// Measured, not chosen. The hub carries the smallest type in the app and every guarantee about
-    /// that type assumed a flat fill behind it, so the question is how far the surface under the text
-    /// may move. An icon has no luminance to reason about — it can be GitHub's near-black mark or a
-    /// near-white one — so the bound comes from the worst case: solid white and solid black at this
-    /// opacity, over every tinted fill, in both themes.
+    /// The hub rim is a void; this fill is the caption's surface — an opaque circle
+    /// large enough for the source, title and status line, so a busy desktop cannot
+    /// read through it. The ring and coupling may be translucent; this is not.
+    let hubWellFill: Color
+
+    /// Brand ring that sits on the well's rim and carries radial selection.
     ///
-    /// The binding case is the 9-point secondary line, which is *translucent* in both themes, so
-    /// moving the surface moves the text with it and the contrast between them closes from both ends.
-    /// That is what makes these values as low as they are, and why the light theme's is not simply
-    /// larger despite starting from white.
+    /// The resting colour, used whenever there is no hue to take: a monochrome icon, Increase
+    /// Contrast, or the tint setting turned off. What the ring actually draws is
+    /// `hubAmbience(for:)`, which carries this hue only until the pointer reaches a window that
+    /// has one of its own.
+    let hubRing: Color
+
+    /// How much stronger a selected radial wedge is tinted than an unselected one.
     ///
-    /// `OverlayPaletteTests` holds the bound and also holds the opposite: that the value is close to
-    /// the largest one that clears 4.5:1, so a future palette change cannot quietly leave the
-    /// watermark invisible either.
-    let hubArtworkOpacity: Double
+    /// Greater than 1 so the selected tile is a stronger version of itself rather than a recolor
+    /// to the brand. The brand lives on the ring. Bounded so primary text still clears 4.5:1.
+    let radialSelectedStrengthScale: Double
+
+    /// Hue of a wedge's glass, used as a Liquid Glass tint and as the coloured wash.
+    ///
+    /// Brighter and more chromatic than `cardFill(tintedBy:)`, which has to carry 4.5:1
+    /// text as an opaque plate. Glass gets its identity from a wash and a rim light, not
+    /// from a solid fill, so this colour is allowed to be the icon's own.
+    ///
+    /// Saturation is the mock: dark tiles are stained glass (green Chrome, pink Slack,
+    /// orange Claude), not grey material with a coloured edge. Light tiles are pastels
+    /// at roughly 30% chroma on the selected cyan, 5–12% on the rest.
+    func glassTint(for tint: IconTint?, selected: Bool, scheme: ColorScheme) -> Color {
+        if selected {
+            // The mock's selected Chrome is cyan glass, not the icon's green.
+            return Color(
+                hue: Self.brandHue,
+                saturation: scheme == .dark ? 0.72 : 0.30,
+                brightness: scheme == .dark ? 0.54 : 0.96,
+                opacity: 1
+            )
+        }
+        // Opaque, and a real colour rather than a veil of white.
+        //
+        // A window whose icon yields no usable hue — a monochrome one like Cursor, or any window
+        // at all once icon tinting is switched off — used to land here on `white.opacity(0.06)`,
+        // which after the wash left a card about 5% opaque: not a neutral card but very nearly no
+        // card, taking whatever the wallpaper happened to be. That is why the greyscale-iconed
+        // windows are the palest, most washed-out wedges on the ring in practice while the
+        // references draw them as plain dark and plain light plates like all the others.
+        //
+        // Values are the references' own untinted bodies, measured per card rather than as a field
+        // average: ChatGPT (19,19,19), Cursor (21,21,21) and Grok Bot (27,27,27) in the dark
+        // reference, and 244–247 for the same three in the light one. A first pass read the dark
+        // figure as 46 off a whole-annulus average, which folds in every *tinted* card and the rim
+        // light on all of them; drawn at 46 the greyscale-iconed wedges were the brightest thing on
+        // a dark ring instead of the darkest.
+        guard let tint else {
+            return scheme == .dark
+                ? Color(.sRGB, white: 0.095, opacity: 1)
+                : Color(.sRGB, white: 0.96, opacity: 1)
+        }
+        // These are the colour the card actually *is*, not a hint added to whatever is behind it,
+        // and that changed what the numbers had to be.
+        //
+        // They were previously calibrated by rendering the overlay over flat black and flat cream,
+        // which is not a condition any user is ever in. Measured over a real desktop the same
+        // constants produced a dark card at luminance 106–119 against the reference's 55, with its
+        // saturation cut from 0.34 to 0.20 — the wallpaper was supplying most of the card and the
+        // tint was a wash on top of it. Worse, a Light Mode card over a *dark* desktop came out at
+        // luminance 68, where its near-black label measures 1.70:1.
+        //
+        // So `glassWashOpacity` now lets the tint dominate, and these values are what the composite
+        // has to land on rather than what looks right in isolation.
+        //
+        // Dark Mode is built additively rather than as a fixed HSB brightness, because that is what
+        // the reference measures. Reading its cards one at a time: the *minimum* channel is close to
+        // constant — 17 to 34 across every wedge, right where the untinted ones sit — while the
+        // dominant channels rise with the icon, from 0 chroma on ChatGPT and Cursor through 16 on
+        // Chrome and Kiro to 32 on Brave. The tint is light *added* on top of a common dark floor.
+        //
+        // A fixed brightness does the opposite. Holding it at 0.26 and varying only saturation makes
+        // a more saturated card a *darker* one, so every wedge landed in the same narrow band: the
+        // field measured chroma 0 at its 25th percentile and only 24 at its 90th, against the
+        // reference's 6 and 52. Neutral windows were too bright and vivid ones not vivid enough — a
+        // ring of interchangeable slate tiles, which is the "glass looks less tinted than the mock"
+        // complaint stated in numbers.
+        //
+        // So the floor is fixed and the chroma is what `vividness` buys. `floor` is the untinted
+        // body above; `lift` is up to 38/255 of added chroma, which is the reference's widest card.
+        // Expressing that pair as HSB is only a conversion: brightness is the dominant channel and
+        // saturation is the fraction of it the chroma occupies.
+        //
+        // Light Mode keeps a fixed brightness because a near-white plate has nowhere to add light
+        // to: there the whole tint is chroma taken *out* of white, and 0.08 saturation holds the
+        // reference's measured 13–16 chroma at a luminance the label can still be read against.
+        //
+        // The floor rises with vividness as well, which the reference also shows and a first pass at
+        // this missed. Holding it flat at 0.085 put the whole field too dark and too chromatic at
+        // once — luminance 23.6 at the median against the reference's 38.6, with chroma 25 against
+        // its 15 — because chroma was the only thing vividness bought. In the reference the minimum
+        // channel climbs too, from 17 on the greyscale wedges to 34 on the tinted ones and 62 on the
+        // most vivid, so a saturated card is a *brighter* card there, not just a purer one.
+        if scheme == .dark {
+            let strength = min(1, max(0.30, tint.vividness))
+            let floor = 0.075 + 0.045 * strength
+            let lift = 0.105 * strength
+            return Color(
+                hue: tint.hue,
+                saturation: lift / (floor + lift),
+                brightness: floor + lift,
+                opacity: 1
+            )
+        }
+        return Color(
+            hue: tint.hue,
+            saturation: 0.08 * min(1, max(0.45, tint.vividness)),
+            brightness: 1.0,
+            opacity: 1
+        )
+    }
+
+    /// How heavily `glassTint` is washed over the frosted substrate, `0...1`.
+    ///
+    /// High, in both schemes, and that is the correction rather than a preference.
+    ///
+    /// A wedge draws no opaque plate — unlike the strip, grid and list, whose fills the palette
+    /// deliberately made fully opaque for exactly this reason — so whatever the frosted substrate
+    /// transmits *is* the card. At 0.24 in Light Mode the wallpaper was supplying three quarters of
+    /// it: the same window measured luminance 205 over a bright desktop and 68 over a dark one, so
+    /// the card's identity, its lightness, and the contrast of its own label all belonged to the
+    /// user's choice of wallpaper. In Dark Mode the tint's chroma was being diluted from 0.34 to
+    /// 0.20, which is the visible half of the complaint: the glass looked far less tinted in
+    /// practice than in the references.
+    ///
+    /// 0.95 leaves 5% transmission, which is enough for the desktop to modulate the surface and for
+    /// the macOS 26 material to keep its edge behaviour, and little enough that the card is the same
+    /// card over any wallpaper. The references are not translucent either: what makes their wedges
+    /// read as glass is the rim light on both arcs and the thickness gradient between them, not what
+    /// shows through.
+    ///
+    /// Raised from 0.92 for a reason that only appeared once `glassTint` got darker. 8% of the
+    /// wallpaper is 8% either way, but it stopped being a modulation and started being the card: a
+    /// dark tinted body is about 22 luminance, so a bright desktop was adding 19 to it and very
+    /// nearly doubling it, where the same 8% over the old 46-luminance body moved it by a third.
+    /// Measured across a black and a photographic desktop the dark card's spread was 10.5
+    /// luminance at 0.92 and 6 at 0.95, and the light card gained the 7 it was short of the
+    /// reference over a dark desktop.
+    func glassWashOpacity(selected: Bool, scheme: ColorScheme) -> Double {
+        switch (scheme, selected) {
+        case (.dark, true): return 0.95
+        case (.dark, false): return 0.95
+        case (_, true): return 0.95
+        case (_, false): return 0.95
+        }
+    }
+
+    /// The hub's ambience: every glow the middle throws, hued by the window under the pointer.
+    ///
+    /// Matched to the ring's *perceived* luminance, not to its HSB brightness. Those are not the
+    /// same thing, and the difference is not subtle: holding saturation and brightness fixed while
+    /// only the hue moved put yellow at a relative luminance of 0.742 and purple at 0.325 — a
+    /// 2.3x spread — so the hub's brightness depended on which application happened to be under
+    /// the pointer, and a yellow-iconed one turned the rim back into the glaring torus that
+    /// `HubChrome.ringGlowThickness` exists to prevent.
+    ///
+    /// So brightness is solved for per hue instead. Yellows and cyans are dimmed to the reference;
+    /// blues and purples, which cannot reach it at any brightness, are allowed to give up a bounded
+    /// share of their saturation for it. Alpha never moves.
+    ///
+    /// Returns `hubRing` unchanged when there is no hue to take. Callers pass a tint from
+    /// `OverlayState.tint(for:)`, which already yields `nil` under Increase Contrast and when the
+    /// user has turned icon tinting off, so both settings reach the hub without another check.
+    func hubAmbience(for tint: IconTint?) -> Color {
+        guard let tint, let base = NSColor(hubRing).usingColorSpace(.sRGB) else { return hubRing }
+
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+
+        let reference = Self.relativeLuminance(
+            red: Double(base.redComponent),
+            green: Double(base.greenComponent),
+            blue: Double(base.blueComponent)
+        )
+        // A washed-out icon gets a correspondingly quieter ambience, floored so a pastel still
+        // reads as its own colour rather than collapsing back to the brand.
+        let vivid = min(1, max(0.6, tint.vividness))
+        let wanted = Double(saturation) * vivid
+
+        func luminance(saturation: Double, brightness: Double) -> Double {
+            let (red, green, blue) = Self.components(
+                hue: tint.hue,
+                saturation: saturation,
+                brightness: brightness
+            )
+            return Self.relativeLuminance(red: red, green: green, blue: blue)
+        }
+
+        var resolvedSaturation = wanted
+        var resolvedBrightness = Double(brightness)
+
+        if luminance(saturation: wanted, brightness: resolvedBrightness) > reference {
+            // Monotonic in brightness at a fixed hue, so bisect down onto the reference.
+            var low = 0.0
+            var high = resolvedBrightness
+            for _ in 0..<18 {
+                let mid = (low + high) / 2
+                if luminance(saturation: wanted, brightness: mid) > reference {
+                    high = mid
+                } else {
+                    low = mid
+                }
+            }
+            resolvedBrightness = (low + high) / 2
+        } else if luminance(saturation: wanted, brightness: 1) < reference {
+            // Even at full brightness this hue is darker than the brand. Desaturating raises
+            // luminance, so spend saturation — down to the floor and no further, because a ring
+            // that arrived as pale grey for every cool application would identify nothing.
+            resolvedBrightness = 1
+            var low = wanted * Self.ambienceSaturationFloor
+            var high = wanted
+            for _ in 0..<18 {
+                let mid = (low + high) / 2
+                if luminance(saturation: mid, brightness: 1) < reference {
+                    high = mid
+                } else {
+                    low = mid
+                }
+            }
+            resolvedSaturation = (low + high) / 2
+        } else {
+            resolvedBrightness = 1
+            var low = Double(brightness)
+            var high = 1.0
+            for _ in 0..<18 {
+                let mid = (low + high) / 2
+                if luminance(saturation: wanted, brightness: mid) > reference {
+                    high = mid
+                } else {
+                    low = mid
+                }
+            }
+            resolvedBrightness = (low + high) / 2
+        }
+
+        let (red, green, blue) = Self.components(
+            hue: tint.hue,
+            saturation: resolvedSaturation,
+            brightness: resolvedBrightness
+        )
+        // Built from the components that were actually solved for rather than handed back to
+        // SwiftUI as HSB, so the luminance drawn is the luminance measured.
+        return Color(.sRGB, red: red, green: green, blue: blue, opacity: Double(alpha))
+    }
+
+    /// How much of its saturation a hue may give up to reach the reference luminance.
+    static let ambienceSaturationFloor: Double = 0.55
+
+    /// WCAG relative luminance, the curve `OverlayPaletteTests` measures every ratio with.
+    static func relativeLuminance(red: Double, green: Double, blue: Double) -> Double {
+        func channel(_ value: Double) -> Double {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)
+    }
+
+    /// HSB to sRGB components, so the solve above does not pay for a colour-space round trip on
+    /// every one of its iterations.
+    static func components(
+        hue: Double,
+        saturation: Double,
+        brightness: Double
+    ) -> (red: Double, green: Double, blue: Double) {
+        let wrapped = (hue - floor(hue)) * 6
+        let sector = Int(wrapped) % 6
+        let fraction = wrapped - floor(wrapped)
+        let p = brightness * (1 - saturation)
+        let q = brightness * (1 - saturation * fraction)
+        let t = brightness * (1 - saturation * (1 - fraction))
+        switch sector {
+        case 0: return (brightness, t, p)
+        case 1: return (q, brightness, p)
+        case 2: return (p, brightness, t)
+        case 3: return (p, q, brightness)
+        case 4: return (t, p, brightness)
+        default: return (brightness, p, q)
+        }
+    }
+
+    /// Inner-arc catch light. In the mock this is the glass cue: Chrome's inner edge is
+    /// green, Slack's is pink, the selected one is lit by the hub.
+    ///
+    /// The selected case follows the ambience rather than the resting brand colour. The coupling
+    /// tongue lands on exactly this arc, so a brand-cyan rim under a red tongue would show the
+    /// join as a seam between two different lights.
+    ///
+    /// Pale, which is the whole difference between light caught on an edge and a line drawn along
+    /// one. Sampled at its peak the reference's inner arc is (146,121,178) on its purple card —
+    /// luminance 130 at 0.32 saturation, a washed lavender whose darkest channel is still 121. At
+    /// 0.82 this overlay produced (72,191,157) and (63,124,187): 0.62–0.66 saturation with a
+    /// darkest channel around 65, which is a vivid stroke rather than a highlight, and reads as an
+    /// outline at any blur radius. Hue is untouched — a Chrome edge is still green, a Slack edge
+    /// still pink, which is what the arc is for.
+    func glassRim(for tint: IconTint?, selected: Bool, scheme: ColorScheme) -> Color {
+        if selected { return hubAmbience(for: tint) }
+        guard let tint else {
+            return Color.white.opacity(scheme == .light ? 0.40 : 0.20)
+        }
+        return Color(
+            hue: tint.hue,
+            saturation: scheme == .dark ? 0.38 : 0.26,
+            brightness: scheme == .dark ? 0.95 : 1.0,
+            opacity: 1
+        )
+    }
+
+    /// How strongly a radial wedge's own shadow lifts it off the desktop, `0...1`.
+    ///
+    /// Light needs more: a white tile on a white desktop has no edge without it. This is the
+    /// shadow of the *wedge*, not of the hub. The well draws in front of the inward bleed, so
+    /// the extra Light Mode weight cannot darken the caption — which is why this lives on the
+    /// palette, where the contrast argument lives, rather than as a one-off in the view.
+    let wedgeShadowOpacity: Double
 
     static func forScheme(_ scheme: ColorScheme) -> OverlayPalette {
         scheme == .dark ? .dark : .light
@@ -97,6 +424,7 @@ struct OverlayPalette {
         strongBorder: Color(.sRGB, white: 1, opacity: 0.20),
         text: Color(.sRGB, white: 1, opacity: 1),
         secondaryText: Color(.sRGB, white: 1, opacity: 0.58),
+        hubSecondaryText: Color(.sRGB, white: 1, opacity: 0.85),
         chipFill: Color(.sRGB, red: 18 / 255, green: 22 / 255, blue: 26 / 255, opacity: 1),
         accent: Self.brand,
         accentFill: Self.brandFill,
@@ -110,12 +438,39 @@ struct OverlayPalette {
         tintStrength: 0.26,
         tintSaturation: 1.0,
         tintBrightness: 0.26,
-        // Lower than the light theme's. The dark card is near-black and the text on it is white, so
-        // artwork can only close the gap between them; the light theme's white card with dark text
-        // has the same asymmetry the other way round and more room to give.
-        // Much higher than the opacity-only approach could allow, because the blend direction is
-        // what keeps it safe now rather than the number being small.
-        hubArtworkOpacity: 0.06
+        // Black rather than the selected-card tint: the well is a hole, not another card, and its
+        // job is to carry type, not to identify the window. The ring does that.
+        //
+        // Was (12,14,16). Profiled in annuli, the dark reference's interior is luminance 0 at every
+        // percentile from 0.05 to 0.45 of the ring radius — not dark, *black* — and its climb to the
+        // rim starts only past 0.6. Both this and `HubChrome.backdropIconOpacityDark` were holding
+        // the middle above it; this is the smaller of the two contributions but it is the floor
+        // everything else is measured from, so it goes first.
+        hubWellFill: Color(.sRGB, red: 4 / 255, green: 5 / 255, blue: 6 / 255, opacity: 1),
+        // The dark reference's rim, sampled at its peak: (179,223,213), hue 0.462, saturation 0.197.
+        //
+        // Taken as the *composited* target rather than as a starting colour, which is what makes it
+        // the right value. The rim's layers sum to roughly one unit of opacity at the centreline, so
+        // an additive stack of this colour lands on this colour. Anything more saturated cannot get
+        // there: the previous 0.49 measured 0.51 on screen — the same hue reading as neon rather
+        // than as light — and pushing brightness at it instead just clipped green to 255 and drained
+        // the hue out of the brightest pixel in the overlay. There is no setting where an additive
+        // rim is both brighter than its own source and still coloured.
+        //
+        // This is also the ceiling on `hubAmbience`, which takes saturation from here and only moves
+        // hue, so calming the brand calms every window's ambience with it.
+        // Brighter than the reference's measured (179,223,213), and for a mechanical reason rather
+        // than a stylistic one: the rim composites normally now, so this value is a ceiling rather
+        // than a contribution, and the blur spends part of it spreading the stroke's edges.
+        //
+        // How much was measured rather than estimated. Rendering with icon tinting off, so the ring
+        // paints this colour and nothing substitutes its hue, the drawn peak came out at luminance
+        // 200 from a source of 224 — the missing 11% is the blur, and the earlier "about 10%, so
+        // start 5% above" halved the correction it had already worked out. Starting 8% above lands
+        // the drawn peak on the reference's 217 with saturation intact.
+        hubRing: Color(.sRGB, red: 206 / 255, green: 252 / 255, blue: 242 / 255, opacity: 1),
+        radialSelectedStrengthScale: 1.55,
+        wedgeShadowOpacity: 0.34
     )
 
     /// `--ps-*` light theme.
@@ -127,8 +482,10 @@ struct OverlayPalette {
         strongBorder: Color(.sRGB, red: 32 / 255, green: 30 / 255, blue: 29 / 255, opacity: 0.30),
         text: Color(.sRGB, red: 32 / 255, green: 30 / 255, blue: 29 / 255, opacity: 1),
         // The design's 0.55 measures 3.7:1 on a white card, which is short of 4.5:1 for
-        // 10pt type. Weighted up until the secondary line actually clears it.
-        secondaryText: Color(.sRGB, red: 32 / 255, green: 30 / 255, blue: 29 / 255, opacity: 0.68),
+        // 10pt type. Weighted up until the secondary line actually clears it — and weighted up
+        // again to buy the headroom `hubWellFill` needs to stop being white. See there.
+        secondaryText: Color(.sRGB, red: 32 / 255, green: 30 / 255, blue: 29 / 255, opacity: 0.76),
+        hubSecondaryText: Color(.sRGB, red: 32 / 255, green: 30 / 255, blue: 29 / 255, opacity: 0.9),
         chipFill: Color(.sRGB, red: 252 / 255, green: 251 / 255, blue: 250 / 255, opacity: 1),
         accent: Self.brand,
         accentFill: Self.brandFill,
@@ -141,8 +498,50 @@ struct OverlayPalette {
         tintStrength: 0.15,
         tintSaturation: 0.85,
         tintBrightness: 1.0,
-        hubArtworkOpacity: 0.10
+        // A shallow recess, not a white disc. The light reference's hub interior measures luminance
+        // 224–230 against cards at 235 and a rim crest at 250, so the middle is very slightly
+        // *darker* than everything around it — the same "hole with a lit rim" the dark theme draws,
+        // translated. At 252 there was nothing for the rim to be brighter than: the ring measured a
+        // +3 lift where the reference gets +20, and no amount of ring opacity could fix it, because
+        // in Light Mode the rim composites normally and 255 is the ceiling.
+        //
+        // This is what `secondaryText` was weighted up for. On this fill the 9pt line measures
+        // 6.6:1, and 6.0:1 under the worst case the watermark can produce — a uniformly black icon.
+        // `HubTintTests` measures both from the render.
+        hubWellFill: Color(.sRGB, red: 231 / 255, green: 229 / 255, blue: 227 / 255, opacity: 1),
+        // Near-white cyan, because in Light Mode the rim has to be *brighter* than what it sits on
+        // and it composites normally rather than additively — so its own luminance is a hard ceiling
+        // on the rim, however much opacity is thrown at it.
+        //
+        // Measured: the light reference's rim crests at (243,252,253), luminance 250, against an
+        // interior of 229. At (70,190,230) — 0.70 saturation, luminance 190 — this overlay drew a
+        // *darker* band than everything around it, a green-cyan stroke painted on white. At (214,
+        // 250,255) the ceiling was 243, so the rim could not clear its own surroundings by more
+        // than a few levels whatever else was tuned.
+        //
+        // This is a deliberate compromise rather than the reference exactly, and where the
+        // compromise falls is now measured rather than reasoned about. Rendered, this stroke loses
+        // about 8% of its source to the blur mixing with the well beside it: at (238,252,255),
+        // luminance 248, the drawn rim came out at 228 against an interior of 221 — a +7 lift where
+        // the reference gets +23. Raising the source to luminance 253 recovers most of the
+        // difference and costs 5 points of the hue's already-slim chroma.
+        //
+        // It cannot be closed entirely. Reaching the reference's 250 *on screen* needs a source
+        // above 270, which does not exist, and the hub's ambience is supposed to carry the hue of
+        // the window under the pointer, which a pure-white rim cannot do at all. Dark Mode has no
+        // such conflict: there the rim is bright against black rather than against white.
+        hubRing: Color(.sRGB, red: 246 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
+        // Kept close to 1: every extra point of tint on a white card costs the secondary line,
+        // and 1.85 failed 4.5:1 on blues. 1.3 is still visibly stronger than rest.
+        radialSelectedStrengthScale: 1.3,
+        wedgeShadowOpacity: 0.38
     )
+
+    /// Hue of `hubRing` / the selected glass, as a fraction of the wheel.
+    ///
+    /// Shared so the selected wedge, the halo and the coupling stay one cyan rather
+    /// than three neighbouring ones.
+    private static let brandHue: Double = 0.532
 
     /// PeekSwitch's selection colour, `#0088b0`.
     private static let brand = Color(

@@ -18,7 +18,11 @@ struct OverlayLayoutTests {
     private static let cramped = CGSize(width: 700, height: 480)
 
     /// Styles that page by whole items, as opposed to the strip's pixel scrolling.
-    private static let positionedStyles: [OverlayLayoutStyle] = [.grid, .list, .circular]
+    ///
+    /// The spiral belongs here now that the round arrangements are capped rather than shrunk
+    /// without limit — see `RadialLayout`'s note. It was omitted while they seated every window,
+    /// which meant the paging invariants were only ever exercised against the circular winding.
+    private static let positionedStyles: [OverlayLayoutStyle] = [.grid, .list, .circular, .spiral]
 
     private func layout(
         _ style: OverlayLayoutStyle,
@@ -664,12 +668,17 @@ struct OverlayLayoutTests {
         #expect(OverlayLayoutStyle(rawValue: 4) == .spiral)
     }
 
-    // MARK: - Seating every window
+    // MARK: - Seating and the cap
 
-    /// The point of the round arrangements: no paging. Every window gets a seat, and the
-    /// arrangement shrinks to make room.
-    @Test("Every window is seated at any realistic count", arguments: radialStyles)
-    func everyWindowIsSeated(style: OverlayLayoutStyle) {
+    /// What the round arrangements now promise: every window they seat is a *card*, and any window
+    /// they cannot seat that way is paged rather than squeezed in.
+    ///
+    /// The previous promise was the opposite — every window seated, at whatever size that took —
+    /// and it was measurably the wrong trade. See `RadialLayout`'s note on the cap: at 25 windows
+    /// on a 1512x950 display the wedges came out shallower than the hub's own radius, and the
+    /// content box lost 40% of its area, taking the icon and its label with it.
+    @Test("The ring seats cards, and pages what it cannot", arguments: radialStyles)
+    func ringSeatsCardsAndPagesTheRest(style: OverlayLayoutStyle) throws {
         let displays = [
             CGSize(width: 1512, height: 982),
             CGSize(width: 1920, height: 1080),
@@ -678,42 +687,90 @@ struct OverlayLayoutTests {
         ]
 
         for display in displays {
+            let visibleFrame = CGRect(origin: .zero, size: display)
             let available = CGSize(
-                width: display.width * StripLayout.maxWidthFraction,
-                height: display.height * StripLayout.maxHeightFraction
+                width: OverlayPlacement.availableContentWidth(visibleFrame: visibleFrame),
+                height: OverlayPlacement.availableContentHeight(
+                    visibleFrame: visibleFrame,
+                    style: style
+                )
             )
-            // Up to the largest list the settings will produce.
             for count in [1, 5, 8, 9, 16, 17, SettingsStore.historyDepthRange.upperBound] {
                 let subject = layout(style, count: count, available: available)
+                let geometry = try #require(subject.radial)
+
+                // Whatever is on screen is the whole of what the ring drew, and the accounting
+                // adds up: nothing is drawn twice and nothing vanishes without being counted.
+                #expect(subject.visibleRange.count == geometry.seats)
+                #expect(subject.positionedCards().count == geometry.seats)
+                #expect(subject.hiddenCount == count - geometry.seats)
+
+                // Small counts are never paged. Whatever the cap turns out to be on a given
+                // display, a single turn of wedges is always seated.
+                if count <= RadialLayout.seatsPerTurn {
+                    #expect(
+                        subject.hiddenCount == 0,
+                        "\(style) paged \(count) windows on \(display)"
+                    )
+                }
+
+                // The cap's whole purpose: what *is* seated holds the reference proportion.
+                let ring = geometry.hubRadius - HubChrome.ringInset
+                let depthRatio = geometry.ringThickness / ring
                 #expect(
-                    subject.visibleRange.count == count,
-                    "\(style) paged \(count) windows on \(display)"
+                    depthRatio >= RadialLayout.minimumDepthRatio - 0.001
+                        || geometry.seats <= RadialLayout.seatsPerTurn,
+                    "\(style)/\(count) on \(display): depth is \(depthRatio) of the ring radius"
                 )
-                #expect(subject.hiddenCount == 0)
-                #expect(subject.positionedCards().count == count)
             }
         }
     }
 
-    /// Shrinking is what buys that, so it has to actually happen — and stay within bounds.
-    @Test("The arrangement shrinks as the count grows", arguments: RadialLayout.Winding.allCases)
-    func scaleShrinksWithCount(winding: RadialLayout.Winding) {
+    /// The cap does not replace shrinking, it bounds it. Adding a window still never makes the
+    /// arrangement bigger, and the scale stays inside its range.
+    @Test("The arrangement never grows as the count grows", arguments: RadialLayout.Winding.allCases)
+    func scaleNeverGrowsWithCount(winding: RadialLayout.Winding) {
         let cramped = CGSize(width: 1300, height: 805)
-        let few = radial(winding, count: 4, available: cramped)
-        let many = radial(winding, count: 25, available: cramped)
 
         // A handful of windows gets the arrangement at its intended size, never a blown-up one.
-        #expect(few.scale == 1)
-        #expect(many.scale < few.scale)
-        #expect(many.scale >= RadialLayout.minimumScale)
+        #expect(radial(winding, count: 4, available: cramped).scale == 1)
 
-        // Monotonic: adding a window never makes the arrangement bigger.
         var previous: CGFloat = 1.001
         for count in 1...25 {
-            let scale = radial(winding, count: count, available: cramped).scale
-            #expect(scale <= previous + 0.0001, "\(count) windows scaled up")
-            previous = scale
+            let subject = radial(winding, count: count, available: cramped)
+            #expect(subject.scale <= previous + 0.0001, "\(count) windows scaled up")
+            #expect(subject.scale >= RadialLayout.minimumScale)
+            #expect(subject.scale <= 1)
+            previous = subject.scale
         }
+    }
+
+    /// The cap has to actually engage on the display it was measured against, or none of the
+    /// above is doing anything. Twenty-five windows is the largest list the settings produce, and
+    /// a 1512x950 visible frame is the machine the references were compared on.
+    @Test("A crowded ring on a laptop display pages rather than shrinking", arguments: radialStyles)
+    func crowdedRingPagesOnALaptopDisplay(style: OverlayLayoutStyle) throws {
+        let visibleFrame = CGRect(x: 0, y: 0, width: 1512, height: 950)
+        let subject = layout(
+            style,
+            count: SettingsStore.historyDepthRange.upperBound,
+            available: CGSize(
+                width: OverlayPlacement.availableContentWidth(visibleFrame: visibleFrame),
+                height: OverlayPlacement.availableContentHeight(
+                    visibleFrame: visibleFrame,
+                    style: style
+                )
+            )
+        )
+        let geometry = try #require(subject.radial)
+
+        #expect(subject.hiddenCount > 0, "\(style) still seated every window")
+        #expect(geometry.seats >= RadialLayout.seatsPerTurn * 2, "\(style) capped too hard")
+        // And the label survives, which is the property the old behaviour lost first.
+        #expect(
+            geometry.contentSize.height >= 51,
+            "\(style) content box \(geometry.contentSize) is too short for a name"
+        )
     }
 
     @Test("The panel always fits the display", arguments: radialStyles)
@@ -731,6 +788,148 @@ struct OverlayLayoutTests {
                 let panel = layout(style, count: count, available: available).panelSize
                 #expect(panel.width <= available.width + 0.001, "\(style)/\(count) on \(display)")
                 #expect(panel.height <= available.height + 0.001, "\(style)/\(count) on \(display)")
+            }
+        }
+    }
+
+    /// Production uses a larger radial-only budget and a protected centre. Pin the physical
+    /// ring-to-seat distance at realistic counts: the regression came from treating a soft blur
+    /// extent as empty geometry and pushing every wedge tens of points too far from the hub.
+    @Test("Crowded radial layouts preserve the mock's physical hub and ring spacing")
+    func crowdedRadialGeometryMatchesTheMock() throws {
+        let visibleFrame = CGRect(x: 0, y: 0, width: 1512, height: 950)
+        let width = OverlayPlacement.availableContentWidth(visibleFrame: visibleFrame)
+        let expectedRingGap = RadialLayout.baseHubGap + HubChrome.ringInset
+
+        for style in Self.radialStyles {
+            let height = OverlayPlacement.availableContentHeight(
+                visibleFrame: visibleFrame,
+                style: style
+            )
+            for count in [15, 16, 17, 20, 22, SettingsStore.historyDepthRange.upperBound] {
+                let subject = layout(
+                    style,
+                    count: count,
+                    available: CGSize(width: width, height: height)
+                )
+                let geometry = try #require(subject.radial)
+                let radialBudget = visibleFrame.height * 0.94
+                let ringCentre = geometry.hubRadius - HubChrome.ringInset
+
+                // Fits the budget, but no longer required to *fill* it. Once the ring is capped
+                // the panel stops growing with the count: on this display the circular winding
+                // seats sixteen wedges at full scale in a 756pt panel rather than stretching two
+                // turns across 893pt. Filling the display was never the goal — holding the
+                // reference's proportions was, and that is asserted below.
+                #expect(subject.panelSize.height <= radialBudget + 0.01)
+                // The reference hub is about 92pt, and it never shrinks past what the caption
+                // needs however many windows are open.
+                #expect(
+                    geometry.hubRadius >= RadialLayout.minimumHubRadius - 0.001,
+                    "\(style)/\(count) hub collapsed to \(geometry.hubRadius)"
+                )
+                #expect(geometry.hubRadius <= RadialLayout.baseHubRadius + 0.001)
+                if count <= 17 {
+                    #expect(geometry.hubRadius >= 91, "\(style)/\(count) hub is \(geometry.hubRadius)")
+                }
+
+                // Depth is what makes a wedge read as a card rather than a band, and it now holds
+                // at *every* count rather than relaxing to a floor once the display runs out of
+                // radius. That is the cap doing its job: the arrangement stops adding wedges
+                // instead of continuing to flatten the ones it has. This assertion used to carry
+                // two floors — 1.15 up to sixteen windows and 0.9 beyond — and the second one was
+                // the bug, written down as a requirement.
+                let depthRatio = geometry.ringThickness / ringCentre
+                #expect(
+                    depthRatio >= RadialLayout.minimumDepthRatio - 0.001,
+                    "\(style)/\(count) wedge depth is \(depthRatio) of the ring radius"
+                )
+                #expect(
+                    isClose(geometry.hubGap, RadialLayout.baseHubGap, tolerance: 0.01),
+                    "\(style)/\(count) hub seam became \(geometry.hubGap)pt"
+                )
+                #expect(
+                    isClose(
+                        geometry.ringCentreToFirstRingGap,
+                        expectedRingGap,
+                        tolerance: 0.01
+                    ),
+                    "\(style)/\(count) ring-to-seat gap became \(geometry.ringCentreToFirstRingGap)pt"
+                )
+                #expect(
+                    isClose(
+                        geometry.firstRingRadius,
+                        geometry.hubRadius + RadialLayout.baseHubGap,
+                        tolerance: 0.01
+                    )
+                )
+
+                // The ratio a person actually compares against the mock: the reference void is
+                // 28px against a 172px ring radius, taken as the per-angle *minimum* card start.
+                // Held at every realistic count, because the seam is protected chrome while the
+                // wedge stack scales around it.
+                //
+                // The minimum is the honest instrument. A spiral seats exactly one wedge at the
+                // innermost radius, so a single bearing lands on a further-out turn more often
+                // than not — which is how this was previously read as 53px and the cards pushed
+                // twice as far from the hub as the reference puts them.
+                let voidRatio = geometry.ringCentreToFirstRingGap / ringCentre
+                #expect(
+                    abs(voidRatio - 28.0 / 172.0) < 0.04,
+                    "\(style)/\(count) void is \(voidRatio) of the ring radius, mock is 0.163"
+                )
+                #expect(isClose(geometry.seat(at: 0).innerRadius, geometry.firstRingRadius))
+
+                // Turn separation, which had no coverage and had drifted to 0.075 of a card's
+                // depth against the reference's 0.169 — the reason two turns read as one dense
+                // band. Scale cancels here, so this holds at every count.
+                #expect(
+                    isClose(
+                        geometry.turnGap / geometry.ringThickness,
+                        RadialLayout.baseTurnGap / RadialLayout.baseRingThickness,
+                        tolerance: 0.001
+                    )
+                )
+                #expect(
+                    geometry.turnGap / geometry.ringThickness >= 0.12,
+                    "\(style)/\(count) separates turns by only \(geometry.turnGap / geometry.ringThickness) of a card"
+                )
+            }
+        }
+    }
+
+    /// The caption is drawn on the well's opaque core. If the hub shrinks far enough that the type
+    /// no longer fits that core, the glyphs land on the transparent part of a non-opaque panel and
+    /// the desktop reads through them — unreadable, and invisible in any test that only checks one
+    /// display at one count. Sweep the real budgets instead.
+    ///
+    /// Caught a live case: 1440x875 with 25 windows resolved an 85.2pt hub, a 122.7pt core against
+    /// the 124pt the caption is laid out for, and 1280x800 clipped from 20 windows up.
+    @Test("The caption's plate survives every display and count", arguments: radialStyles)
+    func captionPlateNeverClips(style: OverlayLayoutStyle) throws {
+        for display in [
+            CGSize(width: 1512, height: 950),
+            CGSize(width: 1440, height: 875),
+            CGSize(width: 1280, height: 800),
+            CGSize(width: 1152, height: 720),
+        ] {
+            let visibleFrame = CGRect(origin: .zero, size: display)
+            let available = CGSize(
+                width: OverlayPlacement.availableContentWidth(visibleFrame: visibleFrame),
+                height: OverlayPlacement.availableContentHeight(
+                    visibleFrame: visibleFrame,
+                    style: style
+                )
+            )
+            for count in [8, 16, 20, SettingsStore.historyDepthRange.upperBound] {
+                let geometry = try #require(
+                    layout(style, count: count, available: available).radial
+                )
+                let plate = geometry.hubRadius * 2 * HubChrome.wellOpaqueFraction
+                #expect(
+                    plate >= HubTypography.captionDiameter - 0.001,
+                    "\(style)/\(count) on \(display): caption needs \(HubTypography.captionDiameter)pt, plate is \(plate)pt"
+                )
             }
         }
     }
@@ -997,6 +1196,45 @@ struct OverlayLayoutTests {
         )
     }
 
+    /// The halo paints a band just outside the hub circle. With fewer than eight circular
+    /// seats that band is visible over empty slots, and a click there has to confirm — it
+    /// looks like hub, not like desktop.
+    @Test("A click on the painted halo over an empty slot confirms")
+    func haloOverEmptySlotConfirms() throws {
+        let subject = layout(.circular, count: 5, selected: 1)
+        let geometry = try #require(subject.radial)
+        let angle = RadialLayout.startAngle + 6 * RadialLayout.sweep + RadialLayout.sweep / 2
+        let hubR = geometry.hubRadius
+
+        func point(atRadius radius: CGFloat) -> CGPoint {
+            CGPoint(
+                x: geometry.centre.x + radius * CGFloat(cos(angle)),
+                y: geometry.centre.y + radius * CGFloat(sin(angle))
+            )
+        }
+
+        let painted = point(atRadius: hubR + HubChrome.haloReach / 2)
+        #expect(hit(subject, atTopLeft: painted) == nil, "empty slot must not be a wedge")
+        #expect(subject.commitsSelection(atPanelPoint: appKitPoint(painted, in: subject)))
+        #expect(
+            subject.target(
+                atPanelPoint: appKitPoint(painted, in: subject),
+                scrollOffset: 0,
+                selectedScale: 1
+            ) == .confirmSelection
+        )
+
+        let past = point(atRadius: hubR + HubChrome.haloReach + 8)
+        #expect(!subject.commitsSelection(atPanelPoint: appKitPoint(past, in: subject)))
+        #expect(
+            subject.target(
+                atPanelPoint: appKitPoint(past, in: subject),
+                scrollOffset: 0,
+                selectedScale: 1
+            ) == .background
+        )
+    }
+
     /// Beyond the outermost turn there is nothing, so a click there dismisses.
     @Test("Points outside the outermost turn hit nothing", arguments: radialStyles)
     func outsideTheArcHitsNothing(style: OverlayLayoutStyle) {
@@ -1078,13 +1316,25 @@ struct OverlayLayoutTests {
     func closeAffordanceStaysInsideItsWedge(style: OverlayLayoutStyle) {
         // Includes counts that force the arrangement well down its scale range, where the wedge
         // can be shallower than the button is tall.
+        let available = CGSize(width: 1300, height: 805)
         for count in [3, 8, 16, 25] {
             for selected in [0, count - 1] {
+                // Paged into view first. The last of 25 windows is not on a capped ring at
+                // `visibleStart` zero, and a button belonging to a wedge that was never drawn is
+                // not a containment failure — it is the test asking the wrong question.
+                let start = layout(
+                    style,
+                    count: count,
+                    selected: selected,
+                    available: available
+                ).visibleStart(keepingSelectionVisible: 0)
+
                 let subject = layout(
                     style,
                     count: count,
                     selected: selected,
-                    available: CGSize(width: 1300, height: 805)
+                    available: available,
+                    visibleStart: start
                 )
                 guard
                     let geometry = subject.radial,
@@ -1094,11 +1344,14 @@ struct OverlayLayoutTests {
                     return
                 }
 
+                // The seat's position in the visible run, which is what the geometry indexes —
+                // not the entry's index in the full list.
+                let offset = selected - subject.visibleRange.lowerBound
                 let button = subject.closeButtonFrame(for: card, selectedScale: style.selectedScale)
                 #expect(
                     geometry.seatOffset(atContentPoint: CGPoint(x: button.midX, y: button.midY))
-                        == selected,
-                    "\(style)/\(count): the button left seat \(selected)"
+                        == offset,
+                    "\(style)/\(count): the button left seat \(offset)"
                 )
             }
         }

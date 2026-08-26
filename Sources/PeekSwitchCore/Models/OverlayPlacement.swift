@@ -78,12 +78,23 @@ enum OverlayPlacement {
         return max(StripLayout.cardSize.width, usable - StripLayout.contentInset * 2)
     }
 
-    /// Height the overlay may occupy on a given display. The grid, list and radial
-    /// styles are tall enough to need this; the strip is one card high and ignores it.
+    /// Height the overlay may occupy on a given display. The grid and list retain the compact
+    /// 82% budget; the radial styles use the reference's broader 94% canvas. Radial geometry owns
+    /// its own 18pt edge padding, so subtracting the strip's inset here used to double-charge it
+    /// and collapse the hub-to-wedge void at realistic window counts.
     ///
-    /// The floor keeps a very short display (or a transient zero-height frame during
-    /// reconfiguration) from producing a panel with no room for a single card.
-    static func availableContentHeight(visibleFrame: CGRect) -> CGFloat {
+    /// Keep enough room for search chrome even after the radial panel has expanded. The floor
+    /// still protects a transient zero-height frame during display reconfiguration.
+    static func availableContentHeight(
+        visibleFrame: CGRect,
+        style: OverlayLayoutStyle
+    ) -> CGFloat {
+        if style.radialWinding != nil {
+            let radialHeight = visibleFrame.height * 0.94
+            let searchSafeHeight = visibleFrame.height - OverlayLayout.searchFieldHeight
+            return max(StripLayout.cardSize.height, min(radialHeight, searchSafeHeight))
+        }
+
         let usable = visibleFrame.height * StripLayout.maxHeightFraction
         return max(StripLayout.cardSize.height, usable - StripLayout.contentInset * 2)
     }

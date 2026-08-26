@@ -17,8 +17,12 @@ import SwiftUI
 ///
 /// ## No captions
 ///
-/// There is deliberately no header, no counter and no keyboard hint. They described the
-/// overlay instead of showing it, and on an overlay this short-lived that is noise.
+/// There is deliberately no header and no keyboard hint. They described the overlay instead of
+/// showing it, and on an overlay this short-lived that is noise.
+///
+/// One counter survives, in the hub: the number of windows the ring could not seat. It is not a
+/// description of the overlay, it is the correction to one — the round arrangements are chosen
+/// because they show everything at once, so the case where they do not has to be visible.
 struct OverlayView: View {
 
     @ObservedObject var state: OverlayState
@@ -31,29 +35,6 @@ struct OverlayView: View {
 
     private var palette: OverlayPalette { OverlayPalette.forScheme(colorScheme) }
     private var layout: OverlayLayout { state.layout }
-
-    /// The hub stays fully opaque through its nominal radius, then fades as one continuous
-    /// same-colour corona to a stable 1.45× radius. The fixed reach keeps the hub's visual weight
-    /// unchanged as windows are opened, closed, or filtered.
-    private static let hubCoronaReach: CGFloat = 1.45
-
-    private static func hubCoronaMask(reach: CGFloat) -> Gradient {
-        let safeReach = max(1, reach)
-        let coreLocation = 1 / safeReach
-        let sampleCount = 8
-        var stops: [Gradient.Stop] = [
-            .init(color: .white, location: 0),
-            .init(color: .white, location: coreLocation)
-        ]
-
-        for sample in 1...sampleCount {
-            let progress = Double(sample) / Double(sampleCount)
-            let alpha = pow(1 - progress, 1.7)
-            let location = coreLocation + (1 - coreLocation) * CGFloat(progress)
-            stops.append(.init(color: .white.opacity(alpha), location: location))
-        }
-        return Gradient(stops: stops)
-    }
 
     /// Cards, positioned. The strip is the only style with a non-zero scroll offset.
     private var cards: [OverlayLayout.PositionedCard] {
@@ -166,14 +147,6 @@ struct OverlayView: View {
     /// each one casts its own shadow instead of borrowing the panel's.
     private var cardShadowRadius: CGFloat { showsBackdrop ? 0 : 9 }
     private var cardShadowOpacity: Double { showsBackdrop ? 0 : 0.34 }
-
-    /// White radial cards need a touch more lift from a white desktop, but a stronger stroke would
-    /// also darken every seam inside the ring. Keep the same broad shadow and raise only its source
-    /// opacity in Light Mode; Dark Mode already has enough edge contrast and stays unchanged.
-    private var wedgeShadowOpacity: Double {
-        guard !showsBackdrop else { return 0 }
-        return colorScheme == .light ? 0.38 : 0.34
-    }
 
     // MARK: - Cards
 
@@ -324,20 +297,77 @@ struct OverlayView: View {
 
     private var radial: some View {
         ZStack(alignment: .topLeading) {
-            // The corona reaches into the first ring, so it must be behind every wedge. Drawing it
-            // with the caption would wash translucent colour over unselected cards.
-            hubSurface
+            // Halo first: translucent, so it cannot sit on a card. Ring next so its
+            // inward bloom cannot land on the title — the well's opaque core covers it.
+            // Well after the wedges so a turn-0 shadow cannot land on the caption.
+            // Coupling then caption then close.
+            HubRingHalo(
+                frame: layout.radialHubFrame,
+                ambience: hubAmbience,
+                angle: state.radialRingAngle,
+                isRevealed: state.isRevealed,
+                reduceMotion: state.reduceMotion
+            )
+            .animation(selectionAnimation, value: state.radialRingAngle)
+            .animation(ambienceAnimation, value: hubAmbience)
+            .zIndex(0)
 
+            // Isolate wedge-local z-indices below every front hub layer. Without this parent
+            // level, the selected wedge's zIndex(1) rose above the later well and erased the
+            // inward glow and coupling along exactly the selected axis.
             ForEach(layout.radialSeats, id: \.index) { positioned in
                 wedge(positioned)
             }
+            .zIndex(1)
+
+            HubRing(
+                frame: layout.radialHubFrame,
+                ambience: hubAmbience,
+                angle: state.radialRingAngle,
+                isRevealed: state.isRevealed,
+                reduceMotion: state.reduceMotion
+            )
+            .animation(selectionAnimation, value: state.radialRingAngle)
+            .animation(ambienceAnimation, value: hubAmbience)
+            .zIndex(2)
+
+            // The watermark is passed *into* the well rather than layered over it. It used to draw
+            // here, at zIndex 3.5, between the well and the caption — which is what forced its
+            // opacity to be a contrast budget, because nothing stood between it and 9pt type. The
+            // well now stacks it between its own frosted substrate and its scrim, so the scrim
+            // protects the caption from the icon exactly as it protects it from the wallpaper.
+            HubWell(
+                frame: layout.radialHubFrame,
+                ambience: hubAmbience,
+                backdropIcon: hubBackdropIcon,
+                isRevealed: state.isRevealed,
+                reduceMotion: state.reduceMotion
+            )
+            .animation(ambienceAnimation, value: hubAmbience)
+            .zIndex(3)
+
+            if state.selectedEntry != nil {
+                HubCoupling(
+                    centre: layout.radialCentre,
+                    ambience: hubAmbience,
+                    angle: state.radialRingAngle,
+                    innerRadius: selectedCouplingInnerRadius,
+                    isRevealed: state.isRevealed,
+                    reduceMotion: state.reduceMotion
+                )
+                .animation(selectionAnimation, value: state.radialRingAngle)
+                .animation(ambienceAnimation, value: hubAmbience)
+                .zIndex(4)
+            }
 
             hubCaption
+                .zIndex(5)
 
             // Drawn last so it sits above the wedge it belongs to.
             ForEach(cards, id: \.index) { positioned in
                 closeButton(for: positioned)
             }
+            .zIndex(6)
         }
         .frame(width: layout.panelSize.width, height: layout.panelSize.height)
     }
@@ -360,8 +390,12 @@ struct OverlayView: View {
             display: state.display(for: entry),
             isIncognito: state.isIncognito(entry),
             tint: state.tint(for: entry),
-            shadowRadius: cardShadowRadius,
-            shadowOpacity: wedgeShadowOpacity
+            // Scaled with the arrangement: a flat 9pt blur on a 48pt hub is 19% of the
+            // radius, and even with the well in front the outer edge would swallow a
+            // neighbour. The floor keeps a shrunken ring from losing lift entirely.
+            shadowRadius: max(4, cardShadowRadius * layout.radialScale),
+            shadowOpacity: palette.wedgeShadowOpacity,
+            increaseContrast: state.increaseContrast
         )
         // Wedges are painted in seat order, so without this the selected one's glow would
         // be overpainted by whichever wedge happens to come after it.
@@ -377,37 +411,46 @@ struct OverlayView: View {
         )
     }
 
-    /// The selected hub's colour plate. Its nominal radius remains fully opaque so caption
-    /// contrast is independent of the desktop; the remaining 45% fades continuously to clear.
+    /// Colour of every glow the hub throws, taken from the window under the pointer.
     ///
-    /// This is deliberately visual-only and leaves `radialHubFrame` unchanged: the glow must not
-    /// enlarge the hub's confirmation hit target or steal the innermost part of a wedge.
-    @ViewBuilder
-    private var hubSurface: some View {
-        if let entry = state.selectedEntry {
-            let frame = layout.radialHubFrame
-            let hubRadius = frame.width / 2
-            let reach = Self.hubCoronaReach
-            let surfaceRadius = hubRadius * reach
-            let surfaceDiameter = surfaceRadius * 2
+    /// Keyed off `state.selectedEntry` rather than `hoveredIndex`, which is the correct source
+    /// here for two independent reasons. Hovering a wedge *is* selecting it — `SwitcherController`
+    /// assigns selection from the hover sample — so this already tracks the pointer. And unlike
+    /// the hover index, which is deliberately unpublished so a 60Hz sampler cannot invalidate the
+    /// overlay, the selection publishes; a hue keyed off the index alone could keep the previous
+    /// colour until something else happened to trigger a render.
+    ///
+    /// Resolved here, once, rather than in each hub layer: `HubRing` and `HubCoupling` rebuild
+    /// their bodies 24 times a second under `TimelineView`, and this does colour-space conversion.
+    private var hubAmbience: Color {
+        guard let entry = state.selectedEntry else { return palette.hubRing }
+        return palette.hubAmbience(for: state.tint(for: entry))
+    }
 
-            Circle()
-                .fill(palette.selectedCardFill(tintedBy: state.tint(for: entry)))
-                .frame(width: surfaceDiameter, height: surfaceDiameter)
-                .mask(
-                    RadialGradient(
-                        gradient: Self.hubCoronaMask(reach: reach),
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: surfaceDiameter / 2
-                    )
-                )
-                .allowsHitTesting(false)
-                .animation(captionChangeAnimation, value: entry.id)
-                .opacity(state.isRevealed ? 1 : 0)
-                .animation(hubRevealAnimation, value: state.isRevealed)
-                .position(x: frame.midX, y: frame.midY)
+    /// The hovered window's icon, as a watermark for the middle.
+    ///
+    /// Suppressed under Increase Contrast. A user who asked the system for more contrast has
+    /// asked for the opposite of a decorative shape underneath 9pt type, and unlike the ambience
+    /// this cannot express itself by hue alone.
+    private var hubBackdropIcon: NSImage? {
+        guard !state.increaseContrast else { return nil }
+        return selectedDisplayIcon
+    }
+
+    /// A hue change is a change of light with no direction to it, so it eases in and out rather
+    /// than decelerating, and it is slower than the ring's travel: the glow settling into a new
+    /// colour should trail the hotspot arriving, not race it.
+    private var ambienceAnimation: Animation? {
+        state.reduceMotion ? nil : .easeInOut(duration: 0.30)
+    }
+
+    private var selectedCouplingInnerRadius: CGFloat {
+        guard let index = state.selectedIndex,
+              let seat = layout.radialSeats.first(where: { $0.index == index })?.seat
+        else {
+            return layout.radialHubFrame.width / 2
         }
+        return seat.innerRadius
     }
 
     /// What the hollow middle says.
@@ -430,9 +473,19 @@ struct OverlayView: View {
             let scale = layout.radialScale
             let type = HubTypography(radialScale: scale)
             let summary = state.hubSummary(for: entry)
+            // Windows the ring could not seat. See `RadialLayout`'s note on the cap: the
+            // arrangement stops adding wedges once they would be too shallow to read as cards,
+            // and this is the only thing on screen that admits the ring is not the whole list.
+            let pagedLine: String? = layout.hiddenCount > 0
+                ? "+\(layout.hiddenCount) more"
+                : nil
             // Same threshold the title uses to give up a line: below it the disc is too narrow for
-            // the age as well as the warning, and a half-truncated age is worse than none.
-            let statusLine = summary.statusLine(includingAge: type.isRoomy)
+            // the age as well as the warning, and a half-truncated age is worse than none. The
+            // paged count displaces the age for the same reason — both cannot fit, and how stale a
+            // window is matters less than whether there are windows you cannot see.
+            let statusLine = summary.statusLine(
+                includingAge: type.isRoomy && pagedLine == nil
+            )
 
             VStack(spacing: 3 * scale) {
                 // What this window belongs to. For a browser window that is the site rather than
@@ -447,7 +500,7 @@ struct OverlayView: View {
                         // "github.com" stays "github.com" rather than becoming "githu…".
                         .minimumScaleFactor(type.sourceMinimumScale)
                         .truncationMode(.tail)
-                        .foregroundStyle(palette.secondaryText)
+                        .foregroundStyle(palette.hubSecondaryText)
                         .contentTransition(.opacity)
                 }
 
@@ -470,7 +523,7 @@ struct OverlayView: View {
                     .foregroundStyle(palette.text)
 
                 if entry.isApplication || entry.isMinimized || state.isIncognito(entry)
-                    || statusLine != nil {
+                    || statusLine != nil || pagedLine != nil {
                     HStack(spacing: 4) {
                         if entry.isApplication {
                             ApplicationBadge()
@@ -481,7 +534,7 @@ struct OverlayView: View {
                         if entry.isMinimized {
                             Image(systemName: "arrow.down.right.and.arrow.up.left")
                                 .font(.system(size: 8, weight: .semibold))
-                                .foregroundStyle(palette.secondaryText)
+                                .foregroundStyle(palette.hubSecondaryText)
                         }
                         // The one warning on screen that selecting this replaces the whole screen
                         // rather than just raising a window, and how stale it is if it does.
@@ -491,7 +544,20 @@ struct OverlayView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(type.statusMinimumScale)
                                 .truncationMode(.tail)
-                                .foregroundStyle(palette.secondaryText)
+                                .foregroundStyle(palette.hubSecondaryText)
+                                .contentTransition(.opacity)
+                        }
+                        // How many windows are off the ring. Not a decoration and not a
+                        // progress read-out: the round arrangements are chosen because they
+                        // show everything at once, so the one case where that is untrue has
+                        // to say so or the omission is indistinguishable from a bug.
+                        if let pagedLine {
+                            Text(pagedLine)
+                                .font(.system(size: type.statusSize, weight: .medium))
+                                .lineLimit(1)
+                                .minimumScaleFactor(type.statusMinimumScale)
+                                .truncationMode(.tail)
+                                .foregroundStyle(palette.hubSecondaryText)
                                 .contentTransition(.opacity)
                         }
                     }
@@ -505,33 +571,11 @@ struct OverlayView: View {
             // below against `isRevealed`, and the two must not drive each other — a caption change
             // is not a reason to replay the entrance.
             .animation(captionChangeAnimation, value: entry.id)
-            .padding(.horizontal, 18 * scale)
+            .padding(.horizontal, 14 * scale)
+            // Width of the opaque well, so the title wraps inside the circle instead
+            // of sitting on a rounded rect in the middle of the void.
+            .frame(width: frame.width * HubChrome.wellOpaqueFraction)
             .frame(width: frame.width, height: frame.height)
-            // The colour surface is drawn behind the wedges by `hubSurface`; only the selected
-            // window's artwork remains attached to the nominal caption frame so its blur cannot
-            // escape into the corona.
-            .background(
-                ZStack {
-                    // The selected window's own artwork, large and faint, as a watermark. Its
-                    // strength is bounded by measurement rather than taste — see
-                    // `OverlayPalette.hubArtworkOpacity` — because the caption sits on top of it.
-                    if let icon = state.displayIcon(for: entry) {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .interpolation(.high)
-                            .aspectRatio(contentMode: .fit)
-                            // Slightly larger than the disc and centred, so it reads as artwork
-                            // running behind the caption rather than an icon placed in it.
-                            .frame(width: frame.width * 1.02, height: frame.height * 1.02)
-                            // Softened so the type is never crossed by a hard edge. Detail is not the
-                            // point here; the shape and colour are.
-                            .blur(radius: 3)
-                            .opacity(palette.hubArtworkOpacity)
-                    }
-                }
-                .clipShape(Circle())
-                .animation(captionChangeAnimation, value: entry.id)
-            )
             .opacity(state.isRevealed ? 1 : 0)
             .animation(hubRevealAnimation, value: state.isRevealed)
             .position(x: frame.midX, y: frame.midY)
