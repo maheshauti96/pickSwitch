@@ -14,6 +14,7 @@ struct AudioActivityBadge: View {
 
     var isPlaying: Bool = false
     var isRecording: Bool = false
+    var subject: Subject = .application
     var isOverArtwork: Bool = false
     var isOnAccent: Bool = false
 
@@ -60,30 +61,51 @@ struct AudioActivityBadge: View {
             // Spoken by the card's own label instead, so a screen reader hears it once as part of
             // "Google Chrome, YouTube, playing audio" rather than as a stray element after it.
             .accessibilityHidden(true)
-            .help(Self.tooltip(isPlaying: isPlaying, isRecording: isRecording))
+            .help(Self.tooltip(isPlaying: isPlaying, isRecording: isRecording, subject: subject))
         }
     }
 
-    /// Wording that admits what this actually knows.
+    /// What the badge is entitled to claim, which differs by result kind.
     ///
-    /// It says "this app" and not "this window", because that is the truth: CoreAudio reports audio
-    /// per process, so every window of a browser playing a video is marked, not the one showing it.
-    /// Claiming otherwise in the tooltip would make the badge look broken when a second Chrome window
-    /// lights up, rather than merely coarse.
-    static func tooltip(isPlaying: Bool, isRecording: Bool) -> String {
+    /// Not cosmetic. A tab's reading comes from the browser's own tab strip and is about that one
+    /// tab. A window's comes from CoreAudio, which reports per process, so every window of a browser
+    /// playing one video is marked rather than the one showing it. Saying "this window" there would
+    /// make the badge look broken the moment a second Chrome window lit up; saying "this tab" here
+    /// would undersell a reading that is exact.
+    enum Subject {
+        /// A browser tab, named by its browser's tab strip.
+        case tab
+        /// A window, named only as far as its application.
+        case application
+
+        var noun: String {
+            switch self {
+            case .tab: return "tab"
+            case .application: return "app"
+            }
+        }
+    }
+
+    static func tooltip(isPlaying: Bool, isRecording: Bool, subject: Subject) -> String {
+        let noun = subject.noun
         switch (isPlaying, isRecording) {
-        case (true, true): return "This app is playing audio and using the microphone"
-        case (true, false): return "This app is playing audio"
-        case (false, true): return "This app is using the microphone"
+        case (true, true): return "This \(noun) is playing audio and using the microphone"
+        case (true, false): return "This \(noun) is playing audio"
+        case (false, true): return "This \(noun) is using the microphone"
         case (false, false): return ""
         }
     }
 
     /// The same facts for VoiceOver, as phrases to append to a card's label.
-    static func accessibilityPhrases(isPlaying: Bool, isRecording: Bool) -> [String] {
+    static func accessibilityPhrases(
+        isPlaying: Bool,
+        isRecording: Bool,
+        subject: Subject
+    ) -> [String] {
+        let noun = subject.noun
         var parts: [String] = []
-        if isRecording { parts.append("app using microphone") }
-        if isPlaying { parts.append("app playing audio") }
+        if isRecording { parts.append("\(noun) using microphone") }
+        if isPlaying { parts.append("\(noun) playing audio") }
         return parts
     }
 }

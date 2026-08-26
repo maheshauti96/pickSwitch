@@ -1974,7 +1974,47 @@ extension SwitcherController: TriggerMonitorDelegate {
         if changed {
             afterSearchChanged()
         }
+        refreshTabMediaAlerts(for: entries)
         resolvePendingSearchConfirmationIfReady()
+    }
+
+    /// Ask each browser's tab strip which of its tabs are playing or recording.
+    ///
+    /// Hooked to tabs arriving rather than to presentation, because tabs do not exist until the user
+    /// types — they are fetched over Apple Events on the first keystroke — so there is nothing to
+    /// mark at the moment the panel appears.
+    ///
+    /// Off the main thread for the same reason the window-level query is: this is an accessibility
+    /// walk into another application, which is an IPC round trip that gets slow exactly when the
+    /// machine is busy. `AXBridge`'s messaging timeout bounds a stall; it does not prevent one.
+    private func refreshTabMediaAlerts(for entries: [WindowEntry]) {
+        let browsers = Set(entries.filter(\.isTab).map(\.processID).filter { $0 > 0 })
+        guard !browsers.isEmpty else {
+            state.tabMediaAlerts = [:]
+            return
+        }
+
+        let presentationID = state.presentationID
+        // Only the pids cross to the work queue. The entries stay here: a `WindowEntry` holds a live
+        // `AXUIElement`, and the pairing is string comparison over a handful of readings, so there is
+        // nothing to gain by sending it and a thread-safety question to answer if it went.
+        workQueue.async { [weak self] in
+            let readings = BrowserTabAlertService.readings(forBrowserProcesses: browsers)
+            DispatchQueue.main.async {
+                guard let self, self.state.presentationID == presentationID else { return }
+                let alerts = TabMediaAlert.alerts(forTabsIn: entries, readings: readings)
+                if !readings.isEmpty {
+                    Log.overlay.info(
+                        """
+                        tab media: \(readings.count, privacy: .public) alerting tabs reported, \
+                        \(alerts.count, privacy: .public) matched to results
+                        """
+                    )
+                }
+                guard self.state.tabMediaAlerts != alerts else { return }
+                self.state.tabMediaAlerts = alerts
+            }
+        }
     }
 
     func searchBackspacePressed() {

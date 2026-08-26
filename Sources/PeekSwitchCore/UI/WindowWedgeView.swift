@@ -420,11 +420,18 @@ struct WindowWedgeView: View {
                 AudioActivityBadge(
                     isPlaying: isPlayingAudio,
                     isRecording: isUsingMicrophone,
+                    subject: badgeSubject,
                     isOverArtwork: true
                 )
             }
             Spacer()
         }
+    }
+
+    /// A tab's media state is read from its browser's tab strip and is about that tab; a window's
+    /// comes from CoreAudio and is only ever about the application.
+    private var badgeSubject: AudioActivityBadge.Subject {
+        entry.isTab ? .tab : .application
     }
 
     /// The application name, plus whichever markers apply.
@@ -526,7 +533,8 @@ struct WindowWedgeView: View {
         parts.append(
             contentsOf: AudioActivityBadge.accessibilityPhrases(
                 isPlaying: isPlayingAudio,
-                isRecording: isUsingMicrophone
+                isRecording: isUsingMicrophone,
+                subject: badgeSubject
             )
         )
         if let display { parts.append(display.label) }

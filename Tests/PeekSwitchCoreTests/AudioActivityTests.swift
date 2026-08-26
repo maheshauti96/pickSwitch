@@ -145,29 +145,58 @@ struct AudioActivityTests {
     }
 }
 
-/// The wording is tested because it is a claim about accuracy, not decoration. CoreAudio reports per
-/// process, so a second Chrome window will light up alongside the one playing the video; a badge that
-/// said "this window" would look like a defect at that moment instead of a known limit.
+/// The wording is tested because it is a claim about accuracy, not decoration. The two subjects are
+/// not equally precise — a tab is named by its browser's tab strip, a window only as far as its
+/// process — and the tooltip is where that difference is disclosed.
 struct AudioActivityBadgeWordingTests {
 
-    @Test func everyTooltipSaysApplicationRatherThanWindow() {
+    @Test func aWindowsBadgeClaimsOnlyTheApplication() {
         for (playing, recording) in [(true, false), (false, true), (true, true)] {
-            let tooltip = AudioActivityBadge.tooltip(isPlaying: playing, isRecording: recording)
+            let tooltip = AudioActivityBadge.tooltip(
+                isPlaying: playing,
+                isRecording: recording,
+                subject: .application
+            )
             #expect(tooltip.contains("This app"))
+            // CoreAudio cannot narrow it to one window, so the tooltip must not imply it has.
             #expect(!tooltip.lowercased().contains("window"))
-            #expect(!tooltip.lowercased().contains("tab"))
+        }
+    }
+
+    @Test func aTabsBadgeClaimsTheTab() {
+        for (playing, recording) in [(true, false), (false, true), (true, true)] {
+            let tooltip = AudioActivityBadge.tooltip(
+                isPlaying: playing,
+                isRecording: recording,
+                subject: .tab
+            )
+            #expect(tooltip.contains("This tab"))
         }
     }
 
     @Test func nothingIsSaidWhenNothingIsHappening() {
-        #expect(AudioActivityBadge.tooltip(isPlaying: false, isRecording: false).isEmpty)
-        #expect(AudioActivityBadge.accessibilityPhrases(isPlaying: false, isRecording: false).isEmpty)
+        for subject in [AudioActivityBadge.Subject.tab, .application] {
+            #expect(
+                AudioActivityBadge.tooltip(
+                    isPlaying: false, isRecording: false, subject: subject
+                ).isEmpty
+            )
+            #expect(
+                AudioActivityBadge.accessibilityPhrases(
+                    isPlaying: false, isRecording: false, subject: subject
+                ).isEmpty
+            )
+        }
     }
 
     /// The microphone leads, in the tooltip and for VoiceOver both. "Something is listening to me" is
     /// the one of the two a user may need to act on.
     @Test func theMicrophoneIsAnnouncedFirst() {
-        let phrases = AudioActivityBadge.accessibilityPhrases(isPlaying: true, isRecording: true)
+        let phrases = AudioActivityBadge.accessibilityPhrases(
+            isPlaying: true,
+            isRecording: true,
+            subject: .tab
+        )
         #expect(phrases.count == 2)
         #expect(phrases.first?.contains("microphone") == true)
         #expect(phrases.last?.contains("audio") == true)

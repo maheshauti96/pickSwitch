@@ -188,6 +188,7 @@ struct WindowCardView: View {
                 AudioActivityBadge(
                     isPlaying: isPlayingAudio,
                     isRecording: isUsingMicrophone,
+                    subject: badgeSubject,
                     isOverArtwork: true
                 )
                 .padding(6)
@@ -295,12 +296,19 @@ struct WindowCardView: View {
         parts.append(
             contentsOf: AudioActivityBadge.accessibilityPhrases(
                 isPlaying: isPlayingAudio,
-                isRecording: isUsingMicrophone
+                isRecording: isUsingMicrophone,
+                subject: badgeSubject
             )
         )
         if let display { parts.append(display.label) }
         if entry.isMinimized { parts.append("minimized") }
         if let badgeCount { parts.append("\(badgeCount) windows") }
         return parts.joined(separator: ", ")
+    }
+
+    /// A tab's media state is read from its browser's tab strip and is about that tab; a window's
+    /// comes from CoreAudio and is only ever about the application.
+    private var badgeSubject: AudioActivityBadge.Subject {
+        entry.isTab ? .tab : .application
     }
 }

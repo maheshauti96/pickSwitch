@@ -109,8 +109,15 @@ struct WindowPreviewView: View {
         AudioActivityBadge(
             isPlaying: isPlayingAudio,
             isRecording: isUsingMicrophone,
+            subject: badgeSubject,
             isOverArtwork: true
         )
+    }
+
+    /// A tab's media state is read from its browser's tab strip and is about that tab; a window's
+    /// comes from CoreAudio and is only ever about the application.
+    private var badgeSubject: AudioActivityBadge.Subject {
+        entry?.isTab == true ? .tab : .application
     }
 
     private var liveBadge: some View {
@@ -234,7 +241,8 @@ struct WindowPreviewView: View {
         if isIncognito { label += ", incognito" }
         for phrase in AudioActivityBadge.accessibilityPhrases(
             isPlaying: isPlayingAudio,
-            isRecording: isUsingMicrophone
+            isRecording: isUsingMicrophone,
+            subject: badgeSubject
         ) {
             label += ", \(phrase)"
         }

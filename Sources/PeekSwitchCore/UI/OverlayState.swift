@@ -175,19 +175,29 @@ final class OverlayState: ObservableObject {
     /// `AudioActivityService` for the measurement that decided that.
     @Published var audioActivity: AudioActivity = .silent
 
-    /// Whether this entry's application is playing audio.
+    /// What each alerting tab is doing, keyed by entry id.
     ///
-    /// Windows only, and that exclusion is the point. A tab entry carries its browser's pid, so
-    /// asking this of one would answer "is this browser playing anything" and mark all forty tabs
-    /// of a browser playing one video. The window at least narrows it to an application the user
-    /// can go and look at; a tab badge would be a claim about the tab, and a false one.
+    /// Separate from `audioActivity` because it comes from somewhere else entirely and says something
+    /// stronger. CoreAudio names a process; a browser's tab strip names the individual tab, which is
+    /// the only place that distinction exists. See `TabMediaAlert`.
+    @Published var tabMediaAlerts: [String: TabMediaAlert] = [:]
+
+    /// Whether this entry is playing audio.
+    ///
+    /// The two kinds of entry are answered from different sources, and they are not equally precise.
+    /// A tab is answered by its browser's own tab strip, so it is exact. A window is answered by
+    /// CoreAudio, which reports per process — so every window of a browser playing one video is
+    /// marked, not the one showing it. Neither reading is available for the other kind: a tab has no
+    /// process of its own, and a window has no tab strip entry.
     func isPlayingAudio(_ entry: WindowEntry) -> Bool {
-        entry.isWindow && audioActivity.isPlaying(entry.processID)
+        if entry.isTab { return tabMediaAlerts[entry.id] == .playingAudio }
+        return entry.isWindow && audioActivity.isPlaying(entry.processID)
     }
 
-    /// Whether this entry's application is capturing from the microphone. Windows only, as above.
+    /// Whether this entry is capturing from the microphone or camera. Sourced as above.
     func isUsingMicrophone(_ entry: WindowEntry) -> Bool {
-        entry.isWindow && audioActivity.isRecording(entry.processID)
+        if entry.isTab { return tabMediaAlerts[entry.id] == .recording }
+        return entry.isWindow && audioActivity.isRecording(entry.processID)
     }
 
     /// Whether the cards have been let in yet.
