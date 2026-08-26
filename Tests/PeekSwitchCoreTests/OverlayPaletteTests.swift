@@ -428,9 +428,16 @@ struct OverlayPaletteTests {
         let hubRadius = RadialLayout.minimumHubRadius
         let ringRadius = hubRadius - HubChrome.ringInset
         let captionOuter = hubRadius * HubChrome.wellOpaqueFraction
-        let offset = Double((ringRadius - captionOuter) / HubChrome.haloSpread)
-        // `HubWell`'s Dark Mode crest.
-        return 0.55 * HubHalo.level(atSpreadOffset: offset)
+        let distance = Double((ringRadius - captionOuter) / ringRadius)
+        let scaleLength = HubHalo.scaleLength(for: .dark)
+        // Out here the well is fully opaque, so the rear halo contributes nothing and the bloom's
+        // solved alpha is simply the level it is aiming for: the curve, times whatever is left of
+        // the inward convergence after its taper.
+        let taper = max(0, 1 - distance / (2 * scaleLength))
+        let gain = 1 + (HubHalo.inwardGain(for: .dark) - 1) * taper
+        return HubHalo.crest(for: .dark)
+            * HubHalo.level(atDistanceFraction: distance, scaleLength: scaleLength)
+            * gain
     }
 
     @Test("Caption text clears 4.5:1 over any wallpaper the well transmits")

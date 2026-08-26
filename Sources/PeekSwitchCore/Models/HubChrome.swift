@@ -51,10 +51,19 @@ enum HubChrome {
     /// the composite peak 4px inside the stroke's centreline, leaving the stroke's outer half
     /// standing outside the peak as a shelf.
     ///
-    /// 3pt is 6 device pixels, and the blur below is what keeps it from aliasing rather than what
-    /// spreads it. Both halves of the complaint move the same way: a narrower stroke under a lighter
-    /// blur is *brighter* at its centre, because less of its own mass is thrown into the shoulders.
-    static let ringGlowThickness: CGFloat = 2.2
+    /// 3pt was the first correction and 1.6pt is where the measurement actually pointed. Both halves
+    /// of the complaint move the same way: a narrower stroke under a lighter blur is *brighter* at
+    /// its centre, because less of its own mass is thrown into the shoulders.
+    ///
+    /// What settles the final width is that the glow around the stroke is now an exponential with a
+    /// scale length of about a tenth of the ring's radius — 18px here. An exponential is already down
+    /// to 0.90 of its crest 1.9px from the line, so it produces a fully-lit band 3.7px wide *on its
+    /// own*, which is the reference's 3.5px to within the measurement. The stroke therefore has
+    /// nothing to add in width and everything to lose: at 2.2pt it was 4.4 device pixels of constant
+    /// value laid across the top of that curve, flattening the crest into a 4.5px plateau. At 1.6pt
+    /// it is narrower than the curve's own 0.90 band, so the shape at the top of the profile is the
+    /// glow's rather than the stroke's, and the stroke only supplies brightness.
+    static let ringGlowThickness: CGFloat = 1.6
 
     /// Blur on the core stroke only, which sets how far the *crisp* part of the rim spreads.
     ///
@@ -67,9 +76,10 @@ enum HubChrome {
     /// Cut with `ringGlowThickness`, and for the same reason: this is anti-aliasing, not glow. At
     /// 1.4pt the blur was 2.8 device pixels either side of a stroke that only needed its corners
     /// taken off, and it widened the band that reads as fully lit without adding anything the
-    /// shoulder was not already providing better. 0.7pt keeps the edge smooth at Retina scale and
-    /// leaves the 0.90 band to be set by the stroke's own width.
-    static let ringGlowBlur: CGFloat = 0.7
+    /// shoulder was not already providing better. 0.5pt is one device pixel of softening, which is
+    /// what a hairline needs to not alias and no more; the 0.90 band is set by the glow's own
+    /// exponential rather than by anything here.
+    static let ringGlowBlur: CGFloat = 0.5
 
     /// How far the broad rear bloom reaches either side of the ring's centreline.
     ///
@@ -84,7 +94,17 @@ enum HubChrome {
     static let haloSpread: CGFloat = 30
 
     /// Only to smooth gradient banding. The falloff shape is in the gradient, not in the blur.
-    static let haloBlur: CGFloat = 8
+    ///
+    /// Cut from 8pt once the falloff became an exponential sampled at multiples of its own scale
+    /// length, because 8pt was doing two things it should not. It was 16 device pixels of Gaussian
+    /// over a curve whose scale length is 18, so it visibly rounded the crest — and it was applied
+    /// only to *this* side, while `HubWell` blurred the inward side by a third as much. A rim whose
+    /// two halves are softened by different amounts is asymmetric however carefully their levels are
+    /// matched, and the asymmetry lands exactly at the crest, where it is most visible.
+    ///
+    /// 3pt is 6 device pixels. Linear interpolation between the emitted stops departs from the true
+    /// exponential by less than 0.004 of its crest, so there is no banding left for a blur to hide.
+    static let haloBlur: CGFloat = 3
 
     /// Fraction of hub diameter that stays a fully opaque disc under the caption.
     ///
@@ -179,7 +199,14 @@ enum HubChrome {
     /// Deliberately pessimistic on the one quantity that cannot be measured offscreen: the bound
     /// assumes the material passes the wallpaper through untouched. A real `hudWindow` tints toward
     /// the appearance, so the rendered range is narrower than the bound and inside it either way.
-    static let wellScrimOpacityDark: Double = 0.66
+    /// Dark moved from 0.66 to 0.68 when the rim's inward glow was rebuilt as an exponential. The
+    /// glow reaches a little further in than the four-stop curve it replaced — 0.087 alpha where the
+    /// caption's outermost glyph sits, against 0.073 — and the worst case available (a white
+    /// wallpaper under a white watermark) came out at 4.55:1, which clears 4.5 by one percent. Two
+    /// points of scrim put it at 4.92:1 and cost two points of the thirty-four the well was
+    /// transmitting. Worth it: a bound that holds by one percent is a bound that the next change to
+    /// any of five other constants breaks silently.
+    static let wellScrimOpacityDark: Double = 0.68
     static let wellScrimOpacityLight: Double = 0.68
 
     /// Where the watermark begins fading, as a fraction of its own radius.
@@ -240,12 +267,13 @@ enum HubChrome {
 
     /// Blur on the inward bloom, as a share of `haloBlur`.
     ///
-    /// Cut from 0.60 when the bloom stopped being four stops and became a measured curve. At 0.60
-    /// this was 9.6 device pixels of Gaussian over a gradient whose steepest and most important
-    /// section — the 8px just inside the rim — is narrower than the kernel, so the blur was
-    /// flattening the very part of the shape the curve exists to draw. 0.35 is enough to keep the
-    /// gradient from banding and small enough to leave the curve its slope.
-    static let innerGlowBlurScale: CGFloat = 0.35
+    /// One, and it is a ratio only so that the requirement stays visible: the inward half of the rim
+    /// must be blurred by the same amount as the outward half. It went 0.60, then 0.35, each time
+    /// chasing a kernel that was wide compared with the gradient it was smoothing — and each time
+    /// making the two sides of the rim softer or sharper than each other, which is an asymmetry no
+    /// amount of matching their *levels* can hide. `haloBlur` came down to 3pt instead, so both
+    /// halves can now be blurred alike and neither needs much.
+    static let innerGlowBlurScale: CGFloat = 1.0
 
     /// How far the coupling tongue reaches *into* the selected wedge, from that wedge's inner arc.
     ///

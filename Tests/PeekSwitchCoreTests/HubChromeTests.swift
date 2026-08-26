@@ -46,73 +46,139 @@ struct HubChromeTests {
         #expect(HubChrome.innerGlowStartFraction > HubChrome.wellOpaqueFraction * 0.75)
         #expect(HubChrome.innerGlowStartFraction < HubChrome.innerGlowShoulderFraction)
         #expect(HubChrome.innerGlowShoulderFraction < HubChrome.innerGlowCrestFraction)
-        // Small, and it used to be required to be large. The bloom is a measured curve now rather
-        // than four stops, and its steepest and most important section is the 8px just inside the
-        // rim — narrower than a 9.6px kernel, so at the old 0.60 the blur was flattening the shape
-        // the curve exists to draw. It is anti-banding, not spread.
-        #expect(HubChrome.innerGlowBlurScale > 0.2)
-        #expect(HubChrome.innerGlowBlurScale < 0.5)
+        // One, near enough. This is the ratio between the blur on the inward half of the rim and
+        // the blur on the outward half, and the requirement is that they match: a rim whose two
+        // sides are softened by different amounts is asymmetric however carefully their levels are
+        // matched, and the asymmetry lands on the crest where it shows most. It went 0.60, then
+        // 0.35, each time chasing a kernel that was wide compared with the gradient under it —
+        // `haloBlur` came down to 3pt instead, so neither side needs much and both can have the same.
+        #expect(abs(HubChrome.innerGlowBlurScale - 1) < 0.2)
     }
 
     /// The complaint this answers was that the rim's glow spread outward but not inward. It did:
     /// the outward falloff crested 8px outside the centreline and the inward bloom crested 8px
     /// inside it, from two separately hand-written tables that had drifted apart.
     ///
-    /// Both now read `HubHalo.decay`, so equal distances either side of the rim carry equal light by
-    /// construction. This checks the construction actually holds through the two different
-    /// parameterisations — the outward gradient measures distance against a radius that runs past
-    /// the wedges, the inward one against a radius that ends on the rim.
+    /// Both are now sampled from `HubHalo.level` at a shared `crest`, so the requirement is stronger
+    /// than "the two are close": at any radius inside the rim, whatever share of the rear halo the
+    /// well is still letting through, plus whatever `inwardBloom` restores of the share it is hiding,
+    /// has to come to exactly the curve. That identity is the whole reason the inward side stopped
+    /// being brighter than the outward one — it used to be the halo *plus* an independent bloom
+    /// wherever the well had not yet taken over.
+    ///
+    /// The occlusion ramp is written out here rather than borrowed from the implementation, so this
+    /// asserts the intended relationship rather than restating the code.
     @Test("The glow carries the same light inward as outward")
     func glowIsSymmetricAboutTheRim() {
         let ringRadius: CGFloat = 86.82
-        let bloom = HubHalo.inwardBloom(ring: .white, crest: 1, ringRadius: ringRadius)
+        let outer = ringRadius + HubChrome.ringInset + HubChrome.haloReach
+        let ringStop = Double(ringRadius / outer)
+        // As `HubWell` computes them: the frosted disc and scrim span `wellClearFraction` of the hub
+        // and go solid at `wellOpaqueFraction`, both measured here against the ring's radius.
+        let hubRadius = ringRadius + HubChrome.ringInset
+        let wellEdge = Double(hubRadius * HubChrome.wellClearFraction / ringRadius)
+        let wellSolid = Double(hubRadius * HubChrome.wellOpaqueFraction / ringRadius)
 
-        func inwardLevel(atSpreadOffset offset: Double) -> Double {
-            let location = 1 - offset * Double(HubChrome.haloSpread / ringRadius)
-            let stops = bloom.stops.sorted { $0.location < $1.location }
-            func alpha(_ stop: Gradient.Stop) -> Double {
-                Double(NSColor(stop.color).alphaComponent)
-            }
-            guard let first = stops.first, location > Double(first.location) else {
-                return alpha(stops[0])
-            }
-            for (near, far) in zip(stops, stops.dropFirst())
-            where location <= Double(far.location) {
-                let span = Double(far.location - near.location)
-                let t = span <= 0 ? 0 : (location - Double(near.location)) / span
-                return alpha(near) + t * (alpha(far) - alpha(near))
-            }
-            return alpha(stops[stops.count - 1])
+        func hidden(at location: Double) -> Double {
+            if location <= wellSolid { return 1 }
+            if location >= wellEdge { return 0 }
+            return (wellEdge - location) / (wellEdge - wellSolid)
         }
 
-        // Over the range that is visible on both sides. Further in than this the caption surface
-        // covers the bloom and `innerGlowStartFraction` has taken it to zero, which is a different
-        // requirement — `wellFadesBeforeTheRing` holds that one.
-        for offset in [0.05, 0.10, 0.15, 0.20, 0.25, 0.30] {
-            let outward = HubHalo.level(atSpreadOffset: offset)
-            let inward = inwardLevel(atSpreadOffset: offset)
-            let report = "at \(offset) of a spread: inward \(inward), outward \(outward)"
-            #expect(abs(inward - outward) < 0.06, "glow is lopsided \(report)")
-        }
-
-        // And it is a crest on the centreline, not a pair of edges beside it.
-        #expect(HubHalo.level(atSpreadOffset: 0) == 1)
-        for offset in [0.05, 0.15, 0.30, 0.60] {
-            #expect(HubHalo.level(atSpreadOffset: offset) < 1)
-            #expect(
-                HubHalo.level(atSpreadOffset: offset)
-                    == HubHalo.level(atSpreadOffset: -offset)
+        for scheme in [ColorScheme.dark, .light] {
+            let scaleLength = HubHalo.scaleLength(for: scheme)
+            let crest = HubHalo.crest(for: scheme)
+            let outward = HubHalo.outwardGlow(
+                ring: .white,
+                ringStop: ringStop,
+                peak: crest,
+                scaleLength: scaleLength
             )
+            let gain = HubHalo.inwardGain(for: scheme)
+            let inward = HubHalo.inwardBloom(
+                ring: .white,
+                crest: crest,
+                scaleLength: scaleLength,
+                inwardGain: gain,
+                wellSolid: wellSolid,
+                wellEdge: wellEdge
+            )
+
+            for multiple in [0.0, 0.25, 0.5, 1.0, 1.6, 2.5] {
+                let distance = multiple * scaleLength
+                let curve = crest
+                    * HubHalo.level(atDistanceFraction: distance, scaleLength: scaleLength)
+
+                // Outward: the halo is the only thing painting, so it carries the curve alone.
+                let out = Self.alpha(of: outward, at: ringStop * (1 + distance))
+
+                // Inward: the share of the halo the well still lets through, with the bloom
+                // composited over it. Normal blending, so `base + a(1 - base)` and not `base + a` —
+                // treating the bloom's opacity as a contribution is what under-delivered the
+                // convergence by more than half when this was first built.
+                let location = 1 - distance
+                let base = Self.alpha(of: outward, at: ringStop * location)
+                    * (1 - hidden(at: location))
+                let painted = Self.alpha(of: inward, at: location)
+                let into = base + painted * (1 - base)
+
+                // The convergence the references measure, tapered out by two scale lengths — past
+                // that it is not measurable on the reference's outward side, which runs under its
+                // own cards.
+                let want = curve * (1 + (gain - 1) * max(0, 1 - multiple / 2))
+
+                let report = "\(scheme) at \(multiple) scale lengths: outward \(out), "
+                    + "inward \(into), curve \(curve), wanted \(want)"
+                #expect(abs(out - curve) < 0.02, "outward glow left the curve — \(report)")
+                #expect(abs(into - want) < 0.03, "inward glow left the curve — \(report)")
+                // And the inward side is the brighter one, which is the direction both references
+                // run and the reason the gain exists at all.
+                #expect(into >= out - 0.01, "inward glow is the dimmer side — \(report)")
+            }
         }
     }
 
-    /// The inward bloom must crest *inside* the rim and fall back before it, or it spends the
-    /// additive headroom the ring's own core needs and the rim clips to white all the way round.
-    @Test("The inward bloom leaves the rim its headroom")
-    func inwardGlowCrestsInsideTheRim() {
-        #expect(HubChrome.innerGlowCrestFraction < 1)
-        #expect(HubChrome.innerGlowCrestFalloff < 1)
-        #expect(HubChrome.innerGlowCrestFalloff > 0)
+    /// A glow with an edge is a layer; a glow that fades is light. The exponential has to still be
+    /// falling where it is cut off, and be faint enough there that the cut cannot be seen.
+    @Test("The glow fades rather than stopping")
+    func glowHasNoVisibleEdge() {
+        for scheme in [ColorScheme.dark, .light] {
+            let scaleLength = HubHalo.scaleLength(for: scheme)
+            // The furthest the rear bloom is allowed to paint, as a fraction of the ring's radius.
+            let reach = Double(HubChrome.haloSpread / (RadialLayout.baseHubRadius - HubChrome.ringInset))
+            let atTheEdge = HubHalo.level(atDistanceFraction: reach, scaleLength: scaleLength)
+            #expect(
+                atTheEdge < 0.06,
+                "\(scheme) glow is still at \(atTheEdge) of its crest where it is cut off"
+            )
+            // And it is monotone, which a piecewise table is not obliged to be.
+            var previous = 1.0
+            for step in 1...40 {
+                let value = HubHalo.level(
+                    atDistanceFraction: Double(step) * 0.02,
+                    scaleLength: scaleLength
+                )
+                #expect(value < previous, "\(scheme) glow rises again at step \(step)")
+                previous = value
+            }
+        }
+    }
+
+    /// Interpolated alpha of a gradient's stops at a location, which is what the renderer does
+    /// between them.
+    private static func alpha(of gradient: Gradient, at location: Double) -> Double {
+        let stops = gradient.stops.sorted { $0.location < $1.location }
+        func value(_ stop: Gradient.Stop) -> Double {
+            Double(NSColor(stop.color).alphaComponent)
+        }
+        guard let first = stops.first, let last = stops.last else { return 0 }
+        if location <= Double(first.location) { return value(first) }
+        for (near, far) in zip(stops, stops.dropFirst()) where location <= Double(far.location) {
+            let span = Double(far.location - near.location)
+            let t = span <= 0 ? 0 : (location - Double(near.location)) / span
+            return value(near) + t * (value(far) - value(near))
+        }
+        return value(last)
     }
 
     /// The ring lives in the void, not on the wedge seam. Inset by more than the band.
