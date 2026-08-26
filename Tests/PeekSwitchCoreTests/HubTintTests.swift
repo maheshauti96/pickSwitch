@@ -99,7 +99,7 @@ struct HubTintTests {
         iconColour: NSColor?,
         appearance: NSAppearance.Name,
         increaseContrast: Bool = false
-    ) throws -> (ring: NSColor, centre: NSColor) {
+    ) throws -> (ring: NSColor, centre: NSColor, wellBody: NSColor) {
         let (rep, state, bounds) = try renderHub(
             iconColour: iconColour,
             appearance: appearance,
@@ -122,7 +122,10 @@ struct HubTintTests {
                 radius: geometry.hubRadius - HubChrome.ringInset,
                 angle: state.radialRingAngle + .pi
             ),
-            try pixel(radius: 0, angle: 0)
+            try pixel(radius: 0, angle: 0),
+            // Well interior: out past the watermark's strongest point and the caption, but well
+            // inside the rim, so it is the void the ring has to stay lighter than.
+            try pixel(radius: geometry.hubRadius * 0.34, angle: state.radialRingAngle + .pi)
         )
     }
 
@@ -268,6 +271,59 @@ struct HubTintTests {
                 #expect(
                     drift < 0.06,
                     "\(appearance) ring hue \(Self.hue(of: sampled)) is \(drift) from the icon's \(expected.hue)"
+                )
+            }
+        }
+    }
+
+    /// The hue has to arrive as *colour*, not merely as a hue angle — which is the gap that let a
+    /// colourless Light Mode hub ship.
+    ///
+    /// `ambienceFollowsTheHoveredWindow` measures hue drift and passed the whole time the light hub
+    /// was grey, because a near-white pixel still reports a hue: rendered, its rim measured chroma 3
+    /// against Dark Mode's 16–39. Hue was pinned and visibility was not, so this pins visibility.
+    ///
+    /// Chroma as peak-minus-trough in 8-bit rather than HSB saturation, because that is what "does
+    /// this look coloured" depends on and it is the quantity that exposed the defect.
+    @Test("the ambience arrives as visible colour, not just a hue angle")
+    func ambienceIsVisiblyChromatic() throws {
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            for colour in [
+                NSColor.systemRed, .systemOrange, .systemGreen, .systemBlue, .systemPurple,
+            ] {
+                let sampled = try Self.ringAndCentre(iconColour: colour, appearance: appearance)
+                let ring = sampled.ring
+                let red = Double(ring.redComponent) * 255
+                let green = Double(ring.greenComponent) * 255
+                let blue = Double(ring.blueComponent) * 255
+                let chroma = max(red, green, blue) - min(red, green, blue)
+
+                // Measured, both schemes land between 17 and 31 once the ambience states its own
+                // saturation instead of inheriting the resting ring's. 15 clears that with margin and
+                // is far above the 3–5 the defect produced.
+                #expect(
+                    chroma >= 15,
+                    """
+                    \(appearance) ring for \(colour) has chroma \(Int(chroma)): \
+                    rgb(\(Int(red)),\(Int(green)),\(Int(blue)))
+                    """
+                )
+
+                // And the rim stays lighter than the well it encircles. This is the budget the
+                // chroma is spent out of — Light Mode's well renders around luminance 200, leaving
+                // roughly 25 levels — so a later rise in saturation would show up here first, as a
+                // rim that has gone darker than the void it is supposed to edge.
+                let well = sampled.wellBody
+                let ringLuma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+                let wellLuma = 0.2126 * Double(well.redComponent) * 255
+                    + 0.7152 * Double(well.greenComponent) * 255
+                    + 0.0722 * Double(well.blueComponent) * 255
+                #expect(
+                    ringLuma > wellLuma + 5,
+                    """
+                    \(appearance) ring for \(colour) is not lighter than its well: \
+                    ring \(Int(ringLuma)) vs well \(Int(wellLuma))
+                    """
                 )
             }
         }

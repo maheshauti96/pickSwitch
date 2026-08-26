@@ -112,6 +112,30 @@ struct OverlayPalette {
     /// has one of its own.
     let hubRing: Color
 
+    /// Saturation the hub's ambience aims for at full vividness.
+    ///
+    /// Stated outright rather than inherited from `hubRing`, and that is the fix for a Light Mode
+    /// hub that showed no colour at all. The ambience used to ask for the resting ring's own
+    /// saturation — fine in Dark Mode, where that is 0.18, and useless in Light, where the resting
+    /// ring is (250,255,255) and 0.0196 saturated. Rendered, every light window produced a rim of
+    /// chroma 3 against Dark Mode's 16–39: nominally the right hue, and grey to look at.
+    ///
+    /// The resting ring is near-white on purpose — with no window under the pointer there is nothing
+    /// to say — so how loudly a hue gets said had to stop being the same number.
+    let hubAmbienceSaturation: Double
+
+    /// How much of `hubAmbienceSaturation` may be given up to reach the target luminance.
+    let hubAmbienceSaturationFloor: Double
+
+    /// Fraction of the resting ring's luminance the ambience is solved onto.
+    ///
+    /// Below 1 in Light Mode because near white, chroma and luminance trade directly against each
+    /// other: at the resting ring's own luminance there is no room for any colour, and every hue
+    /// resolves to the same white. Coming down buys the chroma back. How far down is bounded by the
+    /// well underneath — the rim has to stay lighter than what it encircles, which in Light Mode is
+    /// already luminance 197–206 of a possible 255.
+    let hubAmbienceLuminanceScale: Double
+
     /// How much stronger a selected radial wedge is tinted than an unselected one.
     ///
     /// Greater than 1 so the selected tile is a stronger version of itself rather than a recolor
@@ -142,9 +166,10 @@ struct OverlayPalette {
             // What made the cyan read as *selected* was never the hue, it was the level: 0.72
             // saturation at 0.54 brightness against a resting body that reaches at most 0.47 at
             // 0.23. Keeping that level and moving the hue keeps the signal and returns the identity.
+            let litSaturation = scheme == .dark ? 0.72 : 0.30
             let lit = Color(
                 hue: Self.brandHue,
-                saturation: scheme == .dark ? 0.72 : 0.30,
+                saturation: litSaturation,
                 brightness: scheme == .dark ? 0.54 : 0.96,
                 opacity: 1
             )
@@ -158,7 +183,7 @@ struct OverlayPalette {
             return Self.rehued(
                 base,
                 to: tint.hue,
-                saturationScale: min(1, max(0.6, tint.vividness)),
+                saturation: litSaturation * min(1, max(0.6, tint.vividness)),
                 saturationFloor: Self.ambienceSaturationFloor
             )
         }
@@ -300,8 +325,9 @@ struct OverlayPalette {
             to: tint.hue,
             // A washed-out icon gets a correspondingly quieter ambience, floored so a pastel still
             // reads as its own colour rather than collapsing back to the brand.
-            saturationScale: min(1, max(0.6, tint.vividness)),
-            saturationFloor: Self.ambienceSaturationFloor
+            saturation: hubAmbienceSaturation * min(1, max(0.6, tint.vividness)),
+            saturationFloor: hubAmbienceSaturationFloor,
+            luminanceScale: hubAmbienceLuminanceScale
         )
     }
 
@@ -317,14 +343,20 @@ struct OverlayPalette {
     /// colour that arrives as pale grey for every blue application and identifies nothing.
     ///
     /// - Parameters:
-    ///   - saturationScale: how much of `base`'s saturation this hue is allowed to ask for.
-    ///   - saturationFloor: the fraction of that it may be reduced to in order to reach the
+    ///   - saturation: what this hue asks for. A floor of 0 paired with a saturation of 1 turns the
+    ///     solve around: instead of holding a chosen saturation and moving brightness, it finds the
+    ///     most saturated colour that still lands on the target luminance. That is what a near-white
+    ///     reference needs, where any chosen saturation is either unreachable or invisible.
+    ///   - saturationFloor: the fraction of `saturation` it may be reduced to in order to reach the
     ///     reference luminance.
+    ///   - luminanceScale: fraction of `base`'s luminance to aim for. Below 1 buys chroma, because
+    ///     the two trade against each other as the reference approaches white.
     static func rehued(
         _ base: NSColor,
         to hue: Double,
-        saturationScale: Double,
-        saturationFloor: Double
+        saturation: Double,
+        saturationFloor: Double,
+        luminanceScale: Double = 1
     ) -> Color {
         var baseHue: CGFloat = 0
         var baseSaturation: CGFloat = 0
@@ -336,8 +368,8 @@ struct OverlayPalette {
             red: Double(base.redComponent),
             green: Double(base.greenComponent),
             blue: Double(base.blueComponent)
-        )
-        let wanted = Double(baseSaturation) * saturationScale
+        ) * luminanceScale
+        let wanted = saturation
 
         func luminance(saturation: Double, brightness: Double) -> Double {
             let (red, green, blue) = components(
@@ -547,6 +579,11 @@ struct OverlayPalette {
         // stayed where it had already been measured to belong and only the line got brighter — which
         // is the difference between a brighter rim and a bigger smudge.
         hubRing: Color(.sRGB, red: 208 / 255, green: 254 / 255, blue: 244 / 255, opacity: 1),
+        // The resting ring's own saturation, (254-208)/254, so Dark Mode is left exactly as it was:
+        // it already reads as coloured, and the reported defect was Light Mode's alone.
+        hubAmbienceSaturation: 0.1811,
+        hubAmbienceSaturationFloor: Self.ambienceSaturationFloor,
+        hubAmbienceLuminanceScale: 1.0,
         radialSelectedStrengthScale: 1.55,
         wedgeShadowOpacity: 0.34
     )
@@ -631,6 +668,20 @@ struct OverlayPalette {
         // brighter than the cards" is finished here, and anything further has to come from the
         // surround rather than from the rim. See the note on `wellScrimOpacityLight` in `HubChrome`.
         hubRing: Color(.sRGB, red: 250 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
+        // A held saturation at full brightness, which is what a floor of 1 and an unreachable
+        // reference come to: no hue can match a near-white ring at this saturation, so every one of
+        // them settles at full brightness with its saturation intact.
+        //
+        // Holding *saturation* rather than luminance here, which is the opposite of Dark Mode, and
+        // measured rather than assumed. Solving for maximum chroma at a fixed luminance — the
+        // obvious reading of "make it more colourful" — produced a wildly uneven ring: green came out
+        // at chroma 71 where red managed 21, because green carries 0.7152 of the luminance weight and
+        // so can be far more saturated at the same lightness. Held saturation gives every window the
+        // same amount of colour and lets lightness vary instead, which on a light hub is the better
+        // trade: a paler rim is merely paler, where in Dark Mode a brighter one is glare.
+        hubAmbienceSaturation: 0.13,
+        hubAmbienceSaturationFloor: 1.0,
+        hubAmbienceLuminanceScale: 1.0,
         // Kept close to 1: every extra point of tint on a white card costs the secondary line,
         // and 1.85 failed 4.5:1 on blues. 1.3 is still visibly stronger than rest.
         radialSelectedStrengthScale: 1.3,
