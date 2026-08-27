@@ -30,10 +30,17 @@ struct CardDetails: Equatable {
 
     let rows: [Row]
 
+    /// Which screen the window is on, shown as a coloured chip rather than a row.
+    ///
+    /// It was a row saying "Screen 1" and earned no line: a label spelling out a number carries the
+    /// same fact as a chip in the corner while costing a full row of the height the preview needs. As
+    /// a chip it is also comparable at a glance — the colour is per screen, so two menus opened on two
+    /// windows say "same screen" or "different screens" without either number being read.
+    let displayNumber: Int?
+
     /// - Parameters:
     ///   - siteHost: the active site, already checked against private browsing by the caller.
-    ///   - displayLabel: the screen's name, or `nil` when there is only one screen and naming it
-    ///     would be a row on every menu that never distinguishes anything.
+    ///   - displayNumber: the screen the window is on, for the chip.
     ///   - tabCount: tabs known to be in this window, or `nil` before they have been fetched.
     ///   - windowPosition: which of its application's windows this is, and how many there are.
     ///   - now: the clock `WindowEntry.lastSeenOnActiveSpace` is stamped from, passed in so the
@@ -41,7 +48,7 @@ struct CardDetails: Equatable {
     static func make(
         entry: WindowEntry,
         siteHost: String?,
-        displayLabel: String?,
+        displayNumber: Int?,
         tabCount: Int?,
         windowPosition: (index: Int, count: Int)?,
         isIncognito: Bool,
@@ -59,10 +66,6 @@ struct CardDetails: Equatable {
                 return elapsed >= 0 ? HubSummary.relativeAge(elapsed) : "unknown"
             }
             rows.append(Row(label: "Desktop", value: age.map { "Another · \($0)" } ?? "Another"))
-        }
-
-        if let displayLabel {
-            rows.append(Row(label: "Screen", value: displayLabel))
         }
 
         if entry.isMinimized {
@@ -98,17 +101,10 @@ struct CardDetails: Equatable {
             )
         }
 
-        // Last, and only when it is real. A zero-sized or minimized window reports geometry that
-        // describes nothing, and `HubSummary` refuses this fact outright — it earns its place here
-        // only because two windows of one application are often told apart by their size.
-        if entry.isWindow, !entry.isMinimized, entry.frame.width > 1, entry.frame.height > 1 {
-            rows.append(
-                Row(
-                    label: "Size",
-                    value: "\(Int(entry.frame.width)) × \(Int(entry.frame.height))"
-                )
-            )
-        }
+        // No pixel size. It was here on the argument that two windows of one application are told
+        // apart by their size — and the preview above these rows now does that far better than
+        // "1512 × 950" ever did, which leaves the row restating what the picture already shows.
+        // `HubSummary` refused this fact outright; the reason it was an exception here is gone.
 
         let source: String = {
             if let siteHost, !siteHost.isEmpty, siteHost != entry.applicationName {
@@ -119,6 +115,13 @@ struct CardDetails: Equatable {
             return entry.applicationName
         }()
 
-        return CardDetails(title: entry.displayTitle, source: source, rows: rows)
+        return CardDetails(
+            title: entry.displayTitle,
+            source: source,
+            rows: rows,
+            // Only a real window sits on a screen. A tab's screen is its browser's, so a chip on a tab
+            // would be describing something other than the thing the menu is about.
+            displayNumber: entry.isWindow ? displayNumber : nil
+        )
     }
 }

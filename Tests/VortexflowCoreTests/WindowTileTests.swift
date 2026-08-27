@@ -14,12 +14,14 @@ struct WindowTileTests {
     /// up rather than cancelling out.
     private let screen = CGRect(x: 100, y: 37, width: 1513, height: 913)
 
-    @Test func theTopHalfIsTheHalfWithTheSmallerY() {
-        let top = WindowTile.topHalf.frame(in: screen)
-        let bottom = WindowTile.bottomHalf.frame(in: screen)
-        #expect(top.minY == screen.minY)
-        #expect(top.minY < bottom.minY, "top and bottom are swapped")
-        #expect(bottom.maxY == screen.maxY)
+    /// Both halves span the screen's full height, which is what says the rectangle was read as Quartz
+    /// space rather than flipped: a mistaken flip would move the origin off the top edge.
+    @Test func bothHalvesStartAtTheTopOfTheScreen() {
+        for tile in WindowTile.allCases {
+            let frame = tile.frame(in: screen)
+            #expect(frame.minY == screen.minY, "\(tile) does not start at the top edge")
+            #expect(frame.maxY == screen.maxY, "\(tile) does not reach the bottom edge")
+        }
     }
 
     @Test func theLeftHalfIsTheHalfWithTheSmallerX() {
@@ -33,15 +35,19 @@ struct WindowTileTests {
     /// No seam and no overhang: an odd width split as `width / 2` twice leaves half a point
     /// somewhere, and the remainder has to go to one of the halves.
     @Test func theTwoHalvesCoverTheScreenExactly() {
-        for pair in [(WindowTile.leftHalf, WindowTile.rightHalf), (.topHalf, .bottomHalf)] {
-            let first = pair.0.frame(in: screen)
-            let second = pair.1.frame(in: screen)
-            #expect(first.union(second) == screen, "\(pair) does not cover the screen")
-            #expect(
-                first.intersection(second).isEmpty,
-                "\(pair) overlap by \(first.intersection(second))"
-            )
-        }
+        let left = WindowTile.leftHalf.frame(in: screen)
+        let right = WindowTile.rightHalf.frame(in: screen)
+        #expect(left.union(right) == screen, "the halves do not cover the screen")
+        #expect(
+            left.intersection(right).isEmpty,
+            "the halves overlap by \(left.intersection(right))"
+        )
+    }
+
+    /// Top and bottom halves were offered and removed: a half-height window shows too few lines to be
+    /// worth the click. Nothing may quietly bring them back.
+    @Test func onlyTheVerticalHalvesAreOffered() {
+        #expect(WindowTile.allCases == [.leftHalf, .rightHalf])
     }
 
     /// Every half stays inside the usable area, which is what keeps a tiled window from sliding
@@ -54,11 +60,9 @@ struct WindowTileTests {
     }
 
     /// A horizontal half keeps the full height, a vertical half keeps the full width.
-    @Test func eachHalfKeepsTheOtherDimensionWhole() {
+    @Test func eachHalfKeepsTheFullHeight() {
         #expect(WindowTile.leftHalf.frame(in: screen).height == screen.height)
         #expect(WindowTile.rightHalf.frame(in: screen).height == screen.height)
-        #expect(WindowTile.topHalf.frame(in: screen).width == screen.width)
-        #expect(WindowTile.bottomHalf.frame(in: screen).width == screen.width)
     }
 
     /// A display to the left of, or above, the main one has negative coordinates, and the halves
@@ -68,7 +72,8 @@ struct WindowTileTests {
         let left = WindowTile.leftHalf.frame(in: secondary)
         #expect(left.minX == -1920)
         #expect(left.width == 960)
-        #expect(WindowTile.topHalf.frame(in: secondary).minY == -1080)
+        #expect(left.minY == -1080)
+        #expect(WindowTile.rightHalf.frame(in: secondary).minX == -960)
     }
 
     @Test func everyTileHasAGlyphAndAName() {

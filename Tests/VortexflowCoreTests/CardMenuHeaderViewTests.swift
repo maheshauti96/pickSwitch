@@ -19,10 +19,16 @@ struct CardMenuHeaderViewTests {
         title: String,
         rows: [CardDetails.Row] = [],
         thumbnail: CGImage? = nil,
-        icon: NSImage? = nil
+        icon: NSImage? = nil,
+        displayNumber: Int? = 1
     ) -> NSHostingView<CardMenuHeaderView> {
         let view = CardMenuHeaderView(
-            details: CardDetails(title: title, source: "Google Chrome", rows: rows),
+            details: CardDetails(
+                title: title,
+                source: "Google Chrome",
+                rows: rows,
+                displayNumber: displayNumber
+            ),
             thumbnail: thumbnail,
             icon: icon
         )
@@ -115,7 +121,6 @@ struct CardMenuHeaderViewTests {
         let actions: [CardMenuItem] = [
             .searchWindowTabs(count: 23),
             .muteAudible,
-            .pinApplication(name: "Google Chrome"),
         ]
 
         for count in 1...controls.count {
@@ -161,6 +166,57 @@ struct CardMenuHeaderViewTests {
         hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
         hosting.layoutSubtreeIfNeeded()
         return hosting.fittingSize.width
+    }
+
+    // MARK: - The screen chip
+
+    /// The colour is the point: two menus opened on two windows should answer "same screen or not"
+    /// without either number being read, which only works if neighbouring screens differ.
+    @Test func neighbouringScreensGetDifferentColours() {
+        let tints = (1...6).map { CardMenuHeaderView.displayTint($0) }
+        #expect(Set(tints.map(String.init(describing:))).count == tints.count)
+    }
+
+    /// The same screen must be the same colour every time the menu opens, or the colour says nothing.
+    @Test func aScreenKeepsItsColour() {
+        #expect(CardMenuHeaderView.displayTint(3) == CardMenuHeaderView.displayTint(3))
+        #expect(CardMenuHeaderView.displayTint(1) != CardMenuHeaderView.displayTint(2))
+    }
+
+    /// More displays than colours wraps rather than trapping, and a zero or negative number — which
+    /// should never arrive, but would index out of bounds if it did — is clamped.
+    @Test func theTintSurvivesNumbersOutsideThePalette() {
+        #expect(CardMenuHeaderView.displayTint(7) == CardMenuHeaderView.displayTint(1))
+        #expect(CardMenuHeaderView.displayTint(0) == CardMenuHeaderView.displayTint(1))
+        #expect(CardMenuHeaderView.displayTint(-4) == CardMenuHeaderView.displayTint(1))
+    }
+
+    /// The chip shares its line with the facts rather than taking one of its own.
+    ///
+    /// Against a single fact row the chip is the taller of the two and sets the line height, which is
+    /// a few points and not a row. Against two or more it costs nothing at all, and that is the case
+    /// worth pinning: the chip must never be what makes the footer grow.
+    @Test func theChipSharesTheFactsLineRatherThanAddingOne() {
+        let oneRow = [CardDetails.Row(label: "Tabs", value: "23 tabs")]
+        let growth = header(title: "Mail", rows: oneRow, displayNumber: 4).fittingSize.height
+            - header(title: "Mail", rows: oneRow, displayNumber: nil).fittingSize.height
+        #expect(growth < 6, "the chip added \(growth)pt, which is a row rather than a line height")
+
+        let twoRows = oneRow + [CardDetails.Row(label: "Audio", value: "Playing")]
+        #expect(
+            header(title: "Mail", rows: twoRows, displayNumber: 4).fittingSize.height
+                == header(title: "Mail", rows: twoRows, displayNumber: nil).fittingSize.height
+        )
+        #expect(header(title: "Mail", rows: twoRows, displayNumber: 4).fittingSize.width
+            == CardMenuHeaderView.width)
+    }
+
+    /// With no facts at all the chip is still shown, and is still the only thing on its line.
+    @Test func theChipAppearsEvenWithNoFacts() {
+        let bare = header(title: "Mail", displayNumber: nil)
+        let chipOnly = header(title: "Mail", displayNumber: 2)
+        #expect(chipOnly.fittingSize.height > bare.fittingSize.height)
+        #expect(chipOnly.fittingSize.width == CardMenuHeaderView.width)
     }
 
     /// The preview well is reserved whether or not a capture has arrived, so the menu does not change

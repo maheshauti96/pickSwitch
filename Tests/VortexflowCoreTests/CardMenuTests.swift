@@ -25,7 +25,6 @@ struct CardMenuTests {
             knownTabCount: 23,
             isAudible: false,
             hasAccessibilityElement: true,
-            isPinned: false,
             isMinimized: false
         )
     }
@@ -38,8 +37,7 @@ struct CardMenuTests {
 
     /// The split is the design. The window controls act on the window, and they are drawn above the
     /// preview because the preview *is* the window — the same reason a title bar carries them. The
-    /// second row is about what the window contains or which application it belongs to, neither of
-    /// which the preview shows.
+    /// second row is about what the window contains, which the preview does not show.
     @Test func theRowsSplitWindowActionsFromContentActions() {
         var context = browserContext
         context.isAudible = true
@@ -50,13 +48,10 @@ struct CardMenuTests {
             .closeWindow,
             .tileWindow(.leftHalf),
             .tileWindow(.rightHalf),
-            .tileWindow(.topHalf),
-            .tileWindow(.bottomHalf),
         ])
         #expect(result.actions == [
             .searchWindowTabs(count: 23),
             .muteAudible,
-            .pinApplication(name: "Google Chrome"),
         ])
     }
 
@@ -72,22 +67,33 @@ struct CardMenuTests {
         #expect(CardMenuItem.searchWindowTabs(count: nil).title == "Search this window's tabs")
     }
 
-    @Test func pinningReflectsTheCurrentState() {
-        var context = CardMenu.Context()
-        context.isPinned = true
-        let result = rows(window(app: "Slack"), context)
-        #expect(result.actions.contains(.unpinApplication(name: "Slack")))
-        #expect(!result.actions.contains(.pinApplication(name: "Slack")))
-    }
+    // MARK: - What was deliberately taken away
 
-    /// Closing a window is not quitting its application, and the menu now offers only the first.
-    /// Nothing may quietly reintroduce an action that terminates every window an application has.
+    /// Closing a window is not quitting its application, and the menu offers only the first. Nothing
+    /// may quietly reintroduce an action that terminates every window an application has.
     @Test func theMenuNeverOffersToQuitAnApplication() {
         var context = browserContext
         context.isAudible = true
-        let result = rows(window(), context)
-        let titles = (result.windowControls + result.actions).map(\.title)
+        let titles = everyAction(in: rows(window(), context)).map(\.title)
         #expect(!titles.contains { $0.localizedCaseInsensitiveContains("quit") })
+    }
+
+    /// Pinning was offered here and removed as not worth the room. It is still reachable in Settings,
+    /// so this is a menu decision rather than a lost capability.
+    @Test func theMenuNoLongerOffersPinning() {
+        var context = browserContext
+        context.isAudible = true
+        let titles = everyAction(in: rows(window(), context)).map(\.title)
+        #expect(!titles.contains { $0.localizedCaseInsensitiveContains("pin") })
+    }
+
+    /// Only the vertical halves. A half-height window shows too few lines to be worth the click.
+    @Test func onlyTheTwoVerticalHalvesAreOffered() {
+        let tiles = rows(window(), browserContext).windowControls.compactMap { item -> WindowTile? in
+            if case .tileWindow(let tile) = item { return tile }
+            return nil
+        }
+        #expect(tiles == [.leftHalf, .rightHalf])
     }
 
     // MARK: - What is withheld, and why
@@ -114,8 +120,8 @@ struct CardMenuTests {
         let result = rows(window(), context)
 
         #expect(result.windowControls.isEmpty)
-        // The content and application actions survive, because they never needed Accessibility.
-        #expect(result.actions.contains(.pinApplication(name: "Google Chrome")))
+        // Tab search survives: it never needed Accessibility, only the browser's scripting id.
+        #expect(result.actions == [.searchWindowTabs(count: 23)])
     }
 
     /// A minimized window's frame is not where it is or how big it looks, so sending it to half a
@@ -150,12 +156,24 @@ struct CardMenuTests {
         #expect(!result.actions.contains(.searchWindowTabs(count: nil)))
     }
 
-    /// A window with nothing available on it must not produce an empty menu frame. Only the
-    /// application row can carry a card this bare, and it must.
-    @Test func theBarestWindowStillHasSomethingToOffer() {
+    /// A consequence of dropping pinning worth stating out loud: with no application-level action left,
+    /// a window that offers nothing at all now produces no menu rather than a menu of one useless
+    /// entry. An empty frame under the pointer would be worse than nothing happening.
+    @Test func aWindowWithNothingAvailableGetsNoMenu() {
         let result = rows(window(app: "Warp"), CardMenu.Context())
         #expect(result.windowControls.isEmpty)
-        #expect(result.actions == [.pinApplication(name: "Warp")])
+        #expect(result.actions.isEmpty)
+        #expect(result.isEmpty)
+    }
+
+    /// The ordinary case still has a menu: a window on this desktop has an Accessibility element, so it
+    /// gets its controls even when there is nothing to say about its contents.
+    @Test func anOrdinaryWindowStillGetsItsControls() {
+        var context = CardMenu.Context()
+        context.hasAccessibilityElement = true
+        let result = rows(window(app: "Warp"), context)
+        #expect(result.windowControls.count == 4)
+        #expect(result.actions.isEmpty)
         #expect(!result.isEmpty)
     }
 
@@ -165,8 +183,7 @@ struct CardMenuTests {
     @Test func everyActionHasAGlyphAndAName() {
         var context = browserContext
         context.isAudible = true
-        let result = rows(window(), context)
-        for item in result.windowControls + result.actions {
+        for item in everyAction(in: rows(window(), context)) {
             #expect(!item.icon.symbolName.isEmpty, "\(item) has no symbol")
             #expect(!item.icon.label.isEmpty, "\(item) has no caption")
             #expect(!item.title.isEmpty, "\(item) has no title")
@@ -178,21 +195,22 @@ struct CardMenuTests {
     @Test func everySymbolResolvesOnThisSystem() {
         var context = browserContext
         context.isAudible = true
-        var pinned = context
-        pinned.isPinned = true
-
-        let everyAction = rows(window(), context).windowControls
-            + rows(window(), context).actions
-            + rows(window(), pinned).actions
-            + [.searchWindowTabs(count: nil)]
-
-        for item in everyAction {
+        for item in everyAction(in: rows(window(), context)) + [.searchWindowTabs(count: nil)] {
             let name = item.icon.symbolName
             #expect(
                 NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
                 "\(name) is not a symbol on this system"
             )
         }
+    }
+
+    /// Closing is the only irreversible action here, and the only one coloured to say so. Minimizing
+    /// is undone from the Dock and tiling by dragging, but a closed window with unsaved work is gone.
+    @Test func onlyClosingIsMarkedDestructive() {
+        var context = browserContext
+        context.isAudible = true
+        let destructive = everyAction(in: rows(window(), context)).filter(\.isDestructive)
+        #expect(destructive == [.closeWindow])
     }
 
     /// The tab count rides in the caption when it is known: it is the one thing a single card cannot
@@ -203,20 +221,15 @@ struct CardMenuTests {
         #expect(CardMenuItem.searchWindowTabs(count: nil).icon.label == "Tabs")
     }
 
-    /// Pinning and unpinning are one button whose glyph says which way it will go.
-    @Test func pinningAndUnpinningReadDifferently() {
-        let pin = CardMenuItem.pinApplication(name: "Google Chrome").icon
-        let unpin = CardMenuItem.unpinApplication(name: "Google Chrome").icon
-        #expect(pin.symbolName != unpin.symbolName)
-        #expect(pin.label == "Pin")
-        #expect(unpin.label == "Unpin")
-    }
-
-    /// Four tiles that look alike would make the row a guessing game.
-    @Test func theFourTilesAreEachDistinct() {
+    /// Two tiles that looked alike would make the row a guessing game.
+    @Test func theTwoTilesAreDistinct() {
         let symbols = WindowTile.allCases.map { CardMenuItem.tileWindow($0).icon.symbolName }
         #expect(Set(symbols).count == WindowTile.allCases.count)
         let labels = WindowTile.allCases.map { CardMenuItem.tileWindow($0).icon.label }
         #expect(Set(labels).count == WindowTile.allCases.count)
+    }
+
+    private func everyAction(in rows: CardMenu.Rows) -> [CardMenuItem] {
+        rows.windowControls + rows.actions
     }
 }

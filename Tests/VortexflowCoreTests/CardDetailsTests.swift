@@ -29,7 +29,7 @@ struct CardDetailsTests {
     private func details(
         for entry: WindowEntry,
         siteHost: String? = nil,
-        displayLabel: String? = nil,
+        displayNumber: Int? = nil,
         tabCount: Int? = nil,
         windowPosition: (index: Int, count: Int)? = nil,
         isIncognito: Bool = false,
@@ -39,7 +39,7 @@ struct CardDetailsTests {
         CardDetails.make(
             entry: entry,
             siteHost: siteHost,
-            displayLabel: displayLabel,
+            displayNumber: displayNumber,
             tabCount: tabCount,
             windowPosition: windowPosition,
             isIncognito: isIncognito,
@@ -55,12 +55,41 @@ struct CardDetailsTests {
 
     // MARK: - The plain case
 
-    /// A window on this desktop, on the only screen, with nothing playing: almost every row is
-    /// withheld, and what is left is the part that distinguishes it from its siblings.
-    @Test func anUnremarkableWindowShowsAlmostNothing() {
+    /// A window on this desktop with nothing playing earns no rows at all. The preview and the title
+    /// say everything there is to say about it, and a row that appears on every menu distinguishes
+    /// nothing while costing the height the preview needs.
+    @Test func anUnremarkableWindowShowsNoRowsAtAll() {
         let result = details(for: window())
-        #expect(result.rows.map(\CardDetails.Row.label) == ["Size"])
-        #expect(value("Size", in: result) == "1920 × 1080")
+        #expect(result.rows.isEmpty)
+    }
+
+    /// The window's pixel size was a row and is not any more: the preview above these rows tells two
+    /// windows of one application apart far better than "1920 × 1080" did.
+    @Test func thePixelSizeIsNeverARow() {
+        let result = details(for: window(frame: CGRect(x: 0, y: 0, width: 1920, height: 1080)))
+        #expect(value("Size", in: result) == nil)
+    }
+
+    /// The screen is a chip, not a row. A row spelling out "Screen 1" carried the same fact for the
+    /// price of a full line.
+    @Test func theScreenIsCarriedAsAChipRatherThanARow() {
+        let result = details(for: window(), displayNumber: 2)
+        #expect(result.displayNumber == 2)
+        #expect(value("Screen", in: result) == nil)
+        #expect(value("Display", in: result) == nil)
+    }
+
+    /// A tab's screen is its browser's, so a chip on a tab would describe something other than the
+    /// thing the menu is about.
+    @Test func aTabGetsNoScreenChip() {
+        let tab = WindowEntry.tabEntry(
+            BrowserTab(
+                browser: .chrome, windowIdentifier: 1, tabIndex: 2,
+                title: "ChatGPT", url: "https://chatgpt.com/"
+            ),
+            application: nil
+        )
+        #expect(details(for: tab, displayNumber: 1).displayNumber == nil)
     }
 
     @Test func theTitleAndSourceAreAlwaysPresent() {
@@ -99,13 +128,6 @@ struct CardDetailsTests {
     @Test func anotherDesktopWithNoHistorySaysOnlyThat() {
         let result = details(for: window(onActiveSpace: false, lastSeen: nil))
         #expect(value("Desktop", in: result) == "Another")
-    }
-
-    @Test func theScreenIsNamedOnlyWhenTheCallerSuppliesOne() {
-        #expect(value("Screen", in: details(for: window())) == nil)
-        #expect(
-            value("Screen", in: details(for: window(), displayLabel: "DELL U2720Q")) == "DELL U2720Q"
-        )
     }
 
     @Test func tabsAreCountedWhenKnown() {
@@ -182,19 +204,19 @@ struct CardDetailsTests {
         #expect(value("Desktop", in: result) == nil)
     }
 
-    /// Ordering is part of the design: the fact that changes the decision comes first, and the
-    /// merely descriptive geometry comes last.
+    /// Ordering is part of the design: the fact that changes the decision comes first, and the merely
+    /// descriptive ones follow.
     @Test func rowsAreOrderedFromConsequentialToDescriptive() {
         let result = details(
             for: window(onActiveSpace: false, lastSeen: Self.now - 60),
-            displayLabel: "Studio Display",
+            displayNumber: 2,
             tabCount: 12,
             windowPosition: (2, 3),
             isPlayingAudio: true
         )
         #expect(
             result.rows.map(\CardDetails.Row.label)
-                == ["Desktop", "Screen", "Tabs", "Audio", "Window", "Size"]
+                == ["Desktop", "Tabs", "Audio", "Window"]
         )
     }
 }

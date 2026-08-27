@@ -41,9 +41,9 @@ struct CardMenuHeaderView: View {
         VStack(alignment: .leading, spacing: 9) {
             preview
             caption
-            if !details.rows.isEmpty {
+            if !details.rows.isEmpty || details.displayNumber != nil {
                 Divider().opacity(0.6)
-                facts
+                footer
             }
         }
         .padding(.horizontal, Self.horizontalPadding)
@@ -124,9 +124,56 @@ struct CardMenuHeaderView: View {
         }
     }
 
+    /// Facts at the leading edge, the screen chip trailing at the bottom.
+    ///
+    /// Bottom-aligned rather than top, so the chip stays in the corner however many facts sit beside
+    /// it — anchored to the block's edge rather than floating against the first row.
+    private var footer: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if !details.rows.isEmpty { facts }
+            Spacer(minLength: 0)
+            if let number = details.displayNumber {
+                displayChip(number)
+            }
+        }
+    }
+
+    /// Which screen, as a colour first and a number second.
+    ///
+    /// The colour is what makes this quicker than the row it replaced: two menus opened on two windows
+    /// answer "same screen or not" without either number being read. It is keyed on the display number
+    /// so it is stable for a session — the same screen is the same colour every time the menu opens.
+    private func displayChip(_ number: Int) -> some View {
+        let tint = Self.displayTint(number)
+        return Text("Display \(number)")
+            .font(.system(size: 9.5, weight: .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule().fill(tint.opacity(0.16))
+            )
+            .overlay(
+                Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 0.5)
+            )
+            .fixedSize()
+    }
+
+    /// One colour per screen, wrapping if someone runs more displays than there are colours.
+    ///
+    /// Chosen to stay apart from each other rather than to be pretty: adjacent entries differ in hue
+    /// far enough that two chips seen a second apart are not mistaken for one another, which is the
+    /// only job the colour has.
+    static func displayTint(_ number: Int) -> Color {
+        let palette: [Color] = [.blue, .purple, .teal, .orange, .pink, .green]
+        // Display numbers are 1-based, and a hostile or unset value must not trap on a negative index.
+        let index = max(0, number - 1) % palette.count
+        return palette[index]
+    }
+
     /// A two-column grid, so the values line up whatever the labels are. Run together as
-    /// "Desktop: Another · 20m ago · Screen: DELL U2720Q" the same facts wrap unpredictably inside a
-    /// fixed width and stop being scannable.
+    /// "Desktop: Another · 20m ago · Tabs: 23 tabs" the same facts wrap unpredictably inside a fixed
+    /// width and stop being scannable.
     private var facts: some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 3) {
             ForEach(details.rows, id: \.label) { row in
@@ -150,7 +197,11 @@ struct CardMenuHeaderView: View {
     /// facts have to arrive as that item's label rather than as separate elements it would never
     /// visit.
     private var accessibilityLabel: String {
-        ([details.title, details.source] + details.rows.map { "\($0.label): \($0.value)" })
-            .joined(separator: ", ")
+        var parts = [details.title, details.source]
+        parts += details.rows.map { "\($0.label): \($0.value)" }
+        // Spoken, because the chip's colour carries meaning that a screen reader cannot convey and
+        // must not be the only way the screen is identified.
+        if let number = details.displayNumber { parts.append("Display \(number)") }
+        return parts.joined(separator: ", ")
     }
 }

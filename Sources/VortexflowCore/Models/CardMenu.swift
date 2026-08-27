@@ -36,8 +36,6 @@ enum CardMenuItem: Equatable {
     /// Send the window to half its screen.
     case tileWindow(WindowTile)
 
-    case pinApplication(name: String)
-    case unpinApplication(name: String)
 }
 
 enum CardMenu {
@@ -52,8 +50,6 @@ enum CardMenu {
         var isAudible: Bool = false
         /// Whether a live Accessibility element exists for this window.
         var hasAccessibilityElement: Bool = false
-        /// Whether the owning application is pinned to the front of the list.
-        var isPinned: Bool = false
         /// Whether the window is currently in the Dock.
         var isMinimized: Bool = false
     }
@@ -100,8 +96,6 @@ enum CardMenu {
         if context.isAudible {
             rows.actions.append(.muteAudible)
         }
-        let name = entry.applicationName
-        rows.actions.append(context.isPinned ? .unpinApplication(name: name) : .pinApplication(name: name))
 
         return rows
     }
@@ -137,10 +131,18 @@ extension CardMenuItem {
             return Icon(symbolName: "xmark", label: "Close")
         case .tileWindow(let tile):
             return Icon(symbolName: tile.symbolName, label: tile.title)
-        case .pinApplication:
-            return Icon(symbolName: "pin", label: "Pin")
-        case .unpinApplication:
-            return Icon(symbolName: "pin.slash", label: "Unpin")
+        }
+    }
+
+    /// Whether this action destroys something, and should be coloured to say so before it is clicked.
+    ///
+    /// Only closing. Minimizing is reversible from the Dock and tiling is reversible by dragging, but
+    /// a closed window with unsaved work in it is not reversible at all — and in a row of same-coloured
+    /// glyphs the cross sits immediately beside the minus, which is the pair most easily confused.
+    var isDestructive: Bool {
+        switch self {
+        case .closeWindow: return true
+        case .searchWindowTabs, .muteAudible, .minimizeWindow, .tileWindow: return false
         }
     }
 
@@ -160,10 +162,6 @@ extension CardMenuItem {
             return "Minimize window"
         case .tileWindow(let tile):
             return tile.title
-        case .pinApplication(let name):
-            return "Pin \(name)"
-        case .unpinApplication(let name):
-            return "Unpin \(name)"
         }
     }
 }

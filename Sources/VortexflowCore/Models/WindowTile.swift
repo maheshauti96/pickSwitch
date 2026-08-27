@@ -5,12 +5,14 @@ import CoreGraphics
 /// Pure geometry, deliberately. The rest of tiling is two Accessibility writes that can only be
 /// exercised against a live window on a real desk, so the part that can be wrong in a way nobody
 /// notices — which half is "top" — is kept here where a test can pin it.
+/// Only the two vertical halves. Top and bottom were offered first and removed: a half-height window
+/// is a shape almost nothing is designed for — a browser, an editor or a terminal at 456pt tall shows
+/// so few lines that the tiling is undone immediately — whereas side-by-side halves are the
+/// arrangement people actually want two windows in.
 enum WindowTile: String, Equatable, CaseIterable, Sendable {
 
     case leftHalf
     case rightHalf
-    case topHalf
-    case bottomHalf
 
     /// The window's new frame inside the screen's usable area.
     ///
@@ -27,7 +29,6 @@ enum WindowTile: String, Equatable, CaseIterable, Sendable {
         // width into two halves of `width / 2` leaves a half-point seam down the middle of the
         // screen, or a half-point overhang past its edge.
         let halfWidth = (visibleBounds.width / 2).rounded()
-        let halfHeight = (visibleBounds.height / 2).rounded()
 
         switch self {
         case .leftHalf:
@@ -40,17 +41,6 @@ enum WindowTile: String, Equatable, CaseIterable, Sendable {
                 x: visibleBounds.minX + halfWidth, y: visibleBounds.minY,
                 width: visibleBounds.width - halfWidth, height: visibleBounds.height
             )
-        case .topHalf:
-            // Smaller y, because y grows downward here.
-            return CGRect(
-                x: visibleBounds.minX, y: visibleBounds.minY,
-                width: visibleBounds.width, height: halfHeight
-            )
-        case .bottomHalf:
-            return CGRect(
-                x: visibleBounds.minX, y: visibleBounds.minY + halfHeight,
-                width: visibleBounds.width, height: visibleBounds.height - halfHeight
-            )
         }
     }
 
@@ -60,8 +50,6 @@ enum WindowTile: String, Equatable, CaseIterable, Sendable {
         switch self {
         case .leftHalf: return "rectangle.lefthalf.filled"
         case .rightHalf: return "rectangle.righthalf.filled"
-        case .topHalf: return "rectangle.tophalf.filled"
-        case .bottomHalf: return "rectangle.bottomhalf.filled"
         }
     }
 
@@ -69,8 +57,6 @@ enum WindowTile: String, Equatable, CaseIterable, Sendable {
         switch self {
         case .leftHalf: return "Left half"
         case .rightHalf: return "Right half"
-        case .topHalf: return "Top half"
-        case .bottomHalf: return "Bottom half"
         }
     }
 }

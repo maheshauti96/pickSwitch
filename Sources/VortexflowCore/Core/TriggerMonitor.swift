@@ -110,14 +110,23 @@ final class TriggerMonitor {
     /// the application underneath.
     private var overlayClickRegion: CGRect?
 
-    /// Let primary clicks past untouched while a card's context menu is tracking.
+    /// True while a card's context menu is tracking, during which the menu owns every mouse button.
     ///
-    /// This tap sits in front of everything and consumes primary clicks inside the overlay, which is
-    /// what makes cards clickable on a never-key panel. It also means the click that chooses a menu
-    /// item is swallowed before the menu can see it — the menu opens, tracks, and reports that nothing
-    /// was chosen. Written on the main thread, read on the tap thread; a stale read for one event is
-    /// harmless either way.
-    var passesThroughPrimaryClicks = false
+    /// This tap sits in front of everything and consumes clicks inside the overlay, which is what
+    /// makes cards clickable on a never-key panel. While a menu is up that is exactly wrong, and for
+    /// both buttons:
+    ///
+    /// - The primary click that chooses a menu item was swallowed before the menu could see it, so the
+    ///   menu opened, tracked, and reported that nothing was chosen.
+    /// - The secondary click that should dismiss the menu was swallowed too, which is subtler and was
+    ///   the "the previous menu does not close" bug. `popUp` blocks the main thread for the whole
+    ///   tracking loop, so the delegate call that would have closed the old menu sat on the main queue
+    ///   behind it — and the click that would otherwise have dismissed the menu never reached AppKit,
+    ///   so the loop had no reason to end. The menu stayed open and the queued work never ran.
+    ///
+    /// Written on the main thread, read on the tap thread; a stale read for one event is harmless
+    /// either way.
+    var contextMenuIsTracking = false
     /// Guards against a synthetic or missed `up` leaving the overlay stuck open.
     private var isTriggerHeld = false
     /// When the current press started, for the tap-versus-hold decision.
@@ -426,7 +435,7 @@ final class TriggerMonitor {
             // inside the panel; outside clicks still reach the application underneath.
             // A tracking context menu owns the primary click: neither consume it nor route it into
             // the card hit test, or the menu never learns that one of its items was picked.
-            if monitor.passesThroughPrimaryClicks {
+            if monitor.contextMenuIsTracking {
                 return Unmanaged.passUnretained(event)
             }
             let screenPoint = NSEvent.mouseLocation
@@ -440,6 +449,20 @@ final class TriggerMonitor {
             let screenPoint = NSEvent.mouseLocation
             let isInsideOverlay = monitor.overlayClickRegion?.contains(screenPoint) == true
             guard isInsideOverlay else { return Unmanaged.passUnretained(event) }
+
+            // A menu is already up, so this click is the menu's to answer first.
+            //
+            // Consuming it here is what left the old menu open: with nothing reaching AppKit the
+            // tracking loop had no reason to end, and because `popUp` blocks the main thread the
+            // delegate call that would have cancelled it could not run either. Passing it through
+            // dismisses the open menu, which releases the main thread, which lets the dispatched
+            // handler below open the new one — in that order, without either half waiting on the
+            // other.
+            if monitor.contextMenuIsTracking {
+                monitor.dispatch { $0.rightMousePressed(atScreenPoint: screenPoint) }
+                return Unmanaged.passUnretained(event)
+            }
+
             monitor.dispatch { $0.rightMousePressed(atScreenPoint: screenPoint) }
             return nil
 

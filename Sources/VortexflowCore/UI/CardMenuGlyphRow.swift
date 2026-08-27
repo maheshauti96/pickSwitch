@@ -94,6 +94,21 @@ struct CardMenuGlyphRow: View {
 
     private var perGlyph: Bool { caption == .perGlyph }
 
+    /// Closing is red before it is hovered, not only once the pointer is on it.
+    ///
+    /// The point is to be seen on the way past. The cross sits immediately beside the minus, which is
+    /// the pair most easily confused in a row of identical glyphs, and a warning that only appears
+    /// after you have already aimed at the thing is not a warning.
+    private func foreground(for action: CardMenuItem, isHovered: Bool) -> AnyShapeStyle {
+        if isHovered { return AnyShapeStyle(.white) }
+        return action.isDestructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary)
+    }
+
+    private func highlight(for action: CardMenuItem, isHovered: Bool) -> Color {
+        guard isHovered else { return .clear }
+        return action.isDestructive ? .red : .accentColor
+    }
+
     private func label(for action: CardMenuItem, isHovered: Bool) -> some View {
         VStack(spacing: 3) {
             Image(systemName: action.icon.symbolName)
@@ -109,13 +124,13 @@ struct CardMenuGlyphRow: View {
                     .minimumScaleFactor(0.7)
             }
         }
-        .foregroundStyle(isHovered ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+        .foregroundStyle(foreground(for: action, isHovered: isHovered))
         .frame(maxWidth: perGlyph ? .infinity : nil)
         .frame(width: perGlyph ? nil : 28)
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isHovered ? Color.accentColor : .clear)
+                .fill(highlight(for: action, isHovered: isHovered))
         )
         // The gap between a glyph and its caption is still part of the button.
         .contentShape(Rectangle())

@@ -1557,6 +1557,18 @@ public final class SwitcherController {
     /// panel that is deliberately never key and belongs to an application that is never active. Every
     /// step logs, so a failure says which step failed rather than "the menu did not work".
     func rightMousePressed(atScreenPoint point: CGPoint) {
+        // Before anything else, including the hit test.
+        //
+        // A right-click anywhere closes an open menu, whether or not it lands on another card, which
+        // is what the pointer being somewhere else already means. Doing this after the hit test left
+        // the old menu open whenever the new click missed a card — and a menu this tall covers several
+        // of them, so missing was easy.
+        if let openContextMenu {
+            Log.overlay.info("right-click while a menu was open; closing it")
+            openContextMenu.cancelTracking()
+            self.openContextMenu = nil
+        }
+
         guard state.isVisible, let panel else { return }
         guard let index = cardIndex(atScreenPoint: point, panel: panel),
               index < state.entries.count
@@ -1571,19 +1583,7 @@ public final class SwitcherController {
             (\(entry.applicationName, privacy: .public)); opening context menu
             """)
 
-        // A menu already open belongs to a different card, so it goes.
-        //
-        // This handler runs *inside* the open menu's tracking loop — the event tap is installed in
-        // the common run loop modes, which is the only reason a second right-click is seen at all —
-        // and cancelling from here unwinds that loop rather than returning immediately. The new
-        // menu's own presentation already waits on a capture, so by the time it runs the first
-        // `popUp` has returned and released the main thread. That ordering is what makes one line
-        // enough here.
-        if let openContextMenu {
-            Log.overlay.info("closing the context menu already open on another card")
-            openContextMenu.cancelTracking()
-            self.openContextMenu = nil
-        }
+
 
         // Selection follows the right-click, so the menu visibly belongs to a card.
         state.setSelection(index)
@@ -1674,11 +1674,11 @@ public final class SwitcherController {
         // suppressing our own handling is not enough while the click is still being swallowed before
         // the menu can see it.
         isShowingContextMenu = true
-        triggerMonitor.passesThroughPrimaryClicks = true
+        triggerMonitor.contextMenuIsTracking = true
         openContextMenu = menu
         defer {
             isShowingContextMenu = false
-            triggerMonitor.passesThroughPrimaryClicks = false
+            triggerMonitor.contextMenuIsTracking = false
             // Only if it is still this menu: a right-click on another card has already replaced the
             // handle, and clearing it here would leave the new menu unclosable by the next one.
             if openContextMenu === menu { openContextMenu = nil }
@@ -1757,9 +1757,12 @@ public final class SwitcherController {
         let details = CardDetails.make(
             entry: entry,
             siteHost: state.siteHost(for: entry),
-            // `display(for:)` already withholds the name on a single-screen setup, which is the same
-            // rule the rest of the overlay follows; re-deciding it here would be a second opinion.
-            displayLabel: state.display(for: entry)?.label,
+            // The layout directly rather than `state.display(for:)`, which withholds the screen on a
+            // single-display setup. That rule is right for a card badge, which competes for space with
+            // everything else on the card, but the chip is in a corner of a menu that is already open
+            // — and showing it always means the colour is learned before a second display appears
+            // rather than the first time one does.
+            displayNumber: state.displayLayout.display(for: entry.frame)?.number,
             tabCount: scriptedID.flatMap { identifier in
                 state.hasLoadedTabs ? state.tabCount(forWindowIdentifier: identifier) : nil
             },
@@ -1842,7 +1845,6 @@ public final class SwitcherController {
             },
             isAudible: state.isPlayingAudio(entry) || state.isUsingMicrophone(entry),
             hasAccessibilityElement: entry.axElement != nil,
-            isPinned: entry.bundleIdentifier.map(settings.pinnedApplications.contains) ?? false,
             isMinimized: entry.isMinimized
         )
     }
@@ -1882,16 +1884,6 @@ public final class SwitcherController {
 
         case .tileWindow(let tile):
             tileWindow(entry, to: tile)
-
-        case .pinApplication, .unpinApplication:
-            guard let bundleIdentifier = entry.bundleIdentifier else { return }
-            var pinned = settings.pinnedApplications
-            if pinned.contains(bundleIdentifier) {
-                pinned.remove(bundleIdentifier)
-            } else {
-                pinned.insert(bundleIdentifier)
-            }
-            settings.pinnedApplications = pinned
 
         case .muteAudible:
             // Not wired yet; the menu does not offer mute until it is.
