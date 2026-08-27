@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// What a Chromium tab strip says about one tab's media, read out of the accessibility tree.
@@ -104,9 +105,72 @@ extension TabMediaAlert {
         /// The browser process the strip belongs to. A tab entry carries the same pid, which keeps
         /// two browsers with same-titled tabs from being confused for one another.
         let processID: pid_t
+        /// The window whose tab strip this was read from, when it could be identified.
+        ///
+        /// This is what makes a *window* badge honest. CoreAudio knows only that a browser process
+        /// is on the microphone, so keyed on the process every window of that browser is marked —
+        /// which is how an incognito window with nothing running in it came to show a microphone for
+        /// a voice chat in a different window. A tab strip belongs to one window, so an alert read
+        /// from it belongs to that window and to no other.
+        let windowID: CGWindowID?
         /// The tab's accessibility description, annotations and all.
         let accessibilityDescription: String
         let alert: TabMediaAlert
+
+        /// `windowID` defaults to absent because it is only needed for the *window* badge. Pairing a
+        /// reading to a tab result does not use it — a tab is matched on title and process — so the
+        /// tab path is not obliged to supply one.
+        init(
+            processID: pid_t,
+            windowID: CGWindowID? = nil,
+            accessibilityDescription: String,
+            alert: TabMediaAlert
+        ) {
+            self.processID = processID
+            self.windowID = windowID
+            self.accessibilityDescription = accessibilityDescription
+            self.alert = alert
+        }
+    }
+
+    /// Everything one sweep of the tab strips found.
+    struct Survey: Equatable, Sendable {
+        var readings: [Reading] = []
+
+        static let empty = Survey()
+
+        /// Processes the strip may be believed *about*, which is narrower than the processes that
+        /// were looked at.
+        ///
+        /// A process qualifies only by having produced a reading. That distinction is the difference
+        /// between fixing one bug and shipping another: a browser can be walked successfully and
+        /// still report nothing, because the alert phrase is a localised Chromium string and a
+        /// non-English Chrome matches none of them. Treating "walked it, found nothing" as silence
+        /// would take the badge away from those users entirely — where treating it as "no finer
+        /// answer available" leaves them with CoreAudio's coarse one, which is what they have today.
+        ///
+        /// Where a reading *was* found, the strip has demonstrably been understood, so a sibling
+        /// window's absence from it is real information. That is the incognito window's case.
+        var narrowedProcesses: Set<pid_t> {
+            Set(readings.map(\.processID))
+        }
+    }
+
+    /// The alert to show on each *window*, keyed by window id.
+    ///
+    /// Windows the sweep inspected and found nothing in are deliberately absent rather than present
+    /// with a "silent" value: the caller distinguishes "inspected and quiet" from "not inspected" by
+    /// `Survey.inspectedProcesses`, which is a property of the browser rather than of the window.
+    static func windowAlerts(readings: [Reading]) -> [CGWindowID: TabMediaAlert] {
+        var resolved: [CGWindowID: TabMediaAlert] = [:]
+        for reading in readings {
+            guard let windowID = reading.windowID else { continue }
+            // A window with both a recording tab and an audible one reports the microphone, matching
+            // the order the badge itself puts them in: being listened to outranks making noise.
+            if resolved[windowID] == .recording { continue }
+            resolved[windowID] = reading.alert
+        }
+        return resolved
     }
 
     /// Match each reading to the tab entries it describes, keyed by entry id.

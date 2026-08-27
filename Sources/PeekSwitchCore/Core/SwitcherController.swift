@@ -648,24 +648,53 @@ public final class SwitcherController {
         let candidates = Set(entries.filter(\.isWindow).map(\.processID).filter { $0 > 0 })
         guard !candidates.isEmpty else {
             state.audioActivity = .silent
+            state.windowMediaAlerts = [:]
+            state.narrowedBrowserProcesses = []
             return
         }
 
+        // Browsers get a second, finer question asked of them in the same hop. CoreAudio can only
+        // say that Chrome is on the microphone; the tab strip says which of Chrome's windows it is
+        // in, which is what a badge drawn on a window needs.
+        let browsers = Set(browserWindowCandidates(in: entries).map(\.processID).filter { $0 > 0 })
+
         workQueue.async { [weak self] in
             let activity = AudioActivityService.current(attributedTo: candidates)
+
+            // Only browsers CoreAudio has already implicated. The tab strip exists here to *narrow*
+            // a positive, so a silent browser has nothing to narrow — and this is what keeps the walk
+            // off the common path: measured at 16 ms median, it now costs that only when a browser is
+            // genuinely making noise, and nothing at all the rest of the time.
+            let busy = browsers.filter {
+                activity.isPlaying($0) || activity.isRecording($0)
+            }
+            let survey = busy.isEmpty
+                ? TabMediaAlert.Survey.empty
+                : BrowserTabAlertService.survey(browserProcesses: busy)
+            let windowAlerts = TabMediaAlert.windowAlerts(readings: survey.readings)
+            let narrowed = survey.narrowedProcesses
+
             if !activity.isSilent {
                 Log.overlay.info(
                     """
                     audio activity: \(activity.playing.count, privacy: .public) playing, \
                     \(activity.recording.count, privacy: .public) recording, \
-                    of \(candidates.count, privacy: .public) windowed processes
+                    of \(candidates.count, privacy: .public) windowed processes; \
+                    \(busy.count, privacy: .public) busy browsers surveyed, \
+                    \(narrowed.count, privacy: .public) narrowed to \
+                    \(windowAlerts.count, privacy: .public) windows
                     """
                 )
             }
             DispatchQueue.main.async {
                 guard let self, self.state.presentationID == presentationID else { return }
-                guard self.state.audioActivity != activity else { return }
-                self.state.audioActivity = activity
+                if self.state.audioActivity != activity { self.state.audioActivity = activity }
+                if self.state.windowMediaAlerts != windowAlerts {
+                    self.state.windowMediaAlerts = windowAlerts
+                }
+                if self.state.narrowedBrowserProcesses != narrowed {
+                    self.state.narrowedBrowserProcesses = narrowed
+                }
             }
         }
     }
@@ -1999,7 +2028,7 @@ extension SwitcherController: TriggerMonitorDelegate {
         // `AXUIElement`, and the pairing is string comparison over a handful of readings, so there is
         // nothing to gain by sending it and a thread-safety question to answer if it went.
         workQueue.async { [weak self] in
-            let readings = BrowserTabAlertService.readings(forBrowserProcesses: browsers)
+            let readings = BrowserTabAlertService.survey(browserProcesses: browsers).readings
             DispatchQueue.main.async {
                 guard let self, self.state.presentationID == presentationID else { return }
                 let alerts = TabMediaAlert.alerts(forTabsIn: entries, readings: readings)

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Darwin
 import Testing
 @testable import PeekSwitchCore
@@ -77,6 +78,83 @@ struct TabMediaAlertParsingTests {
                 accessibilityDescription: "Album \u{2013} Artist \u{2013} Audio playing"
             ) == .playingAudio
         )
+    }
+}
+
+/// Attributing an alert to one *window* rather than to a whole browser.
+///
+/// Reported as microphone and speaker glyphs on an incognito Chrome window with nothing running in
+/// it. CoreAudio's unit is the process, so one Grok tab in voice mode marked every Chrome window —
+/// right about the browser, wrong about the window, and the badge is drawn on windows. A tab strip
+/// belongs to one window, which is what makes the finer answer possible.
+struct TabMediaAlertWindowTests {
+
+    private static let chrome: pid_t = 872
+    private static let voiceChatWindow: CGWindowID = 169
+    private static let incognitoWindow: CGWindowID = 1121
+
+    private func reading(
+        window: CGWindowID?,
+        title: String,
+        alert: TabMediaAlert
+    ) -> TabMediaAlert.Reading {
+        TabMediaAlert.Reading(
+            processID: Self.chrome,
+            windowID: window,
+            accessibilityDescription: "\(title) \u{2013} "
+                + (alert == .recording ? "Microphone recording" : "Audio playing"),
+            alert: alert
+        )
+    }
+
+    /// The reported case, stated as a test: the window holding the voice chat is marked and the
+    /// incognito window sharing its process is not.
+    @Test func onlyTheWindowHoldingTheAlertingTabIsMarked() {
+        let alerts = TabMediaAlert.windowAlerts(readings: [
+            reading(window: Self.voiceChatWindow, title: "Grok", alert: .recording)
+        ])
+
+        #expect(alerts[Self.voiceChatWindow] == .recording)
+        #expect(alerts[Self.incognitoWindow] == nil)
+    }
+
+    /// A reading whose window could not be identified must not be spread across every window. It is
+    /// dropped from the window map — the tab badge can still use it, since that is matched on title.
+    @Test func anUnattributableReadingMarksNoWindow() {
+        let alerts = TabMediaAlert.windowAlerts(readings: [
+            reading(window: nil, title: "Grok", alert: .recording)
+        ])
+        #expect(alerts.isEmpty)
+    }
+
+    /// The microphone wins where a window has both, matching the order the badge draws them in:
+    /// being listened to is the one a user may need to act on.
+    @Test func aWindowWithBothReportsTheMicrophone() {
+        for ordering in [
+            [TabMediaAlert.playingAudio, .recording],
+            [TabMediaAlert.recording, .playingAudio],
+        ] {
+            let alerts = TabMediaAlert.windowAlerts(
+                readings: ordering.enumerated().map { index, alert in
+                    reading(window: Self.voiceChatWindow, title: "Tab \(index)", alert: alert)
+                }
+            )
+            #expect(alerts[Self.voiceChatWindow] == .recording, "order \(ordering) lost the mic")
+        }
+    }
+
+    @Test func twoWindowsEachKeepTheirOwnAlert() {
+        let alerts = TabMediaAlert.windowAlerts(readings: [
+            reading(window: Self.voiceChatWindow, title: "Grok", alert: .recording),
+            reading(window: Self.incognitoWindow, title: "YouTube", alert: .playingAudio),
+        ])
+
+        #expect(alerts[Self.voiceChatWindow] == .recording)
+        #expect(alerts[Self.incognitoWindow] == .playingAudio)
+    }
+
+    @Test func noReadingsMarksNoWindows() {
+        #expect(TabMediaAlert.windowAlerts(readings: []).isEmpty)
     }
 }
 

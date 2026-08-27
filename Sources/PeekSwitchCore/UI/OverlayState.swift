@@ -182,22 +182,56 @@ final class OverlayState: ObservableObject {
     /// the only place that distinction exists. See `TabMediaAlert`.
     @Published var tabMediaAlerts: [String: TabMediaAlert] = [:]
 
+    /// What each browser *window* is doing, read from that window's own tab strip.
+    @Published var windowMediaAlerts: [CGWindowID: TabMediaAlert] = [:]
+
+    /// Browser processes whose tab strip produced an alert this presentation.
+    ///
+    /// The point of keeping this is that it licenses a negative. For these processes the strip has
+    /// demonstrably been understood, so a window that is absent from it is genuinely quiet. For any
+    /// other process there is nothing finer than CoreAudio and its per-process answer stands — which
+    /// is what keeps a browser whose alert wording we cannot read from losing the badge altogether
+    /// rather than merely keeping a coarse one. See `TabMediaAlert.Survey.narrowedProcesses`.
+    @Published var narrowedBrowserProcesses: Set<pid_t> = []
+
+    /// What a window's media state is read from: its own tab strip where that is possible, and
+    /// CoreAudio otherwise.
+    ///
+    /// Reported as microphone and speaker glyphs on an incognito Chrome window with nothing running
+    /// in it. CoreAudio's unit is the process, so one Grok tab in voice mode marked every Chrome
+    /// window including that one — correct about the browser, wrong about the window, and the badge
+    /// is drawn on windows.
+    ///
+    /// A tab strip belongs to one window, so it answers the question that was actually being asked.
+    /// It is only trusted where it was read: an un-inspectable browser falls back to CoreAudio and
+    /// is coarse again, which is the old behaviour rather than a missing badge.
+    private func windowAlert(_ entry: WindowEntry) -> TabMediaAlert? {
+        guard narrowedBrowserProcesses.contains(entry.processID) else { return nil }
+        return windowMediaAlerts[entry.windowID]
+    }
+
     /// Whether this entry is playing audio.
     ///
-    /// The two kinds of entry are answered from different sources, and they are not equally precise.
-    /// A tab is answered by its browser's own tab strip, so it is exact. A window is answered by
-    /// CoreAudio, which reports per process — so every window of a browser playing one video is
-    /// marked, not the one showing it. Neither reading is available for the other kind: a tab has no
-    /// process of its own, and a window has no tab strip entry.
+    /// Three sources, in descending order of precision, and each is the finest thing available for
+    /// its kind of entry: a tab is named outright by its browser's tab strip, a browser window is
+    /// narrowed to its own strip, and anything else has only CoreAudio's per-process reading.
     func isPlayingAudio(_ entry: WindowEntry) -> Bool {
         if entry.isTab { return tabMediaAlerts[entry.id] == .playingAudio }
-        return entry.isWindow && audioActivity.isPlaying(entry.processID)
+        guard entry.isWindow else { return false }
+        if narrowedBrowserProcesses.contains(entry.processID) {
+            return windowAlert(entry) == .playingAudio
+        }
+        return audioActivity.isPlaying(entry.processID)
     }
 
     /// Whether this entry is capturing from the microphone or camera. Sourced as above.
     func isUsingMicrophone(_ entry: WindowEntry) -> Bool {
         if entry.isTab { return tabMediaAlerts[entry.id] == .recording }
-        return entry.isWindow && audioActivity.isRecording(entry.processID)
+        guard entry.isWindow else { return false }
+        if narrowedBrowserProcesses.contains(entry.processID) {
+            return windowAlert(entry) == .recording
+        }
+        return audioActivity.isRecording(entry.processID)
     }
 
     /// Whether the cards have been let in yet.
