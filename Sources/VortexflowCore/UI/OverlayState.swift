@@ -355,7 +355,11 @@ final class OverlayState: ObservableObject {
 
     @discardableResult
     func clearSearch() -> Bool {
-        guard !searchQuery.isEmpty else { return false }
+        // The scope goes with the query. Clearing the text while still restricted to one window's
+        // tabs would leave the user looking at a filtered list with nothing on screen explaining why,
+        // and no obvious way back to their windows.
+        guard !searchQuery.isEmpty || tabScope != nil else { return false }
+        tabScope = nil
         return applySearch("")
     }
 
@@ -378,7 +382,9 @@ final class OverlayState: ObservableObject {
     func setTabs(_ tabs: [WindowEntry]) -> Bool {
         tabEntries = tabs
         hasLoadedTabs = true
-        guard isSearching else { return false }
+        // A scope with no query typed is the case `isSearching` alone would miss: choosing "search
+        // this window's tabs" fetches the tabs, and this is the arrival that has to fill the list.
+        guard isSearching || tabScope != nil else { return false }
         return applySearch(searchQuery)
     }
 
@@ -401,6 +407,29 @@ final class OverlayState: ObservableObject {
         _ = applySearch(searchQuery)
     }
 
+    /// When set, results are restricted to the tabs of one browser window.
+    ///
+    /// The browser's own window identifier, not a `CGWindowID` — it is matched against
+    /// `BrowserTab.windowIdentifier`, which is the only id the tab list is numbered by.
+    ///
+    /// Published so the search pill can say what it is scoped to. A scope with no visible sign would
+    /// look like the switcher had lost most of its results.
+    @Published private(set) var tabScope: Int?
+
+    /// How many fetched tabs belong to one browser window. `0` before the tabs have been fetched,
+    /// which callers distinguish with `hasLoadedTabs`.
+    func tabCount(forWindowIdentifier identifier: Int) -> Int {
+        tabEntries.reduce(0) { $0 + ($1.tab?.windowIdentifier == identifier ? 1 : 0) }
+    }
+
+    /// Restrict results to one browser window's tabs, or clear the restriction with `nil`.
+    @discardableResult
+    func setTabScope(_ identifier: Int?) -> Bool {
+        guard tabScope != identifier else { return false }
+        tabScope = identifier
+        return applySearch(searchQuery)
+    }
+
     @discardableResult
     private func applySearch(_ query: String) -> Bool {
         searchQuery = query
@@ -411,6 +440,20 @@ final class OverlayState: ObservableObject {
         isQuerySelected = false
 
         let matches: [WindowEntry]
+        if let tabScope {
+            // Scoped to one window's tabs: an empty query lists them all, which is what makes this
+            // both "see all tabs" and "search them" without being two separate features. Windows,
+            // installed applications and the web offers are all withheld — the user asked about the
+            // inside of one window, and answering with anything else would be answering a different
+            // question.
+            let scoped = tabEntries.filter { $0.tab?.windowIdentifier == tabScope }
+            matches = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? scoped
+                : WindowSearch.filter(scoped, query: query)
+            guard matches.map(\.id) != entries.map(\.id) else { return false }
+            reload(entries: matches, selectedIndex: matches.isEmpty ? nil : 0)
+            return true
+        }
         if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             matches = allEntries
         } else {
@@ -468,6 +511,9 @@ final class OverlayState: ObservableObject {
         tabEntries = []
         hasLoadedTabs = false
         searchQuery = ""
+        // A scope belongs to the presentation that asked for it. Carried across, the next trigger
+        // would open showing one window's tabs and none of the user's windows.
+        tabScope = nil
         isQuerySelected = false
         // A native window id can be reused, and its active tab can change between invocations.
         // Never carry a per-window favicon, or the tint taken from it, across presentations

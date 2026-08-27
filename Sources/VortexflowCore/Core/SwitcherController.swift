@@ -115,6 +115,13 @@ public final class SwitcherController {
     /// When a desktop change last caused the overlay to reopen, so a burst of them cannot cycle.
     private var lastSpaceReopen: TimeInterval = 0
 
+    /// A browser window's own scripting identifier, keyed by `CGWindowID`.
+    ///
+    /// Two identifier spaces meet here: cards are numbered by the window server, and a browser's tabs
+    /// are numbered by the browser's private window id. `IncognitoMatcher` already pairs them for the
+    /// private-browsing badge; this keeps the pairing rather than discarding it.
+    private var scriptedWindowIdentifiers: [CGWindowID: Int] = [:]
+
     /// True while a card's context menu is tracking.
     ///
     /// Choosing a menu item is a primary click, and a primary click is what dismisses the overlay —
@@ -627,6 +634,10 @@ public final class SwitcherController {
         let revealToken = state.presentationID
         panel.present(at: origin, size: size, afterLayout: true, castsShadow: hasPlate)
         state.isVisible = true
+        // Kept in step with `state.isVisible`, because that flag is what decides whether the next
+        // trigger press opens, commits or is ignored — so a panel that is not actually on screen
+        // while the flag says otherwise silently swallows every press.
+        Log.overlay.debug("panel ordered front; isVisible now true")
         presentedAt = Date().timeIntervalSinceReferenceDate
         Log.overlay.info("presenting \(ordered.count) cards")
         stopwatch.log()
@@ -930,6 +941,12 @@ public final class SwitcherController {
                         """)
                 }
 
+                // Retained so a card can be tied back to the browser's own window id, which is the
+                // only identifier its tab list is numbered by. Without it a window card cannot be
+                // asked "which of these tabs are yours".
+                for (windowID, window) in matched {
+                    self.scriptedWindowIdentifiers[windowID] = window.identifier
+                }
                 if !matched.isEmpty {
                     let incognito = Set(
                         matched.compactMap { windowID, window in
@@ -1569,23 +1586,35 @@ public final class SwitcherController {
             Log.overlay.info("right-click promoted the overlay to persistent")
         }
 
+        let items = CardMenu.items(for: entry, context: menuContext(for: entry))
+        guard !items.isEmpty else {
+            Log.overlay.info("no menu for this card kind")
+            return
+        }
+
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        let heading = NSMenuItem(title: entry.displayTitle, action: nil, keyEquivalent: "")
-        heading.isEnabled = false
-        menu.addItem(heading)
+        menu.addItem(headerItem(for: entry))
         menu.addItem(.separator())
 
-        // One real item, deliberately. The spike is about the mechanism, not the contents.
-        let probe = NSMenuItem(
-            title: "Spike: confirm this menu works",
-            action: #selector(contextMenuProbeChosen(_:)),
-            keyEquivalent: ""
-        )
-        probe.target = self
-        probe.isEnabled = true
-        menu.addItem(probe)
+        for item in items {
+            guard item != .separator else {
+                menu.addItem(.separator())
+                continue
+            }
+            let menuItem = NSMenuItem(
+                title: item.title,
+                action: #selector(cardMenuItemChosen(_:)),
+                keyEquivalent: ""
+            )
+            menuItem.target = self
+            menuItem.isEnabled = true
+            // The chosen action and the card it belongs to travel together, so a menu that outlives
+            // a selection change still acts on the card it was opened on.
+            menuItem.representedObject = CardMenuChoice(item: item, entryID: entry.id)
+            menu.addItem(menuItem)
+        }
 
         // Two things have to be held off for the whole tracking loop, and getting only the first of
         // them right is what made the menu open but never register a choice.
@@ -1621,9 +1650,125 @@ public final class SwitcherController {
         Log.overlay.info("context menu popUp returned \(shown, privacy: .public)")
     }
 
+    /// What a menu item carries with it, so the action is not resolved against a selection that may
+    /// have moved since the menu opened.
+    private final class CardMenuChoice: NSObject {
+        let item: CardMenuItem
+        let entryID: String
+
+        init(item: CardMenuItem, entryID: String) {
+            self.item = item
+            self.entryID = entryID
+        }
+    }
+
+    /// The menu's heading: a preview of the window and the facts worth knowing before acting on it.
+    ///
+    /// A hosted view rather than a titled item, for two reasons. It is what lets the preview and the
+    /// aligned fact list exist at all, and it is what stops the window title from setting the menu's
+    /// width — an `NSMenu` sizes itself to its widest item, so a long title used to stretch every
+    /// short action item alongside it.
+    private func headerItem(for entry: WindowEntry) -> NSMenuItem {
+        let scriptedID = scriptedWindowIdentifiers[entry.windowID]
+        let details = CardDetails.make(
+            entry: entry,
+            siteHost: state.siteHost(for: entry),
+            // `display(for:)` already withholds the name on a single-screen setup, which is the same
+            // rule the rest of the overlay follows; re-deciding it here would be a second opinion.
+            displayLabel: state.display(for: entry)?.label,
+            tabCount: scriptedID.flatMap { identifier in
+                state.hasLoadedTabs ? state.tabCount(forWindowIdentifier: identifier) : nil
+            },
+            windowPosition: state.windowPosition(for: entry),
+            isIncognito: state.isIncognito(entry),
+            isPlayingAudio: state.isPlayingAudio(entry),
+            isUsingMicrophone: state.isUsingMicrophone(entry),
+            now: Date().timeIntervalSinceReferenceDate
+        )
+
+        let header = NSHostingView(
+            rootView: CardMenuHeaderView(
+                details: details,
+                thumbnail: state.thumbnails[entry.windowID],
+                icon: state.displayIcon(for: entry)
+            )
+        )
+        // A menu item's view is not laid out by the menu, so it has to arrive at its final size.
+        // `fittingSize` resolves the height the fixed-width content settled on.
+        header.frame = CGRect(origin: .zero, size: header.fittingSize)
+
+        let item = NSMenuItem()
+        item.view = header
+        // Nothing to choose here, and an enabled heading would highlight under the pointer as though
+        // there were.
+        item.isEnabled = false
+        return item
+    }
+
+    private func menuContext(for entry: WindowEntry) -> CardMenu.Context {
+        let scriptedID = scriptedWindowIdentifiers[entry.windowID]
+        let browser = BrowserTab.Browser.allCases.first {
+            $0.bundleIdentifier == entry.bundleIdentifier
+        }
+        return CardMenu.Context(
+            // A browser we can list tabs for *and* have paired to its scripting id. Without the
+            // pairing there is no way to say which tabs belong to this window, so the item would
+            // scope to nothing.
+            isBrowserWindow: browser != nil && scriptedID != nil,
+            knownTabCount: scriptedID.flatMap { identifier in
+                state.hasLoadedTabs ? state.tabCount(forWindowIdentifier: identifier) : nil
+            },
+            isAudible: state.isPlayingAudio(entry) || state.isUsingMicrophone(entry),
+            hasAccessibilityElement: entry.axElement != nil,
+            isPinned: entry.bundleIdentifier.map(settings.pinnedApplications.contains) ?? false
+        )
+    }
+
     @objc
-    private func contextMenuProbeChosen(_ sender: NSMenuItem) {
-        Log.overlay.info("SPIKE context menu item chosen — the mechanism works")
+    private func cardMenuItemChosen(_ sender: NSMenuItem) {
+        guard let choice = sender.representedObject as? CardMenuChoice else { return }
+        guard let index = state.entries.firstIndex(where: { $0.id == choice.entryID }) else {
+            Log.overlay.info("menu action dropped: its card is no longer in the list")
+            return
+        }
+        let entry = state.entries[index]
+        Log.overlay.info("menu action \(String(describing: choice.item), privacy: .public)")
+
+        switch choice.item {
+        case .searchWindowTabs:
+            guard let identifier = scriptedWindowIdentifiers[entry.windowID] else { return }
+            state.setTabScope(identifier)
+            // Tabs are not fetched until something asks for them, and choosing this item is that
+            // ask. When they land, `setTabs` fills the scoped list.
+            loadBrowserTabsIfNeeded()
+            afterSearchChanged()
+
+        case .minimizeWindow:
+            guard let element = entry.axElement else { return }
+            AXBridge.setBool(element, kAXMinimizedAttribute as String, true)
+            dismiss(activating: nil)
+
+        case .closeWindow:
+            closeWindow(at: index)
+
+        case .pinApplication, .unpinApplication:
+            guard let bundleIdentifier = entry.bundleIdentifier else { return }
+            var pinned = settings.pinnedApplications
+            if pinned.contains(bundleIdentifier) {
+                pinned.remove(bundleIdentifier)
+            } else {
+                pinned.insert(bundleIdentifier)
+            }
+            settings.pinnedApplications = pinned
+
+        case .quitApplication:
+            NSRunningApplication(processIdentifier: entry.processID)?.terminate()
+            dismiss(activating: nil)
+
+        case .muteAudible, .separator:
+            // Not wired yet; the menu does not offer mute until it is.
+            break
+        }
     }
 
     private func cardIndex(atScreenPoint point: CGPoint, panel: OverlayPanel) -> Int? {
@@ -1889,7 +2034,15 @@ public final class SwitcherController {
             dismiss(activating: nil)
 
         case .ignore:
-            break
+            // The last silent branch, and the one that made "it only opens once" undiagnosable: a
+            // press that is neither an open, a commit nor a dismissal left no trace at all, so a
+            // stuck state was indistinguishable from a trigger that never arrived.
+            Log.trigger.info("""
+                trigger press ignored: overlay visible=\(self.state.isVisible, privacy: .public), \
+                mode=\(String(describing: self.presentationMode), privacy: .public), \
+                presenting=\(self.isPresenting, privacy: .public), \
+                menuTracking=\(self.isShowingContextMenu, privacy: .public)
+                """)
         }
     }
 
