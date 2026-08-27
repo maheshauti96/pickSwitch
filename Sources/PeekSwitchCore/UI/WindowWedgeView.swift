@@ -448,9 +448,31 @@ struct WindowWedgeView: View {
     /// Giving the name the full width fixes it at the cause. The badges are markers rather than
     /// reading matter, so they lose nothing by dropping below it, and they are only drawn when
     /// there is a row's worth of height spare for them.
+    /// The application's name, or the window's own title when that name would not identify it.
+    ///
+    /// A wedge names its application because at ring distance that is the recognisable part, and
+    /// that reasoning holds right up until an application has two windows on the ring — at which
+    /// point it stops identifying anything. Reported as "why do I see 3 zoom windows": Zoom had
+    /// three, so the ring drew "zoom.us" three times with the same icon, and nothing on screen said
+    /// they were different windows rather than one window drawn three times.
+    ///
+    /// `badgeCount` is exactly the right switch: `OverlayState.badgeCount(for:)` is non-nil only for
+    /// a window whose application has more than one, which is the condition under which the name
+    /// stops being enough. Tabs get `nil` from it and so keep their site host, which already
+    /// distinguishes them.
+    /// - Parameter badgeCount: the application's window count, or `nil` when it has only one. This
+    ///   is `OverlayState.badgeCount(for:)`, which the wedge is already given and otherwise ignores.
+    static func primaryText(for entry: WindowEntry, badgeCount: Int?) -> String {
+        badgeCount == nil ? entry.sourceLabel : entry.displayTitle
+    }
+
+    private var primaryText: String {
+        Self.primaryText(for: entry, badgeCount: badgeCount)
+    }
+
     private var label: some View {
         VStack(spacing: 1) {
-            Text(entry.sourceLabel)
+            Text(primaryText)
                 .font(.system(size: metrics.titleFontSize, weight: .medium))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
