@@ -107,6 +107,21 @@ public final class SwitcherController {
     // MARK: - Presentation state
 
     private var presentationMode: PresentationMode = .hold
+
+    /// When the overlay last became visible, for telling a desktop change that happened *under* the
+    /// overlay from one that merely finished arriving just after it opened. See `spaceObserver`.
+    private var presentedAt: TimeInterval = 0
+
+    /// When a desktop change last caused the overlay to reopen, so a burst of them cannot cycle.
+    private var lastSpaceReopen: TimeInterval = 0
+
+    /// How soon after presenting a desktop change is treated as having predated the overlay.
+    ///
+    /// A Space switch animates for several hundred milliseconds and the notification only arrives
+    /// when it lands, while the trigger is a global tap that fires the moment it is pressed. So a
+    /// user who switches desktop and reaches for the switcher straight away gets the two in the
+    /// opposite order to the one they performed them in, and the observed gap was 3 ms.
+    private static let spaceChangeGrace: TimeInterval = 1.0
     private var isPresenting = false
     /// Set when the trigger comes up before enumeration finished, so a fast flick
     /// still switches instead of being swallowed.
@@ -285,12 +300,31 @@ public final class SwitcherController {
                 //
                 // Worse than looking stale, it broke the trigger. The overlay counted as visible, so
                 // the next press of the shortcut meant "close this" rather than "open here" — which
-                // read as the shortcut simply not working on the new desktop. Dismissing here is
-                // what makes the next press open a fresh overlay for the Space the user is actually
-                // on, and it matches how a display change is already handled.
-                if self.state.isVisible {
+                // read as the shortcut simply not working on the new desktop.
+                let now = Date().timeIntervalSinceReferenceDate
+                switch SpaceChangeResponse.resolve(
+                    isVisible: self.state.isVisible,
+                    presentedAt: self.presentedAt,
+                    lastReopenAt: self.lastSpaceReopen,
+                    now: now,
+                    grace: Self.spaceChangeGrace
+                ) {
+                case .ignore:
+                    break
+                case .dismiss:
                     Log.overlay.info("active Space changed; dismissing so the next trigger opens here")
                     self.dismiss(activating: nil)
+                case .reopen:
+                    self.lastSpaceReopen = now
+                    // Captured before dismissing, which resets it to `.hold`.
+                    let mode = self.presentationMode
+                    Log.overlay.info("""
+                        active Space changed \
+                        \(Int((now - self.presentedAt) * 1000), privacy: .public)ms after presenting; \
+                        reopening for this desktop
+                        """)
+                    self.dismiss(activating: nil)
+                    self.beginPresentation(mode: mode)
                 }
 
                 self.learnCurrentSpace()
@@ -407,11 +441,21 @@ public final class SwitcherController {
     // MARK: - Presentation
 
     private func beginPresentation(mode: PresentationMode) {
-        guard !isPresenting else { return }
+        // Both refusals below are logged, and that is not noise. "The switcher did not open" was
+        // reported with nothing in the log to say why, because every reason it declines to open was
+        // silent — so the report could not be told apart from a trigger that never arrived, a
+        // presentation that opened and was dismissed again, or a genuine refusal.
+        guard !isPresenting else {
+            Log.overlay.info("trigger ignored: a presentation is already in flight")
+            return
+        }
 
         // A press arriving while the overlay is up never reaches here: `TriggerResponse` has
         // already turned it into a commit, a dismissal or nothing at all.
-        guard !state.isVisible else { return }
+        guard !state.isVisible else {
+            Log.overlay.info("trigger ignored: the overlay is already visible")
+            return
+        }
 
         // Cancel a dismissal-time request that is still in its grace period. Once its synchronous
         // Apple Event has begun it cannot be cancelled safely; in that short interval, do not put
@@ -577,6 +621,7 @@ public final class SwitcherController {
         let revealToken = state.presentationID
         panel.present(at: origin, size: size, afterLayout: true, castsShadow: hasPlate)
         state.isVisible = true
+        presentedAt = Date().timeIntervalSinceReferenceDate
         Log.overlay.info("presenting \(ordered.count) cards")
         stopwatch.log()
 
