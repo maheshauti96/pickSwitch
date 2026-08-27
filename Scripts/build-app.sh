@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 #
-# Builds PeekSwitch.app from the SwiftPM package.
+# Builds Vortexflow.app from the SwiftPM package.
 #
 # SwiftPM produces a bare executable; macOS needs a bundle. This script assembles
 # one, because the bundle is not cosmetic here:
 #
 #   * TCC (Accessibility / Screen Recording / Input Monitoring) attaches grants to a
 #     bundle identity. A loose executable gets re-prompted or silently denied.
-#   * LSUIElement lives in Info.plist, and it is what keeps PeekSwitch out of the
+#   * LSUIElement lives in Info.plist, and it is what keeps Vortexflow out of the
 #     Dock and out of Cmd-Tab.
 #   * NSStatusItem and the non-activating panel both want a real bundled app.
 #
 # Usage:
 #   Scripts/build-app.sh                 # release, universal if possible
-#   Scripts/build-app.sh --install       # also replace /Applications/PeekSwitch.app
+#   Scripts/build-app.sh --install       # also replace /Applications/Vortexflow.app
 #   Scripts/build-app.sh --debug         # debug configuration
 #   Scripts/build-app.sh --native-arch   # skip the universal build
 #
 # Signing:
 #   Run Scripts/create-signing-certificate.sh once. Without a stable signing
-#   identity, macOS forgets PeekSwitch's permissions on every rebuild and can end up
+#   identity, macOS forgets Vortexflow's permissions on every rebuild and can end up
 #   refusing to add it to the privacy lists at all.
 #
 set -euo pipefail
@@ -42,7 +42,7 @@ done
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-APP_NAME="PeekSwitch"
+APP_NAME="Vortexflow"
 BUILD_DIR="$PROJECT_ROOT/build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 CONTENTS="$APP_BUNDLE/Contents"
@@ -115,15 +115,15 @@ printf 'APPL????' > "$CONTENTS/PkgInfo"
 # stops doing anything.
 #
 # So prefer a real signing identity. Resolution order:
-#   1. $PEEKSWITCH_SIGN_IDENTITY, if set
-#   2. a certificate named "PeekSwitch Dev" (Scripts/create-signing-certificate.sh)
+#   1. $VORTEXFLOW_SIGN_IDENTITY, if set
+#   2. a certificate named "Vortexflow Dev" (Scripts/create-signing-certificate.sh)
 #   3. ad-hoc, with a warning
 #
 # Hardened runtime is deliberately NOT enabled. It exists for notarized
 # distribution, buys a locally-built app nothing, and only adds another variable to
 # the permission story.
-SIGN_IDENTITY="${PEEKSWITCH_SIGN_IDENTITY:-}"
-DEFAULT_IDENTITY_NAME="PeekSwitch Dev"
+SIGN_IDENTITY="${VORTEXFLOW_SIGN_IDENTITY:-}"
+DEFAULT_IDENTITY_NAME="Vortexflow Dev"
 
 if [[ -z "$SIGN_IDENTITY" ]]; then
 	# No -v: a self-signed certificate reports as untrusted and `-v` hides it, but
@@ -142,7 +142,7 @@ else
 fi
 
 codesign --force --sign "$SIGN_IDENTITY" \
-	--entitlements "$PROJECT_ROOT/Resources/PeekSwitch.entitlements" \
+	--entitlements "$PROJECT_ROOT/Resources/Vortexflow.entitlements" \
 	--timestamp=none \
 	"$APP_BUNDLE" 2>&1 | sed 's/^/    /'
 
@@ -185,7 +185,7 @@ if [[ "$INSTALL" -eq 1 ]]; then
 	INSTALLED_PATH="/Applications/$APP_NAME.app"
 
 	# Remove the staging copy once it has been installed. Leaving it behind gave Spotlight two
-	# identical "PeekSwitch" results with no way to tell which was which, and the wrong one is a
+	# identical "Vortexflow" results with no way to tell which was which, and the wrong one is a
 	# trap: build/ is deleted on the next build, so a privacy grant given to it points at a path
 	# that no longer exists. Without --install the bundle stays put, since then it is the product.
 	rm -rf "$APP_BUNDLE"
@@ -206,7 +206,7 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
 	Fix it once:
 
 	    Scripts/create-signing-certificate.sh
-	    tccutil reset All dev.peekswitch.PeekSwitch
+	    tccutil reset All io.vortexflow.Vortexflow
 	    Scripts/build-app.sh --install
 
 	WARNING
@@ -215,5 +215,5 @@ fi
 echo "Run it with:  open '$INSTALLED_PATH'"
 echo "Check setup:  '$INSTALLED_PATH/Contents/MacOS/$APP_NAME' --probe"
 echo
-echo "PeekSwitch will ask for Input Monitoring, Accessibility and Screen Recording."
+echo "Vortexflow will ask for Input Monitoring, Accessibility and Screen Recording."
 echo "Grant all three for the full experience; it degrades gracefully without each."

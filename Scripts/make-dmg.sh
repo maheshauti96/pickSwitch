@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# Packages PeekSwitch.app into a disk image for direct download.
+# Packages Vortexflow.app into a disk image for direct download.
 #
 # A DMG rather than a zip for one practical reason: it can carry a symlink to
 # /Applications, so installing is a drag from one side of the window to the other.
 # A zip lands the app in ~/Downloads, and an app run from there is a problem —
 # macOS ties privacy permissions to a path, and the first tidy-up of the Downloads
-# folder silently revokes everything PeekSwitch was granted.
+# folder silently revokes everything Vortexflow was granted.
 #
 # Usage:
 #   Scripts/make-dmg.sh                  # build, then package
@@ -15,7 +15,7 @@
 # IMPORTANT — this image is signed but NOT notarized.
 #
 # Notarization needs a paid Apple Developer account, and without it Gatekeeper
-# refuses a downloaded copy outright: "PeekSwitch cannot be opened because the
+# refuses a downloaded copy outright: "Vortexflow cannot be opened because the
 # developer cannot be verified." That wording suggests the app is broken rather
 # than unregistered, so anyone publishing this link has to tell people how to get
 # past it.
@@ -41,7 +41,7 @@ done
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-APP_NAME="PeekSwitch"
+APP_NAME="Vortexflow"
 BUILD_DIR="$PROJECT_ROOT/build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 
@@ -86,8 +86,8 @@ rm -rf "$STAGING"
 # Sign the image with the same identity as the app when there is one. This does not
 # satisfy Gatekeeper — only notarization does — but it does mean the download can be
 # checked for tampering rather than being wholly unattributable.
-SIGN_IDENTITY="${PEEKSWITCH_SIGN_IDENTITY:-}"
-DEFAULT_IDENTITY_NAME="PeekSwitch Dev"
+SIGN_IDENTITY="${VORTEXFLOW_SIGN_IDENTITY:-}"
+DEFAULT_IDENTITY_NAME="Vortexflow Dev"
 
 if [[ -z "$SIGN_IDENTITY" ]]; then
 	if security find-identity -p codesigning 2>/dev/null | grep -q "$DEFAULT_IDENTITY_NAME"; then

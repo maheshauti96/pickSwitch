@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Vortexflow is intentionally NOT sandboxed. A sandboxed process cannot
+	     install a system-wide CGEventTap, cannot drive AXUIElement against other
+	     applications, and cannot enumerate other applications' windows. Those
+	     three capabilities are the entire product. Distribution is therefore
+	     direct download / Homebrew rather than the Mac App Store. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

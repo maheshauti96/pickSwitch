@@ -1,4 +1,4 @@
-**Specification Document: Open-Source macOS App Switcher (Working Title: Orbit Switcher / PeekSwitch)**
+**Specification Document: Open-Source macOS App Switcher (Working Title: Orbit Switcher / Vortexflow)**
 
 Inspired by **Dory – App Switcher** ($9.99 Mac App Store utility by Segev Sherry).  
 Goal: Create a free, open-source alternative focused on **recent apps/windows**, **live previews**, and **pure mouse-driven switching** via Logitech MX Master 3 extra buttons.
