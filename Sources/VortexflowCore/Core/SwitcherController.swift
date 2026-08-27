@@ -115,6 +115,12 @@ public final class SwitcherController {
     /// When a desktop change last caused the overlay to reopen, so a burst of them cannot cycle.
     private var lastSpaceReopen: TimeInterval = 0
 
+    /// True while a card's context menu is tracking.
+    ///
+    /// Choosing a menu item is a primary click, and a primary click is what dismisses the overlay —
+    /// so without this the menu would close the thing it belongs to before its action ran.
+    private var isShowingContextMenu = false
+
     /// How soon after presenting a desktop change is treated as having predated the overlay.
     ///
     /// A Space switch animates for several hundred milliseconds and the notification only arrives
@@ -1519,6 +1525,107 @@ public final class SwitcherController {
         }
     }
 
+    /// SPIKE. A secondary click on a card opens a context menu for that window.
+    ///
+    /// Toggle mode only, and that is not a simplification: in hold mode the trigger button is still
+    /// down, so there is no hand free to click a menu item with.
+    ///
+    /// The open question this exists to answer is whether an `NSMenu` can be driven at all from a
+    /// panel that is deliberately never key and belongs to an application that is never active. Every
+    /// step logs, so a failure says which step failed rather than "the menu did not work".
+    func rightMousePressed(atScreenPoint point: CGPoint) {
+        guard state.isVisible, let panel else { return }
+        guard let index = cardIndex(atScreenPoint: point, panel: panel),
+              index < state.entries.count
+        else {
+            Log.overlay.info("right-click inside the panel but not on a card")
+            return
+        }
+
+        let entry = state.entries[index]
+        Log.overlay.info("""
+            right-click on card \(index, privacy: .public) \
+            (\(entry.applicationName, privacy: .public)); opening context menu
+            """)
+
+        // Selection follows the right-click, so the menu visibly belongs to a card.
+        state.setSelection(index)
+        holdHoverUntilPointerMoves()
+
+        // Right-clicking promotes the presentation to persistent, exactly as a tap does.
+        //
+        // The first attempt at this *refused* to open a menu unless the overlay was already
+        // persistent, reasoning that a held trigger button leaves no hand free. Every right-click in
+        // testing was rejected on that basis. The reasoning was also backwards: reaching for the
+        // secondary button is an explicit "I want to do something to this card", which is the same
+        // signal a tap gives. Refusing it is what "nothing happens on right click" was.
+        //
+        // Promoting also protects the menu. Left in hold mode, releasing the trigger would commit the
+        // selection and tear the overlay down from under the open menu.
+        if !state.isPersistent {
+            presentationMode = .toggle
+            state.isPersistent = true
+            activateAsSoonAsReady = false
+            Log.overlay.info("right-click promoted the overlay to persistent")
+        }
+
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let heading = NSMenuItem(title: entry.displayTitle, action: nil, keyEquivalent: "")
+        heading.isEnabled = false
+        menu.addItem(heading)
+        menu.addItem(.separator())
+
+        // One real item, deliberately. The spike is about the mechanism, not the contents.
+        let probe = NSMenuItem(
+            title: "Spike: confirm this menu works",
+            action: #selector(contextMenuProbeChosen(_:)),
+            keyEquivalent: ""
+        )
+        probe.target = self
+        probe.isEnabled = true
+        menu.addItem(probe)
+
+        // Two things have to be held off for the whole tracking loop, and getting only the first of
+        // them right is what made the menu open but never register a choice.
+        //
+        // Dismissal, because the overlay closes on a primary click and picking a menu item is one.
+        // And the event tap's *consumption* of primary clicks, because it sits in front of the menu:
+        // suppressing our own handling is not enough while the click is still being swallowed before
+        // the menu can see it.
+        isShowingContextMenu = true
+        triggerMonitor.passesThroughPrimaryClicks = true
+        defer {
+            isShowingContextMenu = false
+            triggerMonitor.passesThroughPrimaryClicks = false
+            Log.overlay.info("context menu closed; overlay still visible: \(self.state.isVisible, privacy: .public)")
+        }
+
+        // Positioned in screen coordinates, with no view to interpret them.
+        //
+        // Passing `panel.contentView` looked like the natural thing and put the menu somewhere else
+        // entirely, because the point then has to be in *that view's* coordinate space. The content
+        // view is an `NSHostingView`, and SwiftUI hosting views are flipped — origin at the top-left,
+        // y increasing downward — while `NSEvent.mouseLocation` and `panel.frame` are both bottom-left
+        // screen coordinates. Subtracting the panel's origin produced a y measured from the wrong
+        // edge, so the error grew with distance from the panel's vertical centre.
+        //
+        // Handing `nil` for the view makes `popUp` read the point as screen coordinates, which is
+        // exactly what the click already is. No conversion, so no coordinate space to get wrong.
+        Log.overlay.info("""
+            context menu at screen \(Int(point.x), privacy: .public),\(Int(point.y), privacy: .public); \
+            contentView flipped: \(panel.contentView?.isFlipped ?? false, privacy: .public)
+            """)
+        let shown = menu.popUp(positioning: nil, at: point, in: nil)
+        Log.overlay.info("context menu popUp returned \(shown, privacy: .public)")
+    }
+
+    @objc
+    private func contextMenuProbeChosen(_ sender: NSMenuItem) {
+        Log.overlay.info("SPIKE context menu item chosen — the mechanism works")
+    }
+
     private func cardIndex(atScreenPoint point: CGPoint, panel: OverlayPanel) -> Int? {
         let frame = panel.frame
         guard frame.contains(point) else { return nil }
@@ -1564,6 +1671,16 @@ public final class SwitcherController {
     @discardableResult
     private func handleLeftMouseDown(at point: CGPoint, source: ClickSource) -> Bool {
         guard state.isVisible, let panel else { return false }
+
+        // A context menu is tracking, and choosing one of its items is itself a primary click. Left
+        // to the normal path that click either dismisses the overlay or commits a card, both of which
+        // happen before the menu's own action runs.
+        // Not consumed — reported as unhandled so the click continues on to the menu. Consuming it
+        // here was the other half of the menu never seeing its own selection.
+        guard !isShowingContextMenu else {
+            Log.overlay.info("primary click left to the tracking context menu")
+            return false
+        }
 
         let isInsidePanel = panel.frame.contains(point)
         guard isInsidePanel else {

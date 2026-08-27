@@ -13,6 +13,12 @@ protocol TriggerMonitorDelegate: AnyObject {
     /// uses AppKit's global screen coordinates so the controller can share its normal
     /// card hit-testing path.
     func leftMousePressed(atScreenPoint point: CGPoint)
+
+    /// A secondary click while the overlay is up, for the per-card context menu.
+    ///
+    /// Observed at the same HID-level tap as the primary click and for the same reason: a
+    /// never-key, nonactivating panel does not reliably receive either through AppKit.
+    func rightMousePressed(atScreenPoint point: CGPoint)
     func scrollReceived(delta: Double)
     func escapePressed()
     /// The registered shortcut pressed again while the overlay is up. Distinct from
@@ -103,6 +109,15 @@ final class TriggerMonitor {
     /// It lets the tap consume card clicks while allowing outside clicks to pass to
     /// the application underneath.
     private var overlayClickRegion: CGRect?
+
+    /// Let primary clicks past untouched while a card's context menu is tracking.
+    ///
+    /// This tap sits in front of everything and consumes primary clicks inside the overlay, which is
+    /// what makes cards clickable on a never-key panel. It also means the click that chooses a menu
+    /// item is swallowed before the menu can see it — the menu opens, tracks, and reports that nothing
+    /// was chosen. Written on the main thread, read on the tap thread; a stale read for one event is
+    /// harmless either way.
+    var passesThroughPrimaryClicks = false
     /// Guards against a synthetic or missed `up` leaving the overlay stuck open.
     private var isTriggerHeld = false
     /// When the current press started, for the tap-versus-hold decision.
@@ -187,6 +202,7 @@ final class TriggerMonitor {
 
         let overlayMask: CGEventMask =
             (1 << CGEventType.leftMouseDown.rawValue) |
+            (1 << CGEventType.rightMouseDown.rawValue) |
             (1 << CGEventType.scrollWheel.rawValue) |
             (1 << CGEventType.keyDown.rawValue)
 
@@ -408,10 +424,24 @@ final class TriggerMonitor {
             // already handles scrolling and keyboard confirmation, then route it to
             // the controller's normal card hit test. Consume only clicks geometrically
             // inside the panel; outside clicks still reach the application underneath.
+            // A tracking context menu owns the primary click: neither consume it nor route it into
+            // the card hit test, or the menu never learns that one of its items was picked.
+            if monitor.passesThroughPrimaryClicks {
+                return Unmanaged.passUnretained(event)
+            }
             let screenPoint = NSEvent.mouseLocation
             let isInsideOverlay = monitor.overlayClickRegion?.contains(screenPoint) == true
             monitor.dispatch { $0.leftMousePressed(atScreenPoint: screenPoint) }
             return isInsideOverlay ? nil : Unmanaged.passUnretained(event)
+        case .rightMouseDown:
+            // Same treatment as the primary click, and consumed on the same condition: a
+            // secondary click on a card must not also open the context menu of whatever
+            // application is underneath the overlay.
+            let screenPoint = NSEvent.mouseLocation
+            let isInsideOverlay = monitor.overlayClickRegion?.contains(screenPoint) == true
+            guard isInsideOverlay else { return Unmanaged.passUnretained(event) }
+            monitor.dispatch { $0.rightMousePressed(atScreenPoint: screenPoint) }
+            return nil
 
         case .otherMouseDown, .otherMouseUp:
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
