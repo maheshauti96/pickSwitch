@@ -20,7 +20,10 @@ struct CardMenuHeaderViewTests {
         rows: [CardDetails.Row] = [],
         thumbnail: CGImage? = nil,
         icon: NSImage? = nil,
-        displayNumber: Int? = 1
+        displayNumber: Int? = 1,
+        windowControls: [CardMenuItem] = [],
+        tiling: [CardMenuItem] = [],
+        hover: CardMenuHoverModel = CardMenuHoverModel()
     ) -> NSHostingView<CardMenuHeaderView> {
         let view = CardMenuHeaderView(
             details: CardDetails(
@@ -30,12 +33,28 @@ struct CardMenuHeaderViewTests {
                 displayNumber: displayNumber
             ),
             thumbnail: thumbnail,
-            icon: icon
+            icon: icon,
+            windowControls: windowControls,
+            tiling: tiling,
+            hover: hover,
+            onAction: { _ in }
         )
         let hosting = NSHostingView(rootView: view)
         hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
         hosting.layoutSubtreeIfNeeded()
         return hosting
+    }
+
+    /// A header with everything on it, which is the layout the corner placement is really about.
+    private func fullHeader(hover: CardMenuHoverModel = CardMenuHoverModel())
+        -> NSHostingView<CardMenuHeaderView> {
+        header(
+            title: "Mail",
+            rows: [CardDetails.Row(label: "Tabs", value: "23 tabs")],
+            windowControls: [.minimizeWindow, .closeWindow],
+            tiling: WindowTile.allCases.map(CardMenuItem.tileWindow),
+            hover: hover
+        )
     }
 
     /// The point of the whole view.
@@ -113,25 +132,12 @@ struct CardMenuHeaderViewTests {
         )
     }
 
-    /// The glyph rows are the other things in the menu that could widen it, so both are pinned to the
+    /// The content row is the other thing in the menu that could widen it, so it is pinned to the
     /// header's width. A row that sized itself to its captions would have undone the fix.
-    @Test func everyGlyphRowMatchesTheHeaderWidth() {
-        let controls: [CardMenuItem] = [.minimizeWindow, .closeWindow]
-            + WindowTile.allCases.map(CardMenuItem.tileWindow)
-        let actions: [CardMenuItem] = [
-            .searchWindowTabs(count: 23),
-            .muteAudible,
-        ]
-
-        for count in 1...controls.count {
-            let width = rowWidth(Array(controls.prefix(count)), caption: .shared("Window"))
-            #expect(
-                width == CardMenuHeaderView.width,
-                "\(count) control(s) gave a width of \(width)"
-            )
-        }
+    @Test func theContentRowMatchesTheHeaderWidth() {
+        let actions: [CardMenuItem] = [.searchWindowTabs(count: 23), .muteAudible]
         for count in 1...actions.count {
-            let width = rowWidth(Array(actions.prefix(count)), caption: .perGlyph)
+            let width = rowWidth(Array(actions.prefix(count)))
             #expect(
                 width == CardMenuHeaderView.width,
                 "\(count) action(s) gave a width of \(width)"
@@ -139,29 +145,61 @@ struct CardMenuHeaderViewTests {
         }
     }
 
-    /// Six window controls cannot each carry a legible word in a fixed width, so only the hovered one
-    /// is named — on a line that is always present, so nothing moves when the pointer arrives.
-    @Test func theSharedCaptionRowDoesNotChangeHeightOnHover() {
-        let controls: [CardMenuItem] = [.minimizeWindow, .closeWindow]
-            + WindowTile.allCases.map(CardMenuItem.tileWindow)
-        let hover = CardMenuHoverModel()
-        let view = CardMenuGlyphRow(
-            actions: controls, caption: .shared("Window"), hover: hover
-        ) { _ in }
-        let hosting = NSHostingView(rootView: view)
-        hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
-        hosting.layoutSubtreeIfNeeded()
-        let resting = hosting.fittingSize
-
-        hover.hoveredIndex = controls.count - 1
-        hosting.layoutSubtreeIfNeeded()
-        #expect(hosting.fittingSize == resting, "naming the hovered glyph resized the row")
+    /// The corner groups live inside the header now, so they are the other thing that could widen it.
+    @Test func theCornerGroupsDoNotWidenTheHeader() {
+        #expect(fullHeader().fittingSize.width == CardMenuHeaderView.width)
+        #expect(
+            header(title: "Mail", windowControls: [.minimizeWindow, .closeWindow])
+                .fittingSize.width == CardMenuHeaderView.width
+        )
+        #expect(
+            header(title: "Mail", tiling: WindowTile.allCases.map(CardMenuItem.tileWindow))
+                .fittingSize.width == CardMenuHeaderView.width
+        )
     }
 
-    private func rowWidth(_ actions: [CardMenuItem], caption: CardMenuGlyphRow.Caption) -> CGFloat {
+    /// Highlighting a glyph must not move anything. The corner groups sit against the block's edges,
+    /// so a hover that changed a button's size would shift the preview or the chip beside it.
+    @Test func hoveringAGlyphDoesNotResizeTheHeader() {
+        let hover = CardMenuHoverModel()
+        let view = fullHeader(hover: hover)
+        let resting = view.fittingSize
+
+        for action in [CardMenuItem.closeWindow, .minimizeWindow, .tileWindow(.leftHalf)] {
+            hover.setHovered(action, true)
+            view.layoutSubtreeIfNeeded()
+            #expect(view.fittingSize == resting, "hovering \(action) resized the header")
+            hover.setHovered(action, false)
+        }
+    }
+
+    /// Hover is keyed on the action, not on a position, so one model serves every group. Two groups
+    /// each believing their own first glyph was hovered is what an index would have allowed.
+    @Test func onlyOneGlyphIsEverHovered() {
+        let hover = CardMenuHoverModel()
+        hover.setHovered(.minimizeWindow, true)
+        #expect(hover.isHovered(.minimizeWindow))
+        #expect(!hover.isHovered(.tileWindow(.leftHalf)))
+
+        hover.setHovered(.tileWindow(.leftHalf), true)
+        #expect(hover.isHovered(.tileWindow(.leftHalf)))
+        #expect(!hover.isHovered(.minimizeWindow), "two glyphs both believe they are hovered")
+    }
+
+    /// Leaving a glyph that is no longer the hovered one must not clear the highlight from the one that
+    /// is — the order `onHover` reports enter and exit in is not guaranteed.
+    @Test func leavingAStaleGlyphDoesNotClearTheCurrentOne() {
+        let hover = CardMenuHoverModel()
+        hover.setHovered(.minimizeWindow, true)
+        hover.setHovered(.closeWindow, true)
+        hover.setHovered(.minimizeWindow, false)
+        #expect(hover.isHovered(.closeWindow))
+    }
+
+    private func rowWidth(_ actions: [CardMenuItem]) -> CGFloat {
         let view = CardMenuGlyphRow(
-            actions: actions, caption: caption, hover: CardMenuHoverModel()
-        ) { _ in }
+            actions: actions, hover: CardMenuHoverModel(), onAction: { _ in }
+        )
         let hosting = NSHostingView(rootView: view)
         hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
         hosting.layoutSubtreeIfNeeded()
@@ -191,24 +229,28 @@ struct CardMenuHeaderViewTests {
         #expect(CardMenuHeaderView.displayTint(-4) == CardMenuHeaderView.displayTint(1))
     }
 
-    /// The chip shares its line with the facts rather than taking one of its own.
+    /// The chip shares the bottom line with the tiling glyphs rather than taking a line of its own.
     ///
-    /// Against a single fact row the chip is the taller of the two and sets the line height, which is
-    /// a few points and not a row. Against two or more it costs nothing at all, and that is the case
-    /// worth pinning: the chip must never be what makes the footer grow.
-    @Test func theChipSharesTheFactsLineRatherThanAddingOne() {
-        let oneRow = [CardDetails.Row(label: "Tabs", value: "23 tabs")]
-        let growth = header(title: "Mail", rows: oneRow, displayNumber: 4).fittingSize.height
-            - header(title: "Mail", rows: oneRow, displayNumber: nil).fittingSize.height
-        #expect(growth < 6, "the chip added \(growth)pt, which is a row rather than a line height")
+    /// That is what the opposite corners buy: the line exists for the controls, and the label rides
+    /// along at the far end of it for free. A chip that added height whenever the controls were present
+    /// would mean the two were stacked rather than paired.
+    @Test func theChipRidesAlongWithTheTilingGlyphs() {
+        let rows = [CardDetails.Row(label: "Tabs", value: "23 tabs")]
+        let tiling = WindowTile.allCases.map(CardMenuItem.tileWindow)
 
-        let twoRows = oneRow + [CardDetails.Row(label: "Audio", value: "Playing")]
-        #expect(
-            header(title: "Mail", rows: twoRows, displayNumber: 4).fittingSize.height
-                == header(title: "Mail", rows: twoRows, displayNumber: nil).fittingSize.height
-        )
-        #expect(header(title: "Mail", rows: twoRows, displayNumber: 4).fittingSize.width
-            == CardMenuHeaderView.width)
+        let withChip = header(title: "Mail", rows: rows, displayNumber: 4, tiling: tiling)
+        let withoutChip = header(title: "Mail", rows: rows, displayNumber: nil, tiling: tiling)
+        #expect(withChip.fittingSize.height == withoutChip.fittingSize.height)
+        #expect(withChip.fittingSize.width == CardMenuHeaderView.width)
+    }
+
+    /// With no controls to share it with, the chip is worth one line and no more.
+    @Test func theChipAloneCostsASingleLine() {
+        let rows = [CardDetails.Row(label: "Tabs", value: "23 tabs")]
+        let growth = header(title: "Mail", rows: rows, displayNumber: 4).fittingSize.height
+            - header(title: "Mail", rows: rows, displayNumber: nil).fittingSize.height
+        #expect(growth > 0)
+        #expect(growth < 30, "the chip added \(growth)pt, which is more than one line")
     }
 
     /// With no facts at all the chip is still shown, and is still the only thing on its line.

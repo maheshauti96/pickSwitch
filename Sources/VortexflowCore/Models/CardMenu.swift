@@ -62,16 +62,23 @@ enum CardMenu {
     /// would be describing a shape the menu no longer has.
     struct Rows: Equatable {
 
-        /// Above the preview, top-left: everything that acts on the window *as a window*. Grouped
-        /// there because the preview is the window, so the controls sit on the thing they affect —
-        /// the same reason a title bar puts them on the window rather than in a menu.
+        /// What a title bar carries: minimize and close, in that order.
+        ///
+        /// Drawn in the corner above the preview, because the preview *is* the window and these are
+        /// the controls that belong on a window rather than in a list. Keeping them as their own group
+        /// is what lets the view place them without pattern-matching cases back out of a mixed list.
         var windowControls: [CardMenuItem] = []
 
-        /// Below the facts: what is about the window's *contents* or about its application, neither
-        /// of which the preview shows.
+        /// Where the window can be sent. A separate group from the title-bar controls because it is
+        /// answering a different question — not "get this out of my way" but "put this beside
+        /// something" — and the two sit in opposite corners for that reason.
+        var tiling: [CardMenuItem] = []
+
+        /// What is about the window's *contents* rather than the window, which the preview does not
+        /// show. Its own row, since these need words and the corner glyphs do not.
         var actions: [CardMenuItem] = []
 
-        var isEmpty: Bool { windowControls.isEmpty && actions.isEmpty }
+        var isEmpty: Bool { windowControls.isEmpty && tiling.isEmpty && actions.isEmpty }
     }
 
     static func rows(for entry: WindowEntry, context: Context) -> Rows {
@@ -80,10 +87,13 @@ enum CardMenu {
         var rows = Rows()
 
         if context.hasAccessibilityElement {
+            // Minimize first, close last: close ends up furthest into the corner, which is where the
+            // pointer travels least accurately, and putting the reversible action on the inside is
+            // what keeps a slightly long throw from closing the window.
             rows.windowControls.append(.minimizeWindow)
             rows.windowControls.append(.closeWindow)
             if !context.isMinimized {
-                rows.windowControls.append(contentsOf: WindowTile.allCases.map(CardMenuItem.tileWindow))
+                rows.tiling.append(contentsOf: WindowTile.allCases.map(CardMenuItem.tileWindow))
             }
         }
 

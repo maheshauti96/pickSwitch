@@ -36,25 +36,37 @@ struct CardMenuHeaderView: View {
     /// Favicon for a matched browser window, otherwise the application's icon. Stands in for a
     /// capture that has not arrived, and identifies the application beside the title either way.
     let icon: NSImage?
+    /// Minimize and close, drawn into the top-right corner.
+    var windowControls: [CardMenuItem] = []
+    /// Where the window can be sent, drawn into the bottom-left corner.
+    var tiling: [CardMenuItem] = []
+    @ObservedObject var hover: CardMenuHoverModel
+    let onAction: (CardMenuItem) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
+            if !windowControls.isEmpty { controlStrip }
             preview
             caption
-            if !details.rows.isEmpty || details.displayNumber != nil {
+            if hasFooter {
                 Divider().opacity(0.6)
                 footer
             }
         }
         .padding(.horizontal, Self.horizontalPadding)
-        .padding(.top, 10)
+        .padding(.top, windowControls.isEmpty ? 10 : 6)
         .padding(.bottom, 6)
         .frame(width: Self.width, alignment: .leading)
-        // The header is a label, not a target. Without this the whole block would swallow the click
-        // that is on its way to the menu's tracking loop.
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        // No `allowsHitTesting(false)` any more, and that is the consequence of moving the controls
+        // inside this block: it used to be a pure label, and a label must not swallow the click on its
+        // way to the menu's tracking loop. Now it contains buttons, so the item is enabled and the
+        // view handles its own events — which is what a menu item's view is responsible for. Clicking
+        // the inert parts does nothing, exactly as clicking a disabled menu item does nothing.
+        .accessibilityElement(children: .contain)
+    }
+
+    private var hasFooter: Bool {
+        !details.rows.isEmpty || details.displayNumber != nil || !tiling.isEmpty
     }
 
     // MARK: - Pieces
@@ -122,18 +134,44 @@ struct CardMenuHeaderView: View {
 
             Spacer(minLength: 0)
         }
+        // One element for everything descriptive: the title, what it belongs to, the facts and the
+        // screen. VoiceOver would otherwise stop on each half of every fact row separately — "Tabs",
+        // then "23 tabs" — and the facts and chip below are hidden because they are spoken here.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    /// Facts at the leading edge, the screen chip trailing at the bottom.
+    /// Minimize and close in the top-right corner.
     ///
-    /// Bottom-aligned rather than top, so the chip stays in the corner however many facts sit beside
-    /// it — anchored to the block's edge rather than floating against the first row.
-    private var footer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if !details.rows.isEmpty { facts }
+    /// Right-aligned on a line of their own rather than laid over the preview. Over the picture they
+    /// would cover whatever is in that corner of the window — often a real close button — and give the
+    /// pointer a target that moves with the content behind it.
+    private var controlStrip: some View {
+        HStack(spacing: 2) {
             Spacer(minLength: 0)
-            if let number = details.displayNumber {
-                displayChip(number)
+            ForEach(Array(windowControls.enumerated()), id: \.offset) { _, action in
+                CardMenuGlyphButton(action: action, hover: hover, onAction: onAction)
+            }
+        }
+    }
+
+    /// The bottom line: where the window can be sent on the left, which screen it is on at the right.
+    ///
+    /// Opposite corners because they are opposite kinds of thing — one is a control, one is a label —
+    /// and putting them at the two ends means neither has to be read past to reach the other. The facts
+    /// sit above this line rather than beside it, since they would otherwise compete with the tiling
+    /// glyphs for the leading edge.
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !details.rows.isEmpty { facts }
+            HStack(alignment: .bottom, spacing: 8) {
+                ForEach(Array(tiling.enumerated()), id: \.offset) { _, action in
+                    CardMenuGlyphButton(action: action, hover: hover, onAction: onAction)
+                }
+                Spacer(minLength: 0)
+                if let number = details.displayNumber {
+                    displayChip(number)
+                }
             }
         }
     }
@@ -157,6 +195,8 @@ struct CardMenuHeaderView: View {
                 Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 0.5)
             )
             .fixedSize()
+            // Spoken as part of the caption instead, so the screen is not announced twice.
+            .accessibilityHidden(true)
     }
 
     /// One colour per screen, wrapping if someone runs more displays than there are colours.
@@ -191,6 +231,7 @@ struct CardMenuHeaderView: View {
                 }
             }
         }
+        .accessibilityHidden(true)
     }
 
     /// One string for the whole block. VoiceOver reads the menu item this view belongs to, so the

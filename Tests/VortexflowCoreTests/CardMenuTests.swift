@@ -35,24 +35,23 @@ struct CardMenuTests {
 
     // MARK: - Which row an action belongs in
 
-    /// The split is the design. The window controls act on the window, and they are drawn above the
-    /// preview because the preview *is* the window — the same reason a title bar carries them. The
-    /// second row is about what the window contains, which the preview does not show.
-    @Test func theRowsSplitWindowActionsFromContentActions() {
+    /// Three groups, because they end up in three places: what a title bar carries goes in one corner,
+    /// where the window can be sent goes in the opposite one, and what the window *contains* gets a row
+    /// of its own because it needs words.
+    @Test func theActionsSplitIntoThreeGroups() {
         var context = browserContext
         context.isAudible = true
         let result = rows(window(), context)
 
-        #expect(result.windowControls == [
-            .minimizeWindow,
-            .closeWindow,
-            .tileWindow(.leftHalf),
-            .tileWindow(.rightHalf),
-        ])
-        #expect(result.actions == [
-            .searchWindowTabs(count: 23),
-            .muteAudible,
-        ])
+        #expect(result.windowControls == [.minimizeWindow, .closeWindow])
+        #expect(result.tiling == [.tileWindow(.leftHalf), .tileWindow(.rightHalf)])
+        #expect(result.actions == [.searchWindowTabs(count: 23), .muteAudible])
+    }
+
+    /// Close is last, so it lands furthest into the corner. The pointer is least accurate at the end of
+    /// its travel, and the reversible action is the one that should absorb a slightly long throw.
+    @Test func closeSitsOutsideMinimize() {
+        #expect(rows(window(), browserContext).windowControls.last == .closeWindow)
     }
 
     /// For a browser, the useful thing is the tab, and the fastest route to a tab is the search the
@@ -89,7 +88,7 @@ struct CardMenuTests {
 
     /// Only the vertical halves. A half-height window shows too few lines to be worth the click.
     @Test func onlyTheTwoVerticalHalvesAreOffered() {
-        let tiles = rows(window(), browserContext).windowControls.compactMap { item -> WindowTile? in
+        let tiles = rows(window(), browserContext).tiling.compactMap { item -> WindowTile? in
             if case .tileWindow(let tile) = item { return tile }
             return nil
         }
@@ -120,6 +119,7 @@ struct CardMenuTests {
         let result = rows(window(), context)
 
         #expect(result.windowControls.isEmpty)
+        #expect(result.tiling.isEmpty)
         // Tab search survives: it never needed Accessibility, only the browser's scripting id.
         #expect(result.actions == [.searchWindowTabs(count: 23)])
     }
@@ -131,7 +131,7 @@ struct CardMenuTests {
         context.isMinimized = true
         let result = rows(window(minimized: true), context)
 
-        #expect(!result.windowControls.contains { if case .tileWindow = $0 { true } else { false } })
+        #expect(result.tiling.isEmpty)
         // Close still applies: a minimized window can be closed from the Dock too.
         #expect(result.windowControls.contains(.closeWindow))
     }
@@ -162,6 +162,7 @@ struct CardMenuTests {
     @Test func aWindowWithNothingAvailableGetsNoMenu() {
         let result = rows(window(app: "Warp"), CardMenu.Context())
         #expect(result.windowControls.isEmpty)
+        #expect(result.tiling.isEmpty)
         #expect(result.actions.isEmpty)
         #expect(result.isEmpty)
     }
@@ -172,7 +173,8 @@ struct CardMenuTests {
         var context = CardMenu.Context()
         context.hasAccessibilityElement = true
         let result = rows(window(app: "Warp"), context)
-        #expect(result.windowControls.count == 4)
+        #expect(result.windowControls == [.minimizeWindow, .closeWindow])
+        #expect(result.tiling.count == 2)
         #expect(result.actions.isEmpty)
         #expect(!result.isEmpty)
     }
@@ -230,6 +232,6 @@ struct CardMenuTests {
     }
 
     private func everyAction(in rows: CardMenu.Rows) -> [CardMenuItem] {
-        rows.windowControls + rows.actions
+        rows.windowControls + rows.tiling + rows.actions
     }
 }

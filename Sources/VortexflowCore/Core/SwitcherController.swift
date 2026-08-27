@@ -1645,25 +1645,16 @@ public final class SwitcherController {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        // Above the preview, because the preview *is* the window and the controls belong on the thing
-        // they act on — the same reason a title bar carries them rather than a menu.
-        if !rows.windowControls.isEmpty {
-            menu.addItem(
-                glyphRowItem(
-                    rows.windowControls,
-                    caption: .shared("Window"),
-                    entry: entry,
-                    menu: menu
-                )
-            )
-        }
+        // One hover model for the whole menu, keyed on the action rather than on a position, so the
+        // corner groups and the row below cannot each think their own first glyph is hovered.
+        let hover = CardMenuHoverModel()
 
-        menu.addItem(headerItem(for: entry, preview: preview))
+        menu.addItem(
+            headerItem(for: entry, preview: preview, rows: rows, hover: hover, menu: menu)
+        )
 
         if !rows.actions.isEmpty {
-            menu.addItem(
-                glyphRowItem(rows.actions, caption: .perGlyph, entry: entry, menu: menu)
-            )
+            menu.addItem(glyphRowItem(rows.actions, entry: entry, hover: hover, menu: menu))
         }
 
         // Two things have to be held off for the whole tracking loop, and getting only the first of
@@ -1704,34 +1695,37 @@ public final class SwitcherController {
         Log.overlay.info("context menu popUp returned \(shown, privacy: .public)")
     }
 
-    /// One row of glyphs as a menu item.
+    /// The captioned row of content actions.
     private func glyphRowItem(
         _ actions: [CardMenuItem],
-        caption: CardMenuGlyphRow.Caption,
         entry: WindowEntry,
+        hover: CardMenuHoverModel,
         menu: NSMenu
     ) -> NSMenuItem {
         let host = NSHostingView(
             rootView: CardMenuGlyphRow(
                 actions: actions,
-                caption: caption,
-                hover: CardMenuHoverModel()
-            ) { [weak self, weak menu] action in
-                // Ending tracking first, so the overlay teardown some of these actions perform does
-                // not happen underneath an open menu.
-                menu?.cancelTracking()
-                Log.overlay.info("menu glyph chosen: \(String(describing: action), privacy: .public)")
-                self?.perform(action, onEntry: entry.id)
-            }
+                hover: hover,
+                onAction: menuAction(for: entry, menu: menu)
+            )
         )
         host.frame = CGRect(origin: .zero, size: host.fittingSize)
 
         let item = NSMenuItem()
         item.view = host
-        // Enabled, unlike the header: a disabled item does not track, and its view would never see
-        // the click.
         item.isEnabled = true
         return item
+    }
+
+    /// What every glyph in the menu does when clicked, wherever it is drawn.
+    private func menuAction(for entry: WindowEntry, menu: NSMenu) -> (CardMenuItem) -> Void {
+        { [weak self, weak menu] action in
+            // Ending tracking first, so the overlay teardown some of these actions perform does not
+            // happen underneath an open menu.
+            menu?.cancelTracking()
+            Log.overlay.info("menu glyph chosen: \(String(describing: action), privacy: .public)")
+            self?.perform(action, onEntry: entry.id)
+        }
     }
 
     /// What a menu item carries with it, so the action is not resolved against a selection that may
@@ -1752,7 +1746,13 @@ public final class SwitcherController {
     /// aligned fact list exist at all, and it is what stops the window title from setting the menu's
     /// width — an `NSMenu` sizes itself to its widest item, so a long title used to stretch every
     /// short action item alongside it.
-    private func headerItem(for entry: WindowEntry, preview: CGImage?) -> NSMenuItem {
+    private func headerItem(
+        for entry: WindowEntry,
+        preview: CGImage?,
+        rows: CardMenu.Rows,
+        hover: CardMenuHoverModel,
+        menu: NSMenu
+    ) -> NSMenuItem {
         let scriptedID = scriptedWindowIdentifiers[entry.windowID]
         let details = CardDetails.make(
             entry: entry,
@@ -1783,7 +1783,11 @@ public final class SwitcherController {
             rootView: CardMenuHeaderView(
                 details: details,
                 thumbnail: preview,
-                icon: state.displayIcon(for: entry)
+                icon: state.displayIcon(for: entry),
+                windowControls: rows.windowControls,
+                tiling: rows.tiling,
+                hover: hover,
+                onAction: menuAction(for: entry, menu: menu)
             )
         )
         // A menu item's view is not laid out by the menu, so it has to arrive at its final size.
@@ -1792,9 +1796,10 @@ public final class SwitcherController {
 
         let item = NSMenuItem()
         item.view = header
-        // Nothing to choose here, and an enabled heading would highlight under the pointer as though
-        // there were.
-        item.isEnabled = false
+        // Enabled, where this used to be disabled. The controls now live inside this block, and a
+        // disabled item does not track at all — its view would never see a click. The inert parts of
+        // the view simply do nothing when clicked, as a disabled menu item would.
+        item.isEnabled = true
 
         return item
     }
