@@ -95,6 +95,38 @@ enum AXBridge {
     }
 
     @discardableResult
+    static func setPoint(_ element: AXUIElement, _ attribute: String, _ value: CGPoint) -> Bool {
+        var point = value
+        guard let wrapped = AXValueCreate(.cgPoint, &point) else { return false }
+        return AXUIElementSetAttributeValue(element, attribute as CFString, wrapped) == .success
+    }
+
+    @discardableResult
+    static func setSize(_ element: AXUIElement, _ attribute: String, _ value: CGSize) -> Bool {
+        var size = value
+        guard let wrapped = AXValueCreate(.cgSize, &size) else { return false }
+        return AXUIElementSetAttributeValue(element, attribute as CFString, wrapped) == .success
+    }
+
+    /// Move and resize in one call, position first.
+    ///
+    /// The order is not incidental. A window is resized within whatever screen it currently occupies,
+    /// so growing it before moving it can have the window manager clamp the new size to the *old*
+    /// screen — which is how a window tiled to the half of a smaller display ends up the wrong size.
+    /// Setting the size again afterwards costs one more round trip and settles windows that clamped
+    /// their width to a minimum before the move.
+    ///
+    /// Returns whether both attributes were accepted. Some windows are simply not resizable, and
+    /// reporting that honestly is better than a silent no-op.
+    @discardableResult
+    static func setFrame(_ element: AXUIElement, _ frame: CGRect) -> Bool {
+        let moved = setPoint(element, kAXPositionAttribute as String, frame.origin)
+        let sized = setSize(element, kAXSizeAttribute as String, frame.size)
+        if moved { setPoint(element, kAXPositionAttribute as String, frame.origin) }
+        return moved && sized
+    }
+
+    @discardableResult
     static func perform(_ element: AXUIElement, _ action: String) -> Bool {
         AXUIElementPerformAction(element, action as CFString) == .success
     }

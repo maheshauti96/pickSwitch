@@ -128,10 +128,11 @@ public final class SwitcherController {
     /// so without this the menu would close the thing it belongs to before its action ran.
     private var isShowingContextMenu = false
 
-    /// Which card the open context menu belongs to, so a capture that arrives late is only applied to
-    /// the menu that asked for it. Without this check, closing one menu and opening another on a
-    /// different card would let the first window's screenshot land in the second window's header.
-    private var contextMenuEntryID: String?
+    /// The menu currently tracking, so a right-click on another card can close it.
+    ///
+    /// The event tap runs during menu tracking, which is what makes the second right-click reachable
+    /// at all — and without a handle on the first menu it simply stayed open beside the new one.
+    private weak var openContextMenu: NSMenu?
 
     /// How soon after presenting a desktop change is treated as having predated the overlay.
     ///
@@ -1570,6 +1571,20 @@ public final class SwitcherController {
             (\(entry.applicationName, privacy: .public)); opening context menu
             """)
 
+        // A menu already open belongs to a different card, so it goes.
+        //
+        // This handler runs *inside* the open menu's tracking loop — the event tap is installed in
+        // the common run loop modes, which is the only reason a second right-click is seen at all —
+        // and cancelling from here unwinds that loop rather than returning immediately. The new
+        // menu's own presentation already waits on a capture, so by the time it runs the first
+        // `popUp` has returned and released the main thread. That ordering is what makes one line
+        // enough here.
+        if let openContextMenu {
+            Log.overlay.info("closing the context menu already open on another card")
+            openContextMenu.cancelTracking()
+            self.openContextMenu = nil
+        }
+
         // Selection follows the right-click, so the menu visibly belongs to a card.
         state.setSelection(index)
         holdHoverUntilPointerMoves()
@@ -1591,8 +1606,8 @@ public final class SwitcherController {
             Log.overlay.info("right-click promoted the overlay to persistent")
         }
 
-        let items = CardMenu.items(for: entry, context: menuContext(for: entry))
-        guard !items.isEmpty else {
+        let rows = CardMenu.rows(for: entry, context: menuContext(for: entry))
+        guard !rows.isEmpty else {
             Log.overlay.info("no menu for this card kind")
             return
         }
@@ -1614,7 +1629,7 @@ public final class SwitcherController {
                 Log.overlay.info("context menu abandoned: its card left the list during the capture")
                 return
             }
-            self.presentContextMenu(for: entry, items: items, at: point, preview: preview)
+            self.presentContextMenu(for: entry, rows: rows, at: point, preview: preview)
         }
     }
 
@@ -1622,7 +1637,7 @@ public final class SwitcherController {
     /// awaited between the two, and everything from here on blocks until the menu closes.
     private func presentContextMenu(
         for entry: WindowEntry,
-        items: [CardMenuItem],
+        rows: CardMenu.Rows,
         at point: CGPoint,
         preview: CGImage?
     ) {
@@ -1630,46 +1645,25 @@ public final class SwitcherController {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        menu.addItem(headerItem(for: entry, preview: preview))
-
-        // The compact actions become one row of glyphs; whatever cannot be a glyph stays a written
-        // line below it.
-        let (icons, written) = CardMenu.partition(items)
-
-        if !icons.isEmpty {
-            let actions = NSMenuItem()
-            let host = NSHostingView(
-                rootView: CardMenuActionsView(actions: icons, hover: CardMenuHoverModel()) { [weak self, weak menu] action in
-                    // Ending tracking first, so the overlay teardown some of these actions perform
-                    // does not happen underneath an open menu.
-                    menu?.cancelTracking()
-                    Log.overlay.info("menu glyph chosen: \(String(describing: action), privacy: .public)")
-                    self?.perform(action, onEntry: entry.id)
-                }
+        // Above the preview, because the preview *is* the window and the controls belong on the thing
+        // they act on — the same reason a title bar carries them rather than a menu.
+        if !rows.windowControls.isEmpty {
+            menu.addItem(
+                glyphRowItem(
+                    rows.windowControls,
+                    caption: .shared("Window"),
+                    entry: entry,
+                    menu: menu
+                )
             )
-            host.frame = CGRect(origin: .zero, size: host.fittingSize)
-            actions.view = host
-            // Enabled, unlike the header: a disabled item does not track, and its view would never
-            // see the click.
-            actions.isEnabled = true
-            menu.addItem(actions)
         }
 
-        if !written.isEmpty {
-            menu.addItem(.separator())
-            for item in written {
-                let menuItem = NSMenuItem(
-                    title: item.title,
-                    action: #selector(cardMenuItemChosen(_:)),
-                    keyEquivalent: ""
-                )
-                menuItem.target = self
-                menuItem.isEnabled = true
-                // The chosen action and the card it belongs to travel together, so a menu that
-                // outlives a selection change still acts on the card it was opened on.
-                menuItem.representedObject = CardMenuChoice(item: item, entryID: entry.id)
-                menu.addItem(menuItem)
-            }
+        menu.addItem(headerItem(for: entry, preview: preview))
+
+        if !rows.actions.isEmpty {
+            menu.addItem(
+                glyphRowItem(rows.actions, caption: .perGlyph, entry: entry, menu: menu)
+            )
         }
 
         // Two things have to be held off for the whole tracking loop, and getting only the first of
@@ -1681,9 +1675,13 @@ public final class SwitcherController {
         // the menu can see it.
         isShowingContextMenu = true
         triggerMonitor.passesThroughPrimaryClicks = true
+        openContextMenu = menu
         defer {
             isShowingContextMenu = false
             triggerMonitor.passesThroughPrimaryClicks = false
+            // Only if it is still this menu: a right-click on another card has already replaced the
+            // handle, and clearing it here would leave the new menu unclosable by the next one.
+            if openContextMenu === menu { openContextMenu = nil }
             Log.overlay.info("context menu closed; overlay still visible: \(self.state.isVisible, privacy: .public)")
         }
 
@@ -1704,6 +1702,36 @@ public final class SwitcherController {
             """)
         let shown = menu.popUp(positioning: nil, at: point, in: nil)
         Log.overlay.info("context menu popUp returned \(shown, privacy: .public)")
+    }
+
+    /// One row of glyphs as a menu item.
+    private func glyphRowItem(
+        _ actions: [CardMenuItem],
+        caption: CardMenuGlyphRow.Caption,
+        entry: WindowEntry,
+        menu: NSMenu
+    ) -> NSMenuItem {
+        let host = NSHostingView(
+            rootView: CardMenuGlyphRow(
+                actions: actions,
+                caption: caption,
+                hover: CardMenuHoverModel()
+            ) { [weak self, weak menu] action in
+                // Ending tracking first, so the overlay teardown some of these actions perform does
+                // not happen underneath an open menu.
+                menu?.cancelTracking()
+                Log.overlay.info("menu glyph chosen: \(String(describing: action), privacy: .public)")
+                self?.perform(action, onEntry: entry.id)
+            }
+        )
+        host.frame = CGRect(origin: .zero, size: host.fittingSize)
+
+        let item = NSMenuItem()
+        item.view = host
+        // Enabled, unlike the header: a disabled item does not track, and its view would never see
+        // the click.
+        item.isEnabled = true
+        return item
     }
 
     /// What a menu item carries with it, so the action is not resolved against a selection that may
@@ -1814,7 +1842,8 @@ public final class SwitcherController {
             },
             isAudible: state.isPlayingAudio(entry) || state.isUsingMicrophone(entry),
             hasAccessibilityElement: entry.axElement != nil,
-            isPinned: entry.bundleIdentifier.map(settings.pinnedApplications.contains) ?? false
+            isPinned: entry.bundleIdentifier.map(settings.pinnedApplications.contains) ?? false,
+            isMinimized: entry.isMinimized
         )
     }
 
@@ -1851,6 +1880,9 @@ public final class SwitcherController {
         case .closeWindow:
             closeWindow(at: index)
 
+        case .tileWindow(let tile):
+            tileWindow(entry, to: tile)
+
         case .pinApplication, .unpinApplication:
             guard let bundleIdentifier = entry.bundleIdentifier else { return }
             var pinned = settings.pinnedApplications
@@ -1861,14 +1893,48 @@ public final class SwitcherController {
             }
             settings.pinnedApplications = pinned
 
-        case .quitApplication:
-            NSRunningApplication(processIdentifier: entry.processID)?.terminate()
-            dismiss(activating: nil)
-
-        case .muteAudible, .separator:
+        case .muteAudible:
             // Not wired yet; the menu does not offer mute until it is.
             break
         }
+    }
+
+    /// Send a window to half of the screen it is on.
+    ///
+    /// Tiled to the screen's *visible* bounds, not its full bounds, or the window slides under the
+    /// menu bar and the Dock. `DisplayInfo` carries both, in the same Quartz global space that
+    /// `kAXPositionAttribute` speaks, so there is no coordinate conversion left to get wrong here —
+    /// it was done once where the two spaces are documented together.
+    private func tileWindow(_ entry: WindowEntry, to tile: WindowTile) {
+        guard let element = entry.axElement else { return }
+        // `display(for:)` withholds the display on a single-screen setup, since naming it there tells
+        // the user nothing — but tiling needs the geometry regardless of whether it is worth naming.
+        guard let display = state.displayLayout.display(for: entry.frame) else {
+            Log.overlay.info("tile dropped: the window is on no active display")
+            return
+        }
+
+        let frame = tile.frame(in: display.visibleBounds)
+        let applied = AXBridge.setFrame(element, frame)
+        Log.overlay.info("""
+            tiled \(entry.applicationName, privacy: .public) \(tile.rawValue, privacy: .public) \
+            on screen \(display.number, privacy: .public) to \
+            \(Int(frame.width), privacy: .public)×\(Int(frame.height), privacy: .public) \
+            at \(Int(frame.minX), privacy: .public),\(Int(frame.minY), privacy: .public); \
+            accepted: \(applied, privacy: .public)
+            """)
+
+        // Read back rather than assume. A window can refuse part of what it was asked for — many have
+        // a minimum width, and some are not resizable at all — so the frame recorded here is the one
+        // the window actually took, which is what keeps the next right-click's size row honest.
+        if let origin = AXBridge.point(element, kAXPositionAttribute as String),
+           let size = AXBridge.size(element, kAXSizeAttribute as String) {
+            state.setFrame(CGRect(origin: origin, size: size), forWindowID: entry.windowID)
+        }
+
+        // The overlay stays open. Tiling is the one action here a user is likely to repeat — try the
+        // left half, then the top — and it changes the window rather than which window is in front,
+        // so there is nothing to switch to.
     }
 
     private func cardIndex(atScreenPoint point: CGPoint, panel: OverlayPanel) -> Int? {

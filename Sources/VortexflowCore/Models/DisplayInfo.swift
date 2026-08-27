@@ -28,6 +28,32 @@ struct DisplayInfo: Equatable, Identifiable, Sendable {
     /// Empty when macOS does not offer one.
     let name: String
 
+    /// The usable part of the display — `bounds` less the menu bar and the Dock — in the same Quartz
+    /// global space as `bounds`.
+    ///
+    /// Kept beside `bounds` rather than derived where it is needed, because deriving it means
+    /// crossing from `NSScreen`'s coordinate space into this one, and that conversion belongs in the
+    /// one place that already documents both spaces. Tiling a window to `bounds` instead of this
+    /// slides it under the menu bar.
+    ///
+    /// Defaults to `bounds` when no screen information is available, which is the honest answer for a
+    /// synthetic arrangement in a test: with nothing known to subtract, all of it is usable.
+    let visibleBounds: CGRect
+
+    init(
+        number: Int,
+        bounds: CGRect,
+        isBuiltIn: Bool,
+        name: String,
+        visibleBounds: CGRect? = nil
+    ) {
+        self.number = number
+        self.bounds = bounds
+        self.isBuiltIn = isBuiltIn
+        self.name = name
+        self.visibleBounds = visibleBounds ?? bounds
+    }
+
     var id: Int { number }
 
     /// Short form for a card, where there is room for two or three characters.
@@ -117,6 +143,7 @@ extension DisplayLayout {
         }
 
         let namesByID = displayNames()
+        let screensByID = screens()
 
         // A mirrored display shows the same content as the one it mirrors, so listing
         // it separately would offer the user a "Screen 3" that is really Screen 1.
@@ -124,14 +151,58 @@ extension DisplayLayout {
         let ordered = distinct.sorted { orderedBefore($0, $1) }
 
         let displays = ordered.enumerated().map { index, id in
-            DisplayInfo(
+            let bounds = CGDisplayBounds(id)
+            let screen = screensByID[id]
+            return DisplayInfo(
                 number: index + 1,
-                bounds: CGDisplayBounds(id),
+                bounds: bounds,
                 isBuiltIn: CGDisplayIsBuiltin(id) != 0,
-                name: namesByID[id] ?? ""
+                name: namesByID[id] ?? "",
+                visibleBounds: screen.map {
+                    quartzRect(fromScreenRect: $0.visibleFrame, screenFrame: $0.frame, quartzBounds: bounds)
+                }
             )
         }
         return DisplayLayout(displays: displays)
+    }
+
+    /// Convert a rectangle from `NSScreen`'s space to Quartz global display space.
+    ///
+    /// The two spaces disagree about which way is up: Quartz measures y downward from the top of the
+    /// main display, `NSScreen` measures it upward from the bottom. Flipping needs the height of the
+    /// main display, and rather than hunting for which screen that is, it is derived from the pair of
+    /// rectangles describing *this* display. The top of this display is `quartzBounds.minY` below the
+    /// main display's top and `screenFrame.maxY` above the main display's bottom, so those two must
+    /// add up to the main display's height — for every display, including ones at negative
+    /// coordinates.
+    ///
+    /// Deriving it this way rather than reading `NSScreen.screens.first` also means the arrangement
+    /// cannot be misread when the primary display is not the first in the list, which is the ordinary
+    /// case for a laptop sitting to the left of an external monitor.
+    static func quartzRect(
+        fromScreenRect rect: CGRect,
+        screenFrame: CGRect,
+        quartzBounds: CGRect
+    ) -> CGRect {
+        let mainDisplayHeight = quartzBounds.minY + screenFrame.maxY
+        return CGRect(
+            x: rect.minX,
+            y: mainDisplayHeight - rect.maxY,
+            width: rect.width,
+            height: rect.height
+        )
+    }
+
+    @MainActor
+    private static func screens() -> [CGDirectDisplayID: NSScreen] {
+        var result: [CGDirectDisplayID: NSScreen] = [:]
+        for screen in NSScreen.screens {
+            guard let number = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? NSNumber else { continue }
+            result[CGDirectDisplayID(number.uint32Value)] = screen
+        }
+        return result
     }
 
     /// Left to right, then top to bottom, with the display ID as a final tie-break so

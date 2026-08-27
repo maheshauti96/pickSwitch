@@ -820,6 +820,24 @@ final class OverlayState: ObservableObject {
     /// spot repeatedly — the next card slides under the cursor. When the last card goes,
     /// the selection becomes nil and the empty state takes over.
     ///
+    /// Record a window's new geometry after the overlay itself moved it.
+    ///
+    /// Both lists, because clearing a search would otherwise bring back the pre-tiling frame from
+    /// `allEntries`. The display mapping is re-derived for that one window rather than for all of
+    /// them: tiling cannot move a window to another screen, but the same call is what would keep the
+    /// mapping right if a future action did.
+    func setFrame(_ frame: CGRect, forWindowID windowID: CGWindowID) {
+        for index in entries.indices where entries[index].windowID == windowID {
+            entries[index].frame = frame
+        }
+        for index in allEntries.indices where allEntries[index].windowID == windowID {
+            allEntries[index].frame = frame
+        }
+        if let display = displayLayout.display(for: frame) {
+            displaysByWindowID[windowID] = display
+        }
+    }
+
     /// - Returns: `false` when the window was not in the list to begin with.
     @discardableResult
     func remove(windowID: CGWindowID) -> Bool {

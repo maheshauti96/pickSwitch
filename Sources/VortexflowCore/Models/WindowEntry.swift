@@ -21,7 +21,10 @@ struct WindowEntry: Identifiable {
     /// `nil` for the rare process that has no bundle.
     var bundleIdentifier: String?
     let title: String
-    let frame: CGRect
+    /// Mutable because the overlay can now move the window itself. Tiling changes the frame while the
+    /// overlay is open, and the frame is what the display mapping and the menu's size row read from,
+    /// so a stale one makes the next right-click describe where the window used to be.
+    var frame: CGRect
     let isMinimized: Bool
     /// Front-to-back position in the system window list at enumeration time.
     /// `0` is frontmost. Used to seed MRU order for windows this session has never

@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Testing
 @testable import VortexflowCore
@@ -12,9 +13,10 @@ struct CardMenuTests {
 
     private func window(
         app: String = "Google Chrome",
-        id: CGWindowID = 169
+        id: CGWindowID = 169,
+        minimized: Bool = false
     ) -> WindowEntry {
-        Fixture.entry(id: id, app: app, title: "A window")
+        Fixture.entry(id: id, app: app, title: "A window", minimized: minimized)
     }
 
     private var browserContext: CardMenu.Context {
@@ -23,17 +25,45 @@ struct CardMenuTests {
             knownTabCount: 23,
             isAudible: false,
             hasAccessibilityElement: true,
-            isPinned: false
+            isPinned: false,
+            isMinimized: false
         )
     }
 
-    // MARK: - What appears
+    private func rows(_ entry: WindowEntry, _ context: CardMenu.Context) -> CardMenu.Rows {
+        CardMenu.rows(for: entry, context: context)
+    }
 
-    /// The reported priority: for a browser, the useful thing is the tab, and the fastest route to a
-    /// tab is the search the overlay already has. So it leads.
-    @Test func aBrowserWindowLeadsWithTabSearch() {
-        let items = CardMenu.items(for: window(), context: browserContext)
-        #expect(items.first == .searchWindowTabs(count: 23))
+    // MARK: - Which row an action belongs in
+
+    /// The split is the design. The window controls act on the window, and they are drawn above the
+    /// preview because the preview *is* the window — the same reason a title bar carries them. The
+    /// second row is about what the window contains or which application it belongs to, neither of
+    /// which the preview shows.
+    @Test func theRowsSplitWindowActionsFromContentActions() {
+        var context = browserContext
+        context.isAudible = true
+        let result = rows(window(), context)
+
+        #expect(result.windowControls == [
+            .minimizeWindow,
+            .closeWindow,
+            .tileWindow(.leftHalf),
+            .tileWindow(.rightHalf),
+            .tileWindow(.topHalf),
+            .tileWindow(.bottomHalf),
+        ])
+        #expect(result.actions == [
+            .searchWindowTabs(count: 23),
+            .muteAudible,
+            .pinApplication(name: "Google Chrome"),
+        ])
+    }
+
+    /// For a browser, the useful thing is the tab, and the fastest route to a tab is the search the
+    /// overlay already has. So it leads its row.
+    @Test func aBrowserWindowLeadsItsActionsWithTabSearch() {
+        #expect(rows(window(), browserContext).actions.first == .searchWindowTabs(count: 23))
     }
 
     @Test func theTabCountIsShownWhenKnownAndOmittedWhenNot() {
@@ -42,24 +72,28 @@ struct CardMenuTests {
         #expect(CardMenuItem.searchWindowTabs(count: nil).title == "Search this window's tabs")
     }
 
-    @Test func everyWindowOffersItsApplicationActions() {
-        let items = CardMenu.items(for: window(app: "Warp"), context: CardMenu.Context())
-        #expect(items.contains(.quitApplication(name: "Warp")))
-        #expect(items.contains(.pinApplication(name: "Warp")))
-    }
-
     @Test func pinningReflectsTheCurrentState() {
         var context = CardMenu.Context()
         context.isPinned = true
-        let items = CardMenu.items(for: window(app: "Slack"), context: context)
-        #expect(items.contains(.unpinApplication(name: "Slack")))
-        #expect(!items.contains(.pinApplication(name: "Slack")))
+        let result = rows(window(app: "Slack"), context)
+        #expect(result.actions.contains(.unpinApplication(name: "Slack")))
+        #expect(!result.actions.contains(.pinApplication(name: "Slack")))
+    }
+
+    /// Closing a window is not quitting its application, and the menu now offers only the first.
+    /// Nothing may quietly reintroduce an action that terminates every window an application has.
+    @Test func theMenuNeverOffersToQuitAnApplication() {
+        var context = browserContext
+        context.isAudible = true
+        let result = rows(window(), context)
+        let titles = (result.windowControls + result.actions).map(\.title)
+        #expect(!titles.contains { $0.localizedCaseInsensitiveContains("quit") })
     }
 
     // MARK: - What is withheld, and why
 
     /// A tab result has no window of its own and an installed application has no window yet, so
-    /// neither can be closed, minimised or pinned as a window. No menu at all is the honest answer.
+    /// neither can be closed, minimised or tiled. No menu at all is the honest answer.
     @Test func onlyWindowsGetAMenu() {
         let tab = WindowEntry.tabEntry(
             BrowserTab(
@@ -68,21 +102,32 @@ struct CardMenuTests {
             ),
             application: nil
         )
-        #expect(CardMenu.items(for: tab, context: browserContext).isEmpty)
+        #expect(rows(tab, browserContext).isEmpty)
     }
 
     /// The case that made this rule necessary: windows found on another desktop through the window
-    /// server carry no Accessibility element, which is why they already show no close button. Closing
-    /// and minimising them is impossible rather than unreliable.
-    @Test func windowsWithNoAccessibilityElementOfferNoWindowActions() {
+    /// server carry no Accessibility element, which is why they already show no close button. Closing,
+    /// minimising and tiling them is impossible rather than unreliable.
+    @Test func windowsWithNoAccessibilityElementOfferNoWindowControls() {
         var context = browserContext
         context.hasAccessibilityElement = false
-        let items = CardMenu.items(for: window(), context: context)
+        let result = rows(window(), context)
 
-        #expect(!items.contains(.closeWindow))
-        #expect(!items.contains(.minimizeWindow))
-        // The application-level actions survive, because they never needed Accessibility.
-        #expect(items.contains(.quitApplication(name: "Google Chrome")))
+        #expect(result.windowControls.isEmpty)
+        // The content and application actions survive, because they never needed Accessibility.
+        #expect(result.actions.contains(.pinApplication(name: "Google Chrome")))
+    }
+
+    /// A minimized window's frame is not where it is or how big it looks, so sending it to half a
+    /// screen you cannot see it on changes nothing observable.
+    @Test func aMinimizedWindowIsNotOfferedTiling() {
+        var context = browserContext
+        context.isMinimized = true
+        let result = rows(window(minimized: true), context)
+
+        #expect(!result.windowControls.contains { if case .tileWindow = $0 { true } else { false } })
+        // Close still applies: a minimized window can be closed from the Dock too.
+        #expect(result.windowControls.contains(.closeWindow))
     }
 
     /// Muting acts on what is playing now. With nothing playing there is nothing to act on, so the
@@ -90,145 +135,88 @@ struct CardMenuTests {
     @Test func muteAppearsOnlyForAWindowMakingNoise() {
         var quiet = browserContext
         quiet.isAudible = false
-        #expect(!CardMenu.items(for: window(), context: quiet).contains(.muteAudible))
+        #expect(!rows(window(), quiet).actions.contains(.muteAudible))
 
         var audible = browserContext
         audible.isAudible = true
-        #expect(CardMenu.items(for: window(), context: audible).contains(.muteAudible))
+        #expect(rows(window(), audible).actions.contains(.muteAudible))
     }
 
     @Test func aNonBrowserWindowIsNotOfferedTabSearch() {
         var context = browserContext
         context.isBrowserWindow = false
-        let items = CardMenu.items(for: window(app: "Warp"), context: context)
-        #expect(!items.contains(.searchWindowTabs(count: 23)))
-        #expect(!items.contains(.searchWindowTabs(count: nil)))
+        let result = rows(window(app: "Warp"), context)
+        #expect(!result.actions.contains(.searchWindowTabs(count: 23)))
+        #expect(!result.actions.contains(.searchWindowTabs(count: nil)))
     }
 
-    // MARK: - Shape
-
-    /// A withheld group must not leave a separator behind it, or the menu grows blank gaps exactly
-    /// where something was unavailable — which looks like a rendering fault rather than a decision.
-    @Test func withheldGroupsLeaveNoStraySeparators() {
-        // Only the application group survives: not a browser, no Accessibility element.
-        let items = CardMenu.items(for: window(app: "Warp"), context: CardMenu.Context())
-
-        #expect(items.first != .separator)
-        #expect(items.last != .separator)
-        for (index, item) in items.enumerated() where item == .separator {
-            #expect(index > 0 && index < items.count - 1, "separator at the edge of the menu")
-            #expect(items[index - 1] != .separator, "two separators in a row")
-        }
+    /// A window with nothing available on it must not produce an empty menu frame. Only the
+    /// application row can carry a card this bare, and it must.
+    @Test func theBarestWindowStillHasSomethingToOffer() {
+        let result = rows(window(app: "Warp"), CardMenu.Context())
+        #expect(result.windowControls.isEmpty)
+        #expect(result.actions == [.pinApplication(name: "Warp")])
+        #expect(!result.isEmpty)
     }
 
-    @Test func theFullMenuIsGroupedInOrder() {
+    // MARK: - Glyphs
+
+    /// A glyph alone makes the user guess, so each carries a word and a symbol.
+    @Test func everyActionHasAGlyphAndAName() {
         var context = browserContext
         context.isAudible = true
-        let items = CardMenu.items(for: window(), context: context)
-
-        #expect(items == [
-            .searchWindowTabs(count: 23),
-            .muteAudible,
-            .separator,
-            .minimizeWindow,
-            .closeWindow,
-            .separator,
-            .pinApplication(name: "Google Chrome"),
-            .quitApplication(name: "Google Chrome"),
-        ])
-    }
-
-    @Test func noItemHasAnEmptyTitleExceptSeparators() {
-        var context = browserContext
-        context.isAudible = true
-        for item in CardMenu.items(for: window(), context: context) where item != .separator {
+        let result = rows(window(), context)
+        for item in result.windowControls + result.actions {
+            #expect(!item.icon.symbolName.isEmpty, "\(item) has no symbol")
+            #expect(!item.icon.label.isEmpty, "\(item) has no caption")
             #expect(!item.title.isEmpty, "\(item) has no title")
         }
     }
 
-    // MARK: - Glyphs and written lines
-
-    /// The compact actions become a row of glyphs and everything else stays a written line.
-    @Test func theCompactActionsBecomeGlyphs() {
+    /// A misspelled SF Symbol name renders as nothing at all, which is invisible in a diff and
+    /// invisible in a passing test suite. Resolving each one is the only way to catch it.
+    @Test func everySymbolResolvesOnThisSystem() {
         var context = browserContext
         context.isAudible = true
-        let (icons, written) = CardMenu.partition(CardMenu.items(for: window(), context: context))
-        #expect(icons == [
-            .searchWindowTabs(count: 23),
-            .muteAudible,
-            .minimizeWindow,
-            .closeWindow,
-            .pinApplication(name: "Google Chrome"),
-        ])
-        #expect(written == [.quitApplication(name: "Google Chrome")])
-    }
+        var pinned = context
+        pinned.isPinned = true
 
-    /// Quitting closes every window an application has and can lose unsaved work in all of them,
-    /// which is why it is the one action that must not sit a mis-click away from Minimize.
-    @Test func quittingIsNeverAGlyph() {
-        #expect(CardMenuItem.quitApplication(name: "Google Chrome").icon == nil)
-    }
+        let everyAction = rows(window(), context).windowControls
+            + rows(window(), context).actions
+            + rows(window(), pinned).actions
+            + [.searchWindowTabs(count: nil)]
 
-    /// The separators marked groups in a vertical list. Once those actions sit side by side the row
-    /// carries the grouping, so a divider between glyphs would be furniture.
-    @Test func separatorsDoNotSurviveThePartition() {
-        let items = CardMenu.items(for: window(), context: browserContext)
-        #expect(items.contains(.separator), "this fixture should have separators to drop")
-        let (icons, written) = CardMenu.partition(items)
-        #expect(!icons.contains(.separator))
-        #expect(!written.contains(.separator))
-    }
-
-    /// Every action either has a glyph or a written line; none may fall through the partition and
-    /// disappear from the menu altogether.
-    @Test func noActionIsLostByThePartition() {
-        var context = browserContext
-        context.isAudible = true
-        let items = CardMenu.items(for: window(), context: context)
-        let (icons, written) = CardMenu.partition(items)
-        let kept = icons.count + written.count
-        let offered = items.filter { $0 != .separator }.count
-        #expect(kept == offered, "\(offered - kept) action(s) vanished")
-    }
-
-    /// A glyph alone makes the user guess, so each carries a word.
-    @Test func everyGlyphHasACaptionAndASymbol() {
-        var context = browserContext
-        context.isAudible = true
-        let (icons, _) = CardMenu.partition(CardMenu.items(for: window(), context: context))
-        #expect(!icons.isEmpty)
-        for item in icons {
-            let icon = item.icon
-            #expect(icon?.label.isEmpty == false, "\(item) has no caption")
-            #expect(icon?.symbolName.isEmpty == false, "\(item) has no symbol")
+        for item in everyAction {
+            let name = item.icon.symbolName
+            #expect(
+                NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
+                "\(name) is not a symbol on this system"
+            )
         }
     }
 
     /// The tab count rides in the caption when it is known: it is the one thing a single card cannot
     /// tell you, and it decides whether searching inside the window is worth doing.
     @Test func theTabGlyphCarriesTheCountWhenKnown() {
-        #expect(CardMenuItem.searchWindowTabs(count: 23).icon?.label == "23 tabs")
-        #expect(CardMenuItem.searchWindowTabs(count: 1).icon?.label == "1 tab")
-        #expect(CardMenuItem.searchWindowTabs(count: nil).icon?.label == "Tabs")
+        #expect(CardMenuItem.searchWindowTabs(count: 23).icon.label == "23 tabs")
+        #expect(CardMenuItem.searchWindowTabs(count: 1).icon.label == "1 tab")
+        #expect(CardMenuItem.searchWindowTabs(count: nil).icon.label == "Tabs")
     }
 
     /// Pinning and unpinning are one button whose glyph says which way it will go.
     @Test func pinningAndUnpinningReadDifferently() {
         let pin = CardMenuItem.pinApplication(name: "Google Chrome").icon
         let unpin = CardMenuItem.unpinApplication(name: "Google Chrome").icon
-        #expect(pin?.symbolName != unpin?.symbolName)
-        #expect(pin?.label == "Pin")
-        #expect(unpin?.label == "Unpin")
+        #expect(pin.symbolName != unpin.symbolName)
+        #expect(pin.label == "Pin")
+        #expect(unpin.label == "Unpin")
     }
 
-    /// A window discovered on another desktop through the window server alone carries no
-    /// Accessibility element, so it gets no minimize or close glyph — the same windows that already
-    /// show no close button on their card.
-    @Test func aWindowWithoutAccessibilityGetsNoWindowGlyphs() {
-        var context = browserContext
-        context.hasAccessibilityElement = false
-        let (icons, _) = CardMenu.partition(CardMenu.items(for: window(), context: context))
-        #expect(!icons.contains(.minimizeWindow))
-        #expect(!icons.contains(.closeWindow))
+    /// Four tiles that look alike would make the row a guessing game.
+    @Test func theFourTilesAreEachDistinct() {
+        let symbols = WindowTile.allCases.map { CardMenuItem.tileWindow($0).icon.symbolName }
+        #expect(Set(symbols).count == WindowTile.allCases.count)
+        let labels = WindowTile.allCases.map { CardMenuItem.tileWindow($0).icon.label }
+        #expect(Set(labels).count == WindowTile.allCases.count)
     }
 }

@@ -15,8 +15,10 @@ import Foundation
 ///   application has no window yet, so both would produce a menu of things that cannot be done.
 /// - Anything routed through Accessibility is withheld without a live element. Windows discovered on
 ///   another desktop through the window server alone carry none — they are the same windows that
-///   already show no close button — so closing and minimising them is not merely unreliable, it is
-///   impossible, and offering it would be a lie.
+///   already show no close button — so closing, minimising and tiling them is not merely unreliable,
+///   it is impossible, and offering it would be a lie.
+/// - Tiling is withheld for a minimized window. Its frame is not where it is or how big it looks, so
+///   moving it to half a screen you cannot see it on changes nothing you can observe.
 /// - Muting appears only for a window actually making noise. It is not a toggle and not a preference;
 ///   it acts on what is playing right now, and there is nothing to act on otherwise.
 enum CardMenuItem: Equatable {
@@ -31,12 +33,11 @@ enum CardMenuItem: Equatable {
 
     case closeWindow
     case minimizeWindow
+    /// Send the window to half its screen.
+    case tileWindow(WindowTile)
 
     case pinApplication(name: String)
     case unpinApplication(name: String)
-    case quitApplication(name: String)
-
-    case separator
 }
 
 enum CardMenu {
@@ -53,82 +54,71 @@ enum CardMenu {
         var hasAccessibilityElement: Bool = false
         /// Whether the owning application is pinned to the front of the list.
         var isPinned: Bool = false
+        /// Whether the window is currently in the Dock.
+        var isMinimized: Bool = false
     }
 
-    /// The menu for one card, in order. Empty means no menu should open at all.
-    static func items(for entry: WindowEntry, context: Context) -> [CardMenuItem] {
-        guard entry.isWindow else { return [] }
-
-        var groups: [[CardMenuItem]] = []
-
-        // The browser group leads, because it is the one thing here that is about what the window
-        // *contains* rather than about the window. For a browser that is what the user is actually
-        // looking for — a tab — and Vortexflow's own search is already the fastest way to that.
-        var browser: [CardMenuItem] = []
-        if context.isBrowserWindow {
-            browser.append(.searchWindowTabs(count: context.knownTabCount))
-        }
-        if context.isAudible {
-            browser.append(.muteAudible)
-        }
-        groups.append(browser)
-
-        var window: [CardMenuItem] = []
-        if context.hasAccessibilityElement {
-            window.append(.minimizeWindow)
-            window.append(.closeWindow)
-        }
-        groups.append(window)
-
-        let name = entry.applicationName
-        groups.append([
-            context.isPinned ? .unpinApplication(name: name) : .pinApplication(name: name),
-            .quitApplication(name: name),
-        ])
-
-        // Separators between non-empty groups only, so a withheld group leaves no gap behind it.
-        return groups.filter { !$0.isEmpty }
-            .enumerated()
-            .flatMap { index, group in index == 0 ? group : [.separator] + group }
-    }
-}
-
-extension CardMenu {
-
-    /// Split the menu into the actions that become a row of glyphs and the ones that stay written
-    /// out as lines.
+    /// The menu in the two rows it is drawn as.
     ///
-    /// The separators are dropped rather than translated. They marked groups in a vertical list —
-    /// "about the contents", "about the window", "about the application" — and once those actions sit
-    /// side by side in one row the grouping is carried by the row itself. A divider between glyphs
-    /// would be furniture standing in for a distinction the layout already makes.
-    static func partition(_ items: [CardMenuItem]) -> (icons: [CardMenuItem], written: [CardMenuItem]) {
-        var icons: [CardMenuItem] = []
-        var written: [CardMenuItem] = []
-        for item in items where item != .separator {
-            if item.icon == nil {
-                written.append(item)
-            } else {
-                icons.append(item)
+    /// Two ordered lists rather than one flat list with separators in it. The separators used to mark
+    /// these same groups in a vertical list of words, and now that the groups are laid out as
+    /// separate rows the boundary is carried by the layout — so a model that still emitted separators
+    /// would be describing a shape the menu no longer has.
+    struct Rows: Equatable {
+
+        /// Above the preview, top-left: everything that acts on the window *as a window*. Grouped
+        /// there because the preview is the window, so the controls sit on the thing they affect —
+        /// the same reason a title bar puts them on the window rather than in a menu.
+        var windowControls: [CardMenuItem] = []
+
+        /// Below the facts: what is about the window's *contents* or about its application, neither
+        /// of which the preview shows.
+        var actions: [CardMenuItem] = []
+
+        var isEmpty: Bool { windowControls.isEmpty && actions.isEmpty }
+    }
+
+    static func rows(for entry: WindowEntry, context: Context) -> Rows {
+        guard entry.isWindow else { return Rows() }
+
+        var rows = Rows()
+
+        if context.hasAccessibilityElement {
+            rows.windowControls.append(.minimizeWindow)
+            rows.windowControls.append(.closeWindow)
+            if !context.isMinimized {
+                rows.windowControls.append(contentsOf: WindowTile.allCases.map(CardMenuItem.tileWindow))
             }
         }
-        return (icons, written)
+
+        // The browser action leads the second row, because it is the one thing here about what the
+        // window *contains* rather than about the window. For a browser that is what the user is
+        // actually looking for — a tab — and Vortexflow's own search is already the fastest way there.
+        if context.isBrowserWindow {
+            rows.actions.append(.searchWindowTabs(count: context.knownTabCount))
+        }
+        if context.isAudible {
+            rows.actions.append(.muteAudible)
+        }
+        let name = entry.applicationName
+        rows.actions.append(context.isPinned ? .unpinApplication(name: name) : .pinApplication(name: name))
+
+        return rows
     }
 }
 
 extension CardMenuItem {
 
-    /// The glyph and the word under it, for an action compact enough to be a button.
+    /// The glyph and the word that names it.
     struct Icon: Equatable {
         let symbolName: String
-        /// Kept alongside the glyph rather than left to a tooltip. A row of bare glyphs makes the
-        /// user guess, and menu tooltips only appear after a delay the user has no reason to wait
-        /// through — so the caption is the difference between recognising an action and risking one.
+        /// Kept with the glyph rather than left to a tooltip. A row of bare glyphs makes the user
+        /// guess, and menu tooltips only appear after a delay the user has no reason to wait through
+        /// — so this is the difference between recognising an action and risking one.
         let label: String
     }
 
-    /// The button form of this action, or `nil` for one that has to stay a written line.
-    var icon: Icon? {
+    var icon: Icon {
         switch self {
         case .searchWindowTabs(let count):
             // The count rides in the caption when it is known. It is the one thing a single card
@@ -145,27 +135,21 @@ extension CardMenuItem {
             return Icon(symbolName: "minus", label: "Minimize")
         case .closeWindow:
             return Icon(symbolName: "xmark", label: "Close")
+        case .tileWindow(let tile):
+            return Icon(symbolName: tile.symbolName, label: tile.title)
         case .pinApplication:
             return Icon(symbolName: "pin", label: "Pin")
         case .unpinApplication:
             return Icon(symbolName: "pin.slash", label: "Unpin")
-        case .quitApplication:
-            // Deliberately not a glyph. Quitting closes every window the application has and can
-            // lose unsaved work in all of them, which makes it the one action here that must not sit
-            // a mis-click away from Minimize. Naming the application out loud is the confirmation.
-            return nil
-        case .separator:
-            return nil
         }
     }
 
-    /// The menu title. Written out here rather than at the call site so the wording is testable
-    /// alongside the rules that decide whether the item appears.
+    /// The full sentence, for VoiceOver and for the hovered-action caption. Written out here rather
+    /// than at the call site so the wording is testable alongside the rules that decide whether the
+    /// item appears.
     var title: String {
         switch self {
         case .searchWindowTabs(let count):
-            // The count is worth showing when known: "Search 23 tabs" tells the user how much is
-            // behind the window, which is the thing a single card cannot say.
             guard let count else { return "Search this window's tabs" }
             return "Search this window's \(count) tabs"
         case .muteAudible:
@@ -174,14 +158,12 @@ extension CardMenuItem {
             return "Close window"
         case .minimizeWindow:
             return "Minimize window"
+        case .tileWindow(let tile):
+            return tile.title
         case .pinApplication(let name):
             return "Pin \(name)"
         case .unpinApplication(let name):
             return "Unpin \(name)"
-        case .quitApplication(let name):
-            return "Quit \(name)"
-        case .separator:
-            return ""
         }
     }
 }

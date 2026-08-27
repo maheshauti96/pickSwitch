@@ -107,29 +107,60 @@ struct CardMenuHeaderViewTests {
         )
     }
 
-    /// The actions row is the second thing in the menu that could widen it, so it is pinned to the
-    /// same width as the header. A row that sized itself to its captions would have undone the fix.
-    @Test func theActionsRowMatchesTheHeaderWidthAtEveryCount() {
-        let all: [CardMenuItem] = [
+    /// The glyph rows are the other things in the menu that could widen it, so both are pinned to the
+    /// header's width. A row that sized itself to its captions would have undone the fix.
+    @Test func everyGlyphRowMatchesTheHeaderWidth() {
+        let controls: [CardMenuItem] = [.minimizeWindow, .closeWindow]
+            + WindowTile.allCases.map(CardMenuItem.tileWindow)
+        let actions: [CardMenuItem] = [
             .searchWindowTabs(count: 23),
             .muteAudible,
-            .minimizeWindow,
-            .closeWindow,
             .pinApplication(name: "Google Chrome"),
         ]
-        for count in 1...all.count {
-            let view = CardMenuActionsView(
-                actions: Array(all.prefix(count)),
-                hover: CardMenuHoverModel()
-            ) { _ in }
-            let hosting = NSHostingView(rootView: view)
-            hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
-            hosting.layoutSubtreeIfNeeded()
+
+        for count in 1...controls.count {
+            let width = rowWidth(Array(controls.prefix(count)), caption: .shared("Window"))
             #expect(
-                hosting.fittingSize.width == CardMenuHeaderView.width,
-                "\(count) action(s) gave a width of \(hosting.fittingSize.width)"
+                width == CardMenuHeaderView.width,
+                "\(count) control(s) gave a width of \(width)"
             )
         }
+        for count in 1...actions.count {
+            let width = rowWidth(Array(actions.prefix(count)), caption: .perGlyph)
+            #expect(
+                width == CardMenuHeaderView.width,
+                "\(count) action(s) gave a width of \(width)"
+            )
+        }
+    }
+
+    /// Six window controls cannot each carry a legible word in a fixed width, so only the hovered one
+    /// is named — on a line that is always present, so nothing moves when the pointer arrives.
+    @Test func theSharedCaptionRowDoesNotChangeHeightOnHover() {
+        let controls: [CardMenuItem] = [.minimizeWindow, .closeWindow]
+            + WindowTile.allCases.map(CardMenuItem.tileWindow)
+        let hover = CardMenuHoverModel()
+        let view = CardMenuGlyphRow(
+            actions: controls, caption: .shared("Window"), hover: hover
+        ) { _ in }
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
+        hosting.layoutSubtreeIfNeeded()
+        let resting = hosting.fittingSize
+
+        hover.hoveredIndex = controls.count - 1
+        hosting.layoutSubtreeIfNeeded()
+        #expect(hosting.fittingSize == resting, "naming the hovered glyph resized the row")
+    }
+
+    private func rowWidth(_ actions: [CardMenuItem], caption: CardMenuGlyphRow.Caption) -> CGFloat {
+        let view = CardMenuGlyphRow(
+            actions: actions, caption: caption, hover: CardMenuHoverModel()
+        ) { _ in }
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
+        hosting.layoutSubtreeIfNeeded()
+        return hosting.fittingSize.width
     }
 
     /// The preview well is reserved whether or not a capture has arrived, so the menu does not change
