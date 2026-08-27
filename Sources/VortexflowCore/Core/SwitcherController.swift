@@ -128,6 +128,11 @@ public final class SwitcherController {
     /// so without this the menu would close the thing it belongs to before its action ran.
     private var isShowingContextMenu = false
 
+    /// Which card the open context menu belongs to, so a capture that arrives late is only applied to
+    /// the menu that asked for it. Without this check, closing one menu and opening another on a
+    /// different card would let the first window's screenshot land in the second window's header.
+    private var contextMenuEntryID: String?
+
     /// How soon after presenting a desktop change is treated as having predated the overlay.
     ///
     /// A Space switch animates for several hundred milliseconds and the notification only arrives
@@ -1595,6 +1600,9 @@ public final class SwitcherController {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
+        // Set before the header is built: the header's preview capture is asynchronous and checks
+        // this to know the menu it belongs to is still the open one.
+        contextMenuEntryID = entry.id
         menu.addItem(headerItem(for: entry))
         menu.addItem(.separator())
 
@@ -1628,6 +1636,9 @@ public final class SwitcherController {
         defer {
             isShowingContextMenu = false
             triggerMonitor.passesThroughPrimaryClicks = false
+            // Stops a capture still in flight from being applied to a menu that has closed, or to
+            // the next one opened on a different card.
+            contextMenuEntryID = nil
             Log.overlay.info("context menu closed; overlay still visible: \(self.state.isVisible, privacy: .public)")
         }
 
@@ -1686,11 +1697,18 @@ public final class SwitcherController {
             now: Date().timeIntervalSinceReferenceDate
         )
 
+        Log.overlay.info("""
+            menu header: \(details.rows.count, privacy: .public) facts \
+            [\(details.rows.map(\.label).joined(separator: ", "), privacy: .public)], \
+            capture cached: \(self.state.thumbnails[entry.windowID] != nil, privacy: .public)
+            """)
+
+        let icon = state.displayIcon(for: entry)
         let header = NSHostingView(
             rootView: CardMenuHeaderView(
                 details: details,
                 thumbnail: state.thumbnails[entry.windowID],
-                icon: state.displayIcon(for: entry)
+                icon: icon
             )
         )
         // A menu item's view is not laid out by the menu, so it has to arrive at its final size.
@@ -1702,7 +1720,57 @@ public final class SwitcherController {
         // Nothing to choose here, and an enabled heading would highlight under the pointer as though
         // there were.
         item.isEnabled = false
+
+        // The spiral never captures, so the preview has to be fetched for the menu itself.
+        //
+        // `OverlayLayoutStyle.canShowThumbnails` is false for both radial windings, and rightly so:
+        // a rectangular screenshot clipped into an annular sector is unreadable, so capturing for the
+        // cards would be work thrown away. But that is a fact about the *seats*, not about the
+        // window, and this menu has a rectangular well to put a capture in. Reading only
+        // `state.thumbnails` would have meant the spiral — the default arrangement — showed an
+        // application icon here forever and the preview would have been decoration.
+        if state.thumbnails[entry.windowID] == nil {
+            requestContextMenuPreview(for: entry, details: details, icon: icon, into: header)
+        }
         return item
+    }
+
+    /// Capture the right-clicked window and fill in the header's preview when it arrives.
+    ///
+    /// Deliberately not awaited before the menu opens. A capture costs enough that blocking on it
+    /// would make right-click feel broken, and the well is a reserved fixed size, so dropping an
+    /// image into it later moves nothing — the header is the same height with and without one.
+    private func requestContextMenuPreview(
+        for entry: WindowEntry,
+        details: CardDetails,
+        icon: NSImage?,
+        into header: NSHostingView<CardMenuHeaderView>
+    ) {
+        let entryID = entry.id
+        Task { [weak self, weak header, thumbnails] in
+            // The generation in force rather than a new one: a new generation would invalidate the
+            // stills an open thumbnail-showing layout still had in flight.
+            let token = await thumbnails.currentGeneration
+            await thumbnails.captureSelectedPreview(
+                for: entry,
+                scale: self?.panel?.backingScaleFactor ?? 2,
+                token: token
+            ) { _, image in
+                guard let header, self?.contextMenuEntryID == entryID else {
+                    Log.overlay.info("context menu preview arrived after its menu closed; discarded")
+                    return
+                }
+                header.rootView = CardMenuHeaderView(
+                    details: details,
+                    thumbnail: image,
+                    icon: icon
+                )
+                Log.overlay.info("""
+                    context menu preview filled in: \
+                    \(image.width, privacy: .public)×\(image.height, privacy: .public)px
+                    """)
+            }
+        }
     }
 
     private func menuContext(for entry: WindowEntry) -> CardMenu.Context {

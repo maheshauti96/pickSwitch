@@ -57,6 +57,16 @@ actor ThumbnailService {
         return generation
     }
 
+    /// The generation in force, for a caller that wants a capture accepted alongside the current
+    /// batch rather than in place of it.
+    ///
+    /// The context menu needs exactly this. Calling `beginGeneration()` to get a usable token would
+    /// invalidate whatever stills the open overlay still had in flight — in a layout that shows
+    /// thumbnails, right-clicking would blank the cards that had not finished capturing yet.
+    var currentGeneration: UInt64 {
+        generation
+    }
+
     /// Requirement 9.1, 9.2, 9.4, 9.5.
     ///
     /// - Parameters:
