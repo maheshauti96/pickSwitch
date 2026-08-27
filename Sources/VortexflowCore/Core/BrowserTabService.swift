@@ -114,24 +114,51 @@ actor BrowserTabService {
         return all
     }
 
-    /// Bring a tab to the front: select it within its window, raise that window, and
-    /// activate the browser.
-    func activate(_ tab: BrowserTab) -> Bool {
+    /// The script that brings a tab to the front: activate the browser, then select the tab within
+    /// its window and raise that window.
+    ///
+    /// ## Why `activate` comes first
+    ///
+    /// It used to come last, which reads more naturally — set everything up, then bring the browser
+    /// forward — and it does not work when the tab's window is on another desktop. Raising a window
+    /// while its application is in the background does not move it: measured against a Chrome with
+    /// one window on this Space and one on another, raising the off-Space window and then activating
+    /// left the *on-Space* window in front, three times out of three. Activating first and raising
+    /// second put the right window in front, and pulled its desktop with it, three times out of
+    /// three.
+    ///
+    /// That is exactly the reported symptom — "it opened another Chrome window, and the second
+    /// attempt opened the right tab". The first attempt's `activate` made the browser frontmost
+    /// without honouring the raise, so the second attempt found it already frontmost and the raise
+    /// then worked. Two presses did the job of one, and the first press looked like it had picked
+    /// the wrong window.
+    ///
+    /// Only the order changes, and it is worth saying what did *not* need to. A first attempt at this
+    /// waited for the browser to report itself frontmost before raising, on the assumption that
+    /// `activate` returns too early. It does return early, but the wait was useless: AppleScript's
+    /// `frontmost` is already true the moment activation is *requested*, so the loop ran zero times
+    /// and the script it guarded still failed. A fixed delay in its place was not needed either —
+    /// activating first works with no pause at all, across every delay tried from 0 to 0.5 s.
+    static func activationScript(for tab: BrowserTab) -> String {
         let selection = tab.browser.usesCurrentTab
             // Safari addresses the selected tab by object, not by index.
             ? "set current tab of targetWindow to tab \(tab.tabIndex) of targetWindow"
             : "set active tab index of targetWindow to \(tab.tabIndex)"
 
-        let source = """
+        return """
         tell application "\(tab.browser.scriptingName)"
+            activate
             set targetWindow to window id \(tab.windowIdentifier)
             \(selection)
             set index of targetWindow to 1
-            activate
         end tell
         """
+    }
 
-        switch Self.run(source) {
+    /// Bring a tab to the front: activate the browser, select the tab within its window, and raise
+    /// that window. See `activationScript(for:)` for why that order.
+    func activate(_ tab: BrowserTab) -> Bool {
+        switch Self.run(Self.activationScript(for: tab)) {
         case .success:
             return true
         case .denied, .failed:
