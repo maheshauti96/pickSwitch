@@ -132,6 +132,24 @@ actor ThumbnailService {
         }
     }
 
+    /// A one-off capture returned to the caller rather than delivered to it later.
+    ///
+    /// The context menu needs exactly this shape. Its preview cannot be filled in after the menu
+    /// opens: `NSMenu.popUp` blocks the main thread for the whole tracking loop, so a main-actor
+    /// callback cannot run until the menu it was meant for has already closed. That is not a race
+    /// that can be tightened — it is guaranteed — and the first attempt discarded every image it
+    /// captured. The caller has to have the picture before it opens the menu.
+    ///
+    /// No generation token, because there is nothing to invalidate: the caller is awaiting this
+    /// result and can decide for itself whether it still wants it.
+    func capturePreview(for entry: WindowEntry, pixelSize: CGSize) async -> CGImage? {
+        guard !entry.isMinimized else { return nil }
+        guard let content = await shareableContent() else { return nil }
+        guard let scWindow = content.windows.first(where: { CGWindowID($0.windowID) == entry.windowID })
+        else { return nil }
+        return await Self.captureImage(of: scWindow, pixelSize: pixelSize)
+    }
+
     /// Higher-resolution capture for the selected card (Requirement 3.4): at least
     /// twice the linear pixel dimensions of an unselected thumbnail.
     func captureSelectedPreview(

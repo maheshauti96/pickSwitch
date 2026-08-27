@@ -145,4 +145,90 @@ struct CardMenuTests {
             #expect(!item.title.isEmpty, "\(item) has no title")
         }
     }
+
+    // MARK: - Glyphs and written lines
+
+    /// The compact actions become a row of glyphs and everything else stays a written line.
+    @Test func theCompactActionsBecomeGlyphs() {
+        var context = browserContext
+        context.isAudible = true
+        let (icons, written) = CardMenu.partition(CardMenu.items(for: window(), context: context))
+        #expect(icons == [
+            .searchWindowTabs(count: 23),
+            .muteAudible,
+            .minimizeWindow,
+            .closeWindow,
+            .pinApplication(name: "Google Chrome"),
+        ])
+        #expect(written == [.quitApplication(name: "Google Chrome")])
+    }
+
+    /// Quitting closes every window an application has and can lose unsaved work in all of them,
+    /// which is why it is the one action that must not sit a mis-click away from Minimize.
+    @Test func quittingIsNeverAGlyph() {
+        #expect(CardMenuItem.quitApplication(name: "Google Chrome").icon == nil)
+    }
+
+    /// The separators marked groups in a vertical list. Once those actions sit side by side the row
+    /// carries the grouping, so a divider between glyphs would be furniture.
+    @Test func separatorsDoNotSurviveThePartition() {
+        let items = CardMenu.items(for: window(), context: browserContext)
+        #expect(items.contains(.separator), "this fixture should have separators to drop")
+        let (icons, written) = CardMenu.partition(items)
+        #expect(!icons.contains(.separator))
+        #expect(!written.contains(.separator))
+    }
+
+    /// Every action either has a glyph or a written line; none may fall through the partition and
+    /// disappear from the menu altogether.
+    @Test func noActionIsLostByThePartition() {
+        var context = browserContext
+        context.isAudible = true
+        let items = CardMenu.items(for: window(), context: context)
+        let (icons, written) = CardMenu.partition(items)
+        let kept = icons.count + written.count
+        let offered = items.filter { $0 != .separator }.count
+        #expect(kept == offered, "\(offered - kept) action(s) vanished")
+    }
+
+    /// A glyph alone makes the user guess, so each carries a word.
+    @Test func everyGlyphHasACaptionAndASymbol() {
+        var context = browserContext
+        context.isAudible = true
+        let (icons, _) = CardMenu.partition(CardMenu.items(for: window(), context: context))
+        #expect(!icons.isEmpty)
+        for item in icons {
+            let icon = item.icon
+            #expect(icon?.label.isEmpty == false, "\(item) has no caption")
+            #expect(icon?.symbolName.isEmpty == false, "\(item) has no symbol")
+        }
+    }
+
+    /// The tab count rides in the caption when it is known: it is the one thing a single card cannot
+    /// tell you, and it decides whether searching inside the window is worth doing.
+    @Test func theTabGlyphCarriesTheCountWhenKnown() {
+        #expect(CardMenuItem.searchWindowTabs(count: 23).icon?.label == "23 tabs")
+        #expect(CardMenuItem.searchWindowTabs(count: 1).icon?.label == "1 tab")
+        #expect(CardMenuItem.searchWindowTabs(count: nil).icon?.label == "Tabs")
+    }
+
+    /// Pinning and unpinning are one button whose glyph says which way it will go.
+    @Test func pinningAndUnpinningReadDifferently() {
+        let pin = CardMenuItem.pinApplication(name: "Google Chrome").icon
+        let unpin = CardMenuItem.unpinApplication(name: "Google Chrome").icon
+        #expect(pin?.symbolName != unpin?.symbolName)
+        #expect(pin?.label == "Pin")
+        #expect(unpin?.label == "Unpin")
+    }
+
+    /// A window discovered on another desktop through the window server alone carries no
+    /// Accessibility element, so it gets no minimize or close glyph — the same windows that already
+    /// show no close button on their card.
+    @Test func aWindowWithoutAccessibilityGetsNoWindowGlyphs() {
+        var context = browserContext
+        context.hasAccessibilityElement = false
+        let (icons, _) = CardMenu.partition(CardMenu.items(for: window(), context: context))
+        #expect(!icons.contains(.minimizeWindow))
+        #expect(!icons.contains(.closeWindow))
+    }
 }

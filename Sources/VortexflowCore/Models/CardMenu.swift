@@ -93,7 +93,71 @@ enum CardMenu {
     }
 }
 
+extension CardMenu {
+
+    /// Split the menu into the actions that become a row of glyphs and the ones that stay written
+    /// out as lines.
+    ///
+    /// The separators are dropped rather than translated. They marked groups in a vertical list —
+    /// "about the contents", "about the window", "about the application" — and once those actions sit
+    /// side by side in one row the grouping is carried by the row itself. A divider between glyphs
+    /// would be furniture standing in for a distinction the layout already makes.
+    static func partition(_ items: [CardMenuItem]) -> (icons: [CardMenuItem], written: [CardMenuItem]) {
+        var icons: [CardMenuItem] = []
+        var written: [CardMenuItem] = []
+        for item in items where item != .separator {
+            if item.icon == nil {
+                written.append(item)
+            } else {
+                icons.append(item)
+            }
+        }
+        return (icons, written)
+    }
+}
+
 extension CardMenuItem {
+
+    /// The glyph and the word under it, for an action compact enough to be a button.
+    struct Icon: Equatable {
+        let symbolName: String
+        /// Kept alongside the glyph rather than left to a tooltip. A row of bare glyphs makes the
+        /// user guess, and menu tooltips only appear after a delay the user has no reason to wait
+        /// through — so the caption is the difference between recognising an action and risking one.
+        let label: String
+    }
+
+    /// The button form of this action, or `nil` for one that has to stay a written line.
+    var icon: Icon? {
+        switch self {
+        case .searchWindowTabs(let count):
+            // The count rides in the caption when it is known. It is the one thing a single card
+            // cannot tell you, and it is what decides whether searching inside is worth doing.
+            return Icon(
+                symbolName: "magnifyingglass",
+                label: count.map { $0 == 1 ? "1 tab" : "\($0) tabs" } ?? "Tabs"
+            )
+        case .muteAudible:
+            return Icon(symbolName: "speaker.slash", label: "Mute")
+        case .minimizeWindow:
+            // The traffic-light glyph rather than a more descriptive arrow: beside the close cross it
+            // reads as the pair the user already knows from every title bar.
+            return Icon(symbolName: "minus", label: "Minimize")
+        case .closeWindow:
+            return Icon(symbolName: "xmark", label: "Close")
+        case .pinApplication:
+            return Icon(symbolName: "pin", label: "Pin")
+        case .unpinApplication:
+            return Icon(symbolName: "pin.slash", label: "Unpin")
+        case .quitApplication:
+            // Deliberately not a glyph. Quitting closes every window the application has and can
+            // lose unsaved work in all of them, which makes it the one action here that must not sit
+            // a mis-click away from Minimize. Naming the application out loud is the confirmation.
+            return nil
+        case .separator:
+            return nil
+        }
+    }
 
     /// The menu title. Written out here rather than at the call site so the wording is testable
     /// alongside the rules that decide whether the item appears.

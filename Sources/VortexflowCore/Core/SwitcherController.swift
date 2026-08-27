@@ -1597,31 +1597,79 @@ public final class SwitcherController {
             return
         }
 
+        // The window's picture has to be in hand before the menu opens, which is why this hands off
+        // to a task instead of popping the menu up here.
+        //
+        // `popUp` blocks the main thread for the whole tracking loop, so anything main-actor bound —
+        // including the completion of a capture started a moment earlier — cannot run until the menu
+        // has closed. That is not a race to be tightened but a certainty, and the first attempt at
+        // this filled in nothing: every capture it took was logged arriving "after its menu closed"
+        // and discarded. Awaiting first costs a short delay before the menu appears, and the
+        // selection has already moved to the card, so the click is not left unacknowledged.
+        Task { [weak self] in
+            guard let self else { return }
+            let preview = await self.contextMenuPreview(for: entry)
+            // The window can go away while it is being photographed.
+            guard self.state.isVisible, self.state.entries.contains(where: { $0.id == entry.id }) else {
+                Log.overlay.info("context menu abandoned: its card left the list during the capture")
+                return
+            }
+            self.presentContextMenu(for: entry, items: items, at: point, preview: preview)
+        }
+    }
+
+    /// Build and run the menu. Separate from `rightMousePressed` only because the preview must be
+    /// awaited between the two, and everything from here on blocks until the menu closes.
+    private func presentContextMenu(
+        for entry: WindowEntry,
+        items: [CardMenuItem],
+        at point: CGPoint,
+        preview: CGImage?
+    ) {
+        guard let panel else { return }
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        // Set before the header is built: the header's preview capture is asynchronous and checks
-        // this to know the menu it belongs to is still the open one.
-        contextMenuEntryID = entry.id
-        menu.addItem(headerItem(for: entry))
-        menu.addItem(.separator())
+        menu.addItem(headerItem(for: entry, preview: preview))
 
-        for item in items {
-            guard item != .separator else {
-                menu.addItem(.separator())
-                continue
-            }
-            let menuItem = NSMenuItem(
-                title: item.title,
-                action: #selector(cardMenuItemChosen(_:)),
-                keyEquivalent: ""
+        // The compact actions become one row of glyphs; whatever cannot be a glyph stays a written
+        // line below it.
+        let (icons, written) = CardMenu.partition(items)
+
+        if !icons.isEmpty {
+            let actions = NSMenuItem()
+            let host = NSHostingView(
+                rootView: CardMenuActionsView(actions: icons, hover: CardMenuHoverModel()) { [weak self, weak menu] action in
+                    // Ending tracking first, so the overlay teardown some of these actions perform
+                    // does not happen underneath an open menu.
+                    menu?.cancelTracking()
+                    Log.overlay.info("menu glyph chosen: \(String(describing: action), privacy: .public)")
+                    self?.perform(action, onEntry: entry.id)
+                }
             )
-            menuItem.target = self
-            menuItem.isEnabled = true
-            // The chosen action and the card it belongs to travel together, so a menu that outlives
-            // a selection change still acts on the card it was opened on.
-            menuItem.representedObject = CardMenuChoice(item: item, entryID: entry.id)
-            menu.addItem(menuItem)
+            host.frame = CGRect(origin: .zero, size: host.fittingSize)
+            actions.view = host
+            // Enabled, unlike the header: a disabled item does not track, and its view would never
+            // see the click.
+            actions.isEnabled = true
+            menu.addItem(actions)
+        }
+
+        if !written.isEmpty {
+            menu.addItem(.separator())
+            for item in written {
+                let menuItem = NSMenuItem(
+                    title: item.title,
+                    action: #selector(cardMenuItemChosen(_:)),
+                    keyEquivalent: ""
+                )
+                menuItem.target = self
+                menuItem.isEnabled = true
+                // The chosen action and the card it belongs to travel together, so a menu that
+                // outlives a selection change still acts on the card it was opened on.
+                menuItem.representedObject = CardMenuChoice(item: item, entryID: entry.id)
+                menu.addItem(menuItem)
+            }
         }
 
         // Two things have to be held off for the whole tracking loop, and getting only the first of
@@ -1636,9 +1684,6 @@ public final class SwitcherController {
         defer {
             isShowingContextMenu = false
             triggerMonitor.passesThroughPrimaryClicks = false
-            // Stops a capture still in flight from being applied to a menu that has closed, or to
-            // the next one opened on a different card.
-            contextMenuEntryID = nil
             Log.overlay.info("context menu closed; overlay still visible: \(self.state.isVisible, privacy: .public)")
         }
 
@@ -1679,7 +1724,7 @@ public final class SwitcherController {
     /// aligned fact list exist at all, and it is what stops the window title from setting the menu's
     /// width — an `NSMenu` sizes itself to its widest item, so a long title used to stretch every
     /// short action item alongside it.
-    private func headerItem(for entry: WindowEntry) -> NSMenuItem {
+    private func headerItem(for entry: WindowEntry, preview: CGImage?) -> NSMenuItem {
         let scriptedID = scriptedWindowIdentifiers[entry.windowID]
         let details = CardDetails.make(
             entry: entry,
@@ -1700,15 +1745,14 @@ public final class SwitcherController {
         Log.overlay.info("""
             menu header: \(details.rows.count, privacy: .public) facts \
             [\(details.rows.map(\.label).joined(separator: ", "), privacy: .public)], \
-            capture cached: \(self.state.thumbnails[entry.windowID] != nil, privacy: .public)
+            preview: \(preview != nil, privacy: .public)
             """)
 
-        let icon = state.displayIcon(for: entry)
         let header = NSHostingView(
             rootView: CardMenuHeaderView(
                 details: details,
-                thumbnail: state.thumbnails[entry.windowID],
-                icon: icon
+                thumbnail: preview,
+                icon: state.displayIcon(for: entry)
             )
         )
         // A menu item's view is not laid out by the menu, so it has to arrive at its final size.
@@ -1721,56 +1765,38 @@ public final class SwitcherController {
         // there were.
         item.isEnabled = false
 
-        // The spiral never captures, so the preview has to be fetched for the menu itself.
-        //
-        // `OverlayLayoutStyle.canShowThumbnails` is false for both radial windings, and rightly so:
-        // a rectangular screenshot clipped into an annular sector is unreadable, so capturing for the
-        // cards would be work thrown away. But that is a fact about the *seats*, not about the
-        // window, and this menu has a rectangular well to put a capture in. Reading only
-        // `state.thumbnails` would have meant the spiral — the default arrangement — showed an
-        // application icon here forever and the preview would have been decoration.
-        if state.thumbnails[entry.windowID] == nil {
-            requestContextMenuPreview(for: entry, details: details, icon: icon, into: header)
-        }
         return item
     }
 
-    /// Capture the right-clicked window and fill in the header's preview when it arrives.
+    /// The picture for the menu's well, captured on demand because the spiral has none cached.
     ///
-    /// Deliberately not awaited before the menu opens. A capture costs enough that blocking on it
-    /// would make right-click feel broken, and the well is a reserved fixed size, so dropping an
-    /// image into it later moves nothing — the header is the same height with and without one.
-    private func requestContextMenuPreview(
-        for entry: WindowEntry,
-        details: CardDetails,
-        icon: NSImage?,
-        into header: NSHostingView<CardMenuHeaderView>
-    ) {
-        let entryID = entry.id
-        Task { [weak self, weak header, thumbnails] in
-            // The generation in force rather than a new one: a new generation would invalidate the
-            // stills an open thumbnail-showing layout still had in flight.
-            let token = await thumbnails.currentGeneration
-            await thumbnails.captureSelectedPreview(
-                for: entry,
-                scale: self?.panel?.backingScaleFactor ?? 2,
-                token: token
-            ) { _, image in
-                guard let header, self?.contextMenuEntryID == entryID else {
-                    Log.overlay.info("context menu preview arrived after its menu closed; discarded")
-                    return
-                }
-                header.rootView = CardMenuHeaderView(
-                    details: details,
-                    thumbnail: image,
-                    icon: icon
-                )
-                Log.overlay.info("""
-                    context menu preview filled in: \
-                    \(image.width, privacy: .public)×\(image.height, privacy: .public)px
-                    """)
-            }
-        }
+    /// `OverlayLayoutStyle.canShowThumbnails` is false for both radial windings, and rightly so: a
+    /// rectangular screenshot clipped into an annular sector is unreadable, so capturing for those
+    /// cards would be work thrown away. But that is a fact about the *seats*, not about the window,
+    /// and this menu has a rectangular well to put a capture in. Reading only `state.thumbnails`
+    /// meant the spiral — the default arrangement, and the one in use — showed an application icon
+    /// here forever, so the preview was decoration rather than the window.
+    private func contextMenuPreview(for entry: WindowEntry) async -> CGImage? {
+        // A layout that does cache stills has already paid for this one.
+        if let cached = state.thumbnails[entry.windowID] { return cached }
+        guard permissions.screenRecordingGranted else { return nil }
+
+        let scale = panel?.backingScaleFactor ?? 2
+        let started = Date()
+        let image = await thumbnails.capturePreview(
+            for: entry,
+            // Asked for at twice the size it is drawn, so the well is sharp on a Retina display.
+            pixelSize: CGSize(
+                width: CardMenuHeaderView.previewWidth * scale * 2,
+                height: CardMenuHeaderView.previewHeight * scale * 2
+            )
+        )
+        let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+        Log.overlay.info("""
+            context menu preview \(image == nil ? "unavailable" : "captured", privacy: .public) \
+            in \(elapsed, privacy: .public)ms
+            """)
+        return image
     }
 
     private func menuContext(for entry: WindowEntry) -> CardMenu.Context {
@@ -1795,14 +1821,20 @@ public final class SwitcherController {
     @objc
     private func cardMenuItemChosen(_ sender: NSMenuItem) {
         guard let choice = sender.representedObject as? CardMenuChoice else { return }
-        guard let index = state.entries.firstIndex(where: { $0.id == choice.entryID }) else {
+        perform(choice.item, onEntry: choice.entryID)
+    }
+
+    /// One path for both forms the menu takes. A glyph in the actions row and a written line below it
+    /// are the same action, so they must not be able to drift into doing different things.
+    private func perform(_ item: CardMenuItem, onEntry entryID: String) {
+        guard let index = state.entries.firstIndex(where: { $0.id == entryID }) else {
             Log.overlay.info("menu action dropped: its card is no longer in the list")
             return
         }
         let entry = state.entries[index]
-        Log.overlay.info("menu action \(String(describing: choice.item), privacy: .public)")
+        Log.overlay.info("menu action \(String(describing: item), privacy: .public)")
 
-        switch choice.item {
+        switch item {
         case .searchWindowTabs:
             guard let identifier = scriptedWindowIdentifiers[entry.windowID] else { return }
             state.setTabScope(identifier)

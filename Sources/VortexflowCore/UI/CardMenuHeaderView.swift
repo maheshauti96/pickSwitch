@@ -22,10 +22,13 @@ struct CardMenuHeaderView: View {
     static let width: CGFloat = 268
 
     private static let horizontalPadding: CGFloat = 13
-    private static let previewWidth = width - horizontalPadding * 2
+
+    /// The preview well, exposed so the capture can be requested at the size it will be drawn at
+    /// rather than at a size guessed elsewhere.
+    static let previewWidth = width - horizontalPadding * 2
     /// 16:10 rather than 16:9. Most windows are not full-screen, and the taller box wastes less on
     /// letterboxing for the portrait-ish shapes that are common at this size.
-    private static let previewHeight = (previewWidth * 10 / 16).rounded()
+    static let previewHeight = (previewWidth * 10 / 16).rounded()
 
     let details: CardDetails
     /// The live capture of this window, when one has arrived.

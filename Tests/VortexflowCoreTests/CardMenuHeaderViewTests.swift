@@ -107,6 +107,31 @@ struct CardMenuHeaderViewTests {
         )
     }
 
+    /// The actions row is the second thing in the menu that could widen it, so it is pinned to the
+    /// same width as the header. A row that sized itself to its captions would have undone the fix.
+    @Test func theActionsRowMatchesTheHeaderWidthAtEveryCount() {
+        let all: [CardMenuItem] = [
+            .searchWindowTabs(count: 23),
+            .muteAudible,
+            .minimizeWindow,
+            .closeWindow,
+            .pinApplication(name: "Google Chrome"),
+        ]
+        for count in 1...all.count {
+            let view = CardMenuActionsView(
+                actions: Array(all.prefix(count)),
+                hover: CardMenuHoverModel()
+            ) { _ in }
+            let hosting = NSHostingView(rootView: view)
+            hosting.frame = CGRect(origin: .zero, size: hosting.fittingSize)
+            hosting.layoutSubtreeIfNeeded()
+            #expect(
+                hosting.fittingSize.width == CardMenuHeaderView.width,
+                "\(count) action(s) gave a width of \(hosting.fittingSize.width)"
+            )
+        }
+    }
+
     /// The preview well is reserved whether or not a capture has arrived, so the menu does not change
     /// height when one lands a moment later.
     @Test func theHeaderIsTheSameHeightWithAndWithoutAThumbnail() {
