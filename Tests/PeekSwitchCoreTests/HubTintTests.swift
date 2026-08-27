@@ -287,7 +287,14 @@ struct HubTintTests {
     /// this look coloured" depends on and it is the quantity that exposed the defect.
     @Test("the ambience arrives as visible colour, not just a hue angle")
     func ambienceIsVisiblyChromatic() throws {
+        // Per scheme, because the two carry colour by different means and are not comparable on one
+        // number. Dark puts a pale rim against a near-black well, so 16–39 of chroma reads loudly off
+        // a luminance difference of about 130. Light has no such difference available — its well
+        // renders around 200 of 255 — so the hue itself has to do the work, and it needs far more of
+        // it. Measured, light lands at 49–69 and dark at 16–39.
+        let floors: [NSAppearance.Name: Double] = [.darkAqua: 15, .aqua: 40]
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let floor = try #require(floors[appearance])
             for colour in [
                 NSColor.systemRed, .systemOrange, .systemGreen, .systemBlue, .systemPurple,
             ] {
@@ -298,30 +305,31 @@ struct HubTintTests {
                 let blue = Double(ring.blueComponent) * 255
                 let chroma = max(red, green, blue) - min(red, green, blue)
 
-                // Measured, both schemes land between 17 and 31 once the ambience states its own
-                // saturation instead of inheriting the resting ring's. 15 clears that with margin and
-                // is far above the 3–5 the defect produced.
                 #expect(
-                    chroma >= 15,
+                    chroma >= floor,
                     """
-                    \(appearance) ring for \(colour) has chroma \(Int(chroma)): \
+                    \(appearance) ring for \(colour) has chroma \(Int(chroma)), under \(Int(floor)): \
                     rgb(\(Int(red)),\(Int(green)),\(Int(blue)))
                     """
                 )
 
-                // And the rim stays lighter than the well it encircles. This is the budget the
-                // chroma is spent out of — Light Mode's well renders around luminance 200, leaving
-                // roughly 25 levels — so a later rise in saturation would show up here first, as a
-                // rim that has gone darker than the void it is supposed to edge.
+                // The rim must not turn into a dark crater around the well.
+                //
+                // Deliberately not "lighter than the well", which is what this asserted first and is
+                // a Dark Mode idea in disguise. In Light Mode there is no lightness to spare — the
+                // well is already at 200 of 255 — so a rim carrying real colour necessarily sits at
+                // or slightly below it: measured, between 13 under and 11 over. That reads correctly,
+                // as a coloured band on a pale void. What would not read is the rim continuing down
+                // until it became an outline, so that is what is bounded.
                 let well = sampled.wellBody
                 let ringLuma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
                 let wellLuma = 0.2126 * Double(well.redComponent) * 255
                     + 0.7152 * Double(well.greenComponent) * 255
                     + 0.0722 * Double(well.blueComponent) * 255
                 #expect(
-                    ringLuma > wellLuma + 5,
+                    ringLuma >= wellLuma - 25,
                     """
-                    \(appearance) ring for \(colour) is not lighter than its well: \
+                    \(appearance) ring for \(colour) has sunk below its well: \
                     ring \(Int(ringLuma)) vs well \(Int(wellLuma))
                     """
                 )

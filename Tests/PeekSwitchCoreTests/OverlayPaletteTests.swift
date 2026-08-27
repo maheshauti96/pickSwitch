@@ -331,7 +331,7 @@ struct OverlayPaletteTests {
     /// on which application was under the pointer and a yellow-iconed one turned the rim into a
     /// glaring torus. Brightness is now solved per hue, so it is brightness that moves and
     /// luminance that holds.
-    @Test("The hub ambience holds its luminance across the colour wheel")
+    @Test("The hub ambience holds luminance in Dark Mode and chroma in Light")
     func hubAmbienceHoldsItsLuminance() {
         for (name, palette) in palettes {
             #expect(palette.hubAmbience(for: nil) == palette.hubRing, "\(name) lost its fallback")
@@ -379,14 +379,54 @@ struct OverlayPaletteTests {
                 #expect(min(drift, 1 - drift) < 0.02, "\(name) hue \(hue) became \(resolvedHue)")
             }
 
-            // Cool hues cannot reach the reference at any brightness, so a spread survives — but a
-            // bounded one, and far from the 2.3x that shipped.
+            // What is held is scheme-specific, because the two schemes carry colour differently and
+            // the earlier version of this test only knew about one of them.
+            //
+            // Dark holds luminance: its rim is a pale band against a near-black well, so the
+            // luminance difference does the work and letting it wander is what produced the glaring
+            // torus this test was written for.
+            //
+            // Light cannot do that. Its well already renders near 200 of 255, so there is no
+            // luminance difference to be had and the hue itself has to carry the signal — which means
+            // holding *saturation* and letting luminance fall where each hue puts it. Blue lands
+            // lowest, at about half the reference, because blue contributes 0.0722 of luminance
+            // against green's 0.7152. That is the mechanism working, not drifting.
             let spread = luminances.max()! / luminances.min()!
-            #expect(spread <= 1.4, "\(name) ambience luminance spread is \(spread)")
-            #expect(
-                luminances.min()! >= reference * 0.70,
-                "\(name) dimmest ambience is \(luminances.min()!) against \(reference)"
-            )
+            if name == "dark" {
+                #expect(spread <= 1.4, "\(name) ambience luminance spread is \(spread)")
+                #expect(
+                    luminances.min()! >= reference * 0.70,
+                    "\(name) dimmest ambience is \(luminances.min()!) against \(reference)"
+                )
+            } else {
+                // Held saturation means chroma is identical at every hue by construction — HSB at
+                // full brightness puts the peak at 1 and the trough at 1 - saturation whatever the
+                // hue. Pinning it is what would catch a slide back to inheriting the resting ring's
+                // 0.0196, which is the defect that made this hub colourless.
+                var chromas: [Double] = []
+                for step in 0..<12 {
+                    let resolved = components(
+                        palette.hubAmbience(for: IconTint(hue: Double(step) / 12, vividness: 1))
+                    )
+                    chromas.append(
+                        max(resolved.red, resolved.green, resolved.blue)
+                            - min(resolved.red, resolved.green, resolved.blue)
+                    )
+                }
+                #expect(
+                    chromas.max()! - chromas.min()! < 0.01,
+                    "\(name) chroma is not even across hues: \(chromas.min()!) to \(chromas.max()!)"
+                )
+                #expect(
+                    chromas.min()! >= 0.20,
+                    "\(name) ambience carries only \(chromas.min()!) of chroma"
+                )
+                // Still bounded below, so the rim cannot slide from a coloured band into an outline.
+                #expect(
+                    luminances.min()! >= reference * 0.45,
+                    "\(name) dimmest ambience is \(luminances.min()!) against \(reference)"
+                )
+            }
 
             // And distinct hues stay distinguishable after all that bounding.
             let red = components(palette.hubAmbience(for: IconTint(hue: 0, vividness: 1)))

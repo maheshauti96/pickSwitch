@@ -679,7 +679,7 @@ struct OverlayPalette {
         // so can be far more saturated at the same lightness. Held saturation gives every window the
         // same amount of colour and lets lightness vary instead, which on a light hub is the better
         // trade: a paler rim is merely paler, where in Dark Mode a brighter one is glare.
-        hubAmbienceSaturation: 0.13,
+        hubAmbienceSaturation: 0.30,
         hubAmbienceSaturationFloor: 1.0,
         hubAmbienceLuminanceScale: 1.0,
         // Kept close to 1: every extra point of tint on a white card costs the secondary line,
