@@ -1,339 +1,328 @@
-# PeekSwitch
+# Vortexflow
 
-A free, open-source macOS window switcher built for the mouse.
+A free, open-source window switcher for macOS, built for the mouse.
 
-Hold an extra button on your mouse, and a strip of your recent **windows** appears
-next to the cursor, each one showing a live thumbnail of its contents. Roll the
-wheel to pick one, let go to switch. Your hand never leaves the mouse and your
-fingers never touch the keyboard.
+Press a button, see every window you have open, pick one. Works with any mouse and any
+keyboard.
 
-Built for the Logitech MX Master 3, works with any mouse that has a middle click or
-thumb buttons.
+---
 
-## What makes it different
+## The problems
 
-Most switchers, including the commercial ones this was modelled on, switch between
-*applications*. PeekSwitch switches between *windows*:
+**Cmd-Tab switches applications, not windows.** Six Chrome windows are one icon behind
+one app. Picking the right one means switching to Chrome first, then hunting through
+what it brings forward.
 
-- **Every window is its own card**, with its own thumbnail and its own
-  most-recently-used timestamp. Four Finder windows are four cards, not one.
-- **Real previews.** Thumbnails come from ScreenCaptureKit, so you see what is
-  actually in the window before you commit to it. The selected card refreshes live.
-- **Most-recently-used order**, per window. The window you were just in is always
-  one flick away.
-- **Mouse-first.** Hold to reveal, scroll or hover to choose, release to switch.
-  The keyboard is optional, not the primary path.
-- **Local and private.** No network calls, no telemetry, no analytics. Three
-  permissions, all of them load-bearing.
+**Windows of the same app are impossible to tell apart.** Same icon, similar titles,
+and a switcher that shows you neither. Three terminals and four editors look like the
+same two entries repeated.
+
+**Your hand has to leave the mouse.** You are already holding it. Reaching for a key
+combination to move between windows is a gesture in the wrong direction, and the
+keyboard shortcuts get worse the more windows you have.
+
+**You lose track of what is actually open.** Windows spread across Spaces and monitors,
+and nothing shows them in one place. Minimized windows disappear from view entirely.
+
+**Getting to a browser tab is two searches.** Switch to the browser, then find the tab
+among thirty others, in a strip of favicons too small to read.
+
+**Opening something that is not running yet is a different gesture altogether.** You
+try the switcher, the app is not there, so you stop and go to Spotlight instead.
+
+**The good alternatives cost money or only switch apps.** The ones that switch windows
+properly tend to be paid, closed, and quietly sending usage data somewhere.
+
+---
+
+## What Vortexflow does about them
+
+**Every window is its own card.** Four Finder windows are four cards, each with its own
+title, its own thumbnail and its own place in the recency order. Minimized windows and
+windows on other Spaces are included rather than hidden.
+
+**Same-app windows are made distinguishable.** Each card takes a hint of colour from
+its own icon, so a ring of windows is not a ring of identical white boxes. Browser
+windows go further and show the icon of the site actually open in them, layered with
+the browser's own icon — so three Chrome windows look like three different things,
+because they are.
+
+**Mouse-first, keyboard optional.** Hold a mouse button and the switcher appears next
+to the cursor; scroll to choose, let go to switch. Your hand never moves. If you would
+rather use the keyboard, a global shortcut does the same job, and Vortexflow treats its
+press and release exactly like a button's.
+
+**Any mouse, any button.** Middle click works with no setup. For a side or thumb
+button, press **Detect Button** and then press the button — no need to know its number.
+Vortexflow watches for buttons earlier in the pipeline than most mouse utilities, so
+buttons that other apps cannot see usually still work here. For a button your mouse
+keeps to itself, assign it to a keyboard shortcut and use that instead.
+
+**Five ways to show it,** because a good arrangement for six windows is a bad one for
+twenty: a horizontal strip, a grid, a list with a large preview, and two round
+arrangements that fan the windows around your cursor. Each one can show live
+screenshots or large icons.
+
+**Real previews.** Thumbnails come from ScreenCaptureKit, so you see what is in a
+window before committing to it. The selected one keeps refreshing.
+
+**Recency that is per window, not per app.** The window you were just in is one flick
+away, and the second card is preselected — so a quick hold-and-release means "back to
+the last window".
+
+**Type to narrow it down.** Start typing and the list filters by application and title.
+It searches your open browser tabs too, so a tab is one gesture away instead of two.
+Tab results are labelled by site — `x.com` rather than "Google Chrome", which every tab
+would otherwise say — and carry the site's icon layered with the browser's.
+Applications that are not running show up as well, so you can launch one without
+leaving for Spotlight. If nothing matches, Return searches the web.
+
+**Local and private.** No accounts, no telemetry, no analytics, no network calls —
+except one, described plainly: to show the icon of a site open in your browser,
+Vortexflow fetches that icon from that site's own address, with no cookies and nothing
+identifying, and never for a private browsing window.
+
+---
+
+## Download
+
+**[Download Vortexflow 1.0.0 (.dmg)](https://github.com/maheshauti96/vortexflow/releases/latest/download/Vortexflow-1.0.0.dmg)** —
+2 MB, universal (Apple Silicon and Intel), macOS 15 or newer.
+
+All releases are on the [releases page](https://github.com/maheshauti96/vortexflow/releases).
+
+### Installing
+
+1. Open the disk image and drag **Vortexflow** to your Applications folder.
+2. Open it. macOS will refuse, and say the developer cannot be verified. This is
+   expected — keep going.
+3. Open **System Settings → Privacy & Security**, scroll down to the **Security**
+   section, and click **Open Anyway** next to Vortexflow. Authenticate when asked.
+4. Grant the permissions it asks for. The setup window explains what each one buys you.
+
+You only do this once; macOS then remembers Vortexflow as an exception, as described in
+[Apple's own documentation](https://support.apple.com/en-us/guide/mac-help/mh40616/mac).
+
+The reason is worth stating plainly rather than hiding: Vortexflow is signed, but it is
+not *notarized*, because notarizing requires a paid Apple Developer account. macOS
+blocks unnotarized downloads, and the wording it uses — "cannot be verified" — reads as
+though the app is broken rather than simply unregistered.
+
+Note that on macOS 15 and later, right-clicking the app and choosing Open no longer
+works as a shortcut for this; Apple removed that bypass, so the Privacy & Security route
+above is the only one. Older instructions elsewhere on the internet still describe the
+right-click trick.
+
+If you would rather not take our word for any of it, building from source takes about a
+minute and produces a copy signed on your own machine — see
+[Building from source](#building-from-source).
+
+---
 
 ## Requirements
 
 - macOS 15 (Sequoia) or newer
-- Apple Silicon or Intel (ships as a universal binary)
-- Swift 6 toolchain to build (Command Line Tools is enough — Xcode is not required)
+- Any Mac, Apple Silicon or Intel
+- Any mouse with at least a middle click, or just the keyboard
 
-## Building
-
-```sh
-git clone <your-fork-url> peekswitch
-cd peekswitch
-Scripts/create-signing-certificate.sh   # once, so permissions survive rebuilds
-Scripts/build-app.sh --install
-open /Applications/PeekSwitch.app
-```
-
-`Scripts/build-app.sh` compiles the package and wraps it into `PeekSwitch.app`. The
-bundle matters: macOS attaches permission grants to a bundle identity, and
-`LSUIElement` (which keeps PeekSwitch out of the Dock and Cmd-Tab) lives in
-`Info.plist`. Running the bare SwiftPM executable will not behave correctly.
-
-Run `Scripts/create-signing-certificate.sh` once first. Without a stable signing
-identity, macOS forgets PeekSwitch's permissions on every rebuild and can end up
-refusing to list it at all — see [Signing](#signing-and-why-it-decides-whether-permissions-work-at-all).
-
-Options:
-
-```sh
-Scripts/build-app.sh --install       # also replace /Applications/PeekSwitch.app
-Scripts/build-app.sh --debug         # debug configuration
-Scripts/build-app.sh --native-arch   # skip the universal build, build for this Mac only
-```
-
-Tests:
-
-```sh
-swift test
-```
+---
 
 ## Permissions
 
-PeekSwitch asks for three permissions on first launch and explains each one in the
-setup window. It works with any subset of them and tells you what you are missing.
+Vortexflow asks for three permissions and explains each one on first launch. It runs
+with any subset of them and tells you what you are missing rather than failing quietly.
 
 | Permission | What it buys you | Without it |
 | --- | --- | --- |
-| **Input Monitoring** | Noticing your extra mouse button | Keyboard shortcut only |
-| **Accessibility** | Listing individual windows and raising the exact one you pick | Whole apps come forward instead of specific windows |
-| **Screen Recording** | Window thumbnails | Cards show app icons |
+| **Input Monitoring** | Noticing your mouse button | Keyboard shortcut only |
+| **Accessibility** | Listing individual windows, and raising the exact one you pick | Whole apps come forward instead of specific windows |
+| **Screen Recording** | Window thumbnails | Cards show large app icons instead |
 
-You can reopen the setup window any time from the menu bar item.
+Automation permission is asked for separately, the first time it looks at browser
+windows, and only powers tab search and site icons.
 
-### Signing, and why it decides whether permissions work at all
+You can reopen the setup window at any time from the menu bar icon.
 
-Run this once, before anything else:
+---
+
+## Using it
+
+By default Vortexflow works out what you meant from how long you held the button.
+
+**Hold** it and the switcher tracks your hand: scroll to move the selection, release to
+switch. Fast, once you know where you are going.
+
+**Tap** it and the switcher stays up so you can read the titles and decide. Click a
+card, or tap again, to switch.
+
+| Action | Result |
+| --- | --- |
+| Hold the trigger button | Switcher appears by the cursor and follows the hold |
+| Scroll | Move the selection, wrapping at both ends |
+| Move onto a card | Select it |
+| Release after holding | Switch to the selected window |
+| Quick tap | Switcher stays open for browsing |
+| Tap again while open | Switch to the selected window |
+| Click a card | Switch to it |
+| Keyboard shortcut | Open it, and press again to close it |
+| Arrow keys | Move the selection — a grid moves by a row, everything else by one window |
+| Return | Switch to the selected window |
+| Start typing | Filter by app, title, browser tab or installed app |
+| Escape, or click outside | Close without switching |
+
+Once it is open you can finish the job entirely from the keyboard — arrows to choose,
+Return to switch — or entirely from the mouse. Neither is the "real" way.
+
+---
+
+## Settings
+
+- **Trigger button** — middle, side back, side forward, or **Detect Button** to use
+  whatever you press next.
+- **Behaviour** — automatic (tap keeps it open, hold switches on release), or force
+  hold or toggle if you would rather it never guessed.
+- **Keyboard shortcut** — pick one, or record your own. Settings tells you whether the
+  shortcut has actually fired, which matters more than it sounds: macOS reports a
+  shortcut as registered even when another app has already claimed it, and then the
+  keystroke simply never arrives. If it says the shortcut has not been seen after you
+  press it, something else owns it — pick another.
+- **Arrangement** — strip, grid, list, circular or spiral.
+- **Each window shows** — a live preview, or a large icon.
+- **Tint each window by its icon** — on by default. Turns itself off when you have
+  macOS's Increase Contrast enabled.
+- **Windows to show** — 5 to 25.
+- **Include the switcher in screenshots** — worth turning off while presenting, since
+  the switcher lists the title of every window you have open.
+- **Permissions** — live status, with links into System Settings.
+
+### A note on the middle button
+
+Vortexflow has to *consume* whichever button triggers it, or the click would also land
+in whatever is under the cursor. With the default middle button, that means
+middle-clicking a link to open it in a new tab stops working while Vortexflow is
+running. Settings warns about this. Moving to a side button avoids it — press **Detect
+Button** and then that button.
+
+---
+
+## Building from source
 
 ```sh
-Scripts/create-signing-certificate.sh
+git clone https://github.com/maheshauti96/vortexflow.git vortexflow
+cd vortexflow
+Scripts/create-signing-certificate.sh   # once
+Scripts/build-app.sh --install
+open /Applications/Vortexflow.app
 ```
 
-macOS records privacy permissions against an app's **code identity**, not its path or
-its name. An ad-hoc signature (`codesign --sign -`) derives that identity from the
-binary's own hash, so it changes on every single build. Two things follow, and the
-second one is nasty:
+Command Line Tools is enough — Xcode is not required.
 
-- Permissions have to be granted again after every rebuild.
-- Stale records accumulate under the same bundle identifier. Once they conflict with
-  what is on disk, macOS stops adding the app to the privacy lists altogether — you
-  pick it with the `+` button and the row simply never appears, with no error.
-
-`create-signing-certificate.sh` generates a self-signed code-signing certificate
-called `PeekSwitch Dev` in your login keychain, and `build-app.sh` picks it up
-automatically. The designated requirement then names the certificate instead of the
-binary:
-
-```
-identifier "dev.peekswitch.PeekSwitch" and certificate root = H"78272f59…"
+```sh
+Scripts/build-app.sh --debug         # debug configuration
+Scripts/build-app.sh --native-arch   # skip the universal build
+Scripts/make-dmg.sh                  # package a disk image
+swift test                           # 402 tests
 ```
 
-That is stable across rebuilds, so a grant given once keeps working. `build-app.sh`
-prints the requirement on every build if you want to confirm it is not changing.
+### Run the signing script first
 
-The certificate shows up as untrusted (`CSSMERR_TP_NOT_TRUSTED`) in
-`security find-identity -v`. That is expected and harmless: trust governs *verifying*
-signatures, not producing them, and `codesign` signs with it happily. Making it
-trusted would mean a system-wide keychain change for no benefit.
+It matters more than it looks. macOS records privacy permissions against an app's
+**code identity**, not its name or its path. An ad-hoc signature derives that identity
+from the binary's own hash, so it changes on every build, and two things follow:
+
+- You have to grant permissions again after every rebuild.
+- Stale records pile up under the same bundle identifier until macOS refuses to add the
+  app to the privacy lists at all — you click `+`, and the row never appears, with no
+  error to explain it.
+
+`create-signing-certificate.sh` makes a self-signed certificate called `Vortexflow Dev`
+in your login keychain, and `build-app.sh` uses it automatically. The identity then
+names the certificate rather than the binary, which is stable across rebuilds.
+
+The certificate shows as untrusted in `security find-identity -v`. That is expected:
+trust governs *verifying* signatures, not making them, and `codesign` is happy to sign
+with it.
 
 To use your own identity instead:
 
 ```sh
-PEEKSWITCH_SIGN_IDENTITY="Developer ID Application: You (TEAMID)" Scripts/build-app.sh
+VORTEXFLOW_SIGN_IDENTITY="Developer ID Application: You (TEAMID)" Scripts/build-app.sh
 ```
 
-### If PeekSwitch will not appear in a privacy list
+### If Vortexflow will not appear in a privacy list
 
-Almost always leftover records from an earlier build with a different identity. Clear
-just this app's records and reinstall:
+Almost always leftover records from a build with a different identity:
 
 ```sh
-tccutil reset All dev.peekswitch.PeekSwitch    # no sudo needed
+tccutil reset All io.vortexflow.Vortexflow    # no sudo needed
 Scripts/build-app.sh --install
-open /Applications/PeekSwitch.app
 ```
 
-Then grant the permissions from PeekSwitch's own setup window rather than the `+`
-button — the app asks the system directly, which is more reliable than adding it by
-hand. Confirm with:
+Then grant permissions from Vortexflow's own setup window rather than the `+` button —
+the app asks the system directly, which is more reliable than adding it by hand. Check
+what it sees with:
 
 ```sh
-/Applications/PeekSwitch.app/Contents/MacOS/PeekSwitch --probe
+/Applications/Vortexflow.app/Contents/MacOS/Vortexflow --probe
 ```
 
-Two things that also matter:
+Run it from `/Applications` rather than `build/`. The build directory is replaced on
+every build, and a privacy grant pointing at a path that no longer exists is dead
+weight.
 
-- **Quit PeekSwitch before replacing the bundle.** `--install` does this for you.
-  Swapping a bundle out from under a running process leaves macOS holding the old
-  identity.
-- **Run it from `/Applications`, not from `build/`.** `build/` gets deleted on every
-  rebuild, and a privacy entry pointing at a path that no longer exists is dead
-  weight.
-
-## Setting up an MX Master
-
-The wheel click works with no setup. For a thumb or Gesture button, try
-**Detect Button…** in Settings first and press it.
-
-PeekSwitch installs its event tap at the **HID level** rather than the session level,
-which matters here. Mouse software like Logi Options+ runs its own session-level event
-tap and consumes the extra buttons there, so anything else watching at session level
-never sees them. A HID-level tap sits earlier in the pipeline and gets the button
-first. This is why other apps can use these buttons, and PeekSwitch initially could
-not.
-
-Check which level yours ended up at:
-
-```sh
-/Applications/PeekSwitch.app/Contents/MacOS/PeekSwitch --probe
-```
-
-Look for `trigger tap installed at: HID level`.
-
-### The thumb / Gesture button, and why Detect can't see it
-
-Measured on an MX Master 3 (vendor `0x46d`, product `0xb023`) by logging its raw HID
-input. With the thumb button set to **"Do Nothing"** in Logi Options+, the mouse reports
-exactly three button usages:
-
-| HID usage | Button |
-| --- | --- |
-| 1 | Left |
-| 2 | Right |
-| 3 | Middle (wheel click) |
-
-That is the complete list. The thumb button produces **no HID input on any usage page,
-from any device interface** — nothing to intercept, at any event tap level. Options+
-discards it inside its own driver rather than passing it on.
-
-So this is not something PeekSwitch can fix. Route it through the keyboard instead:
-
-1. Logi Options+ → your mouse → assign the button to **"Keyboard shortcut"**
-2. Record **F13**. No Mac keyboard binds F13 by default, so nothing will fight it.
-3. PeekSwitch Settings → Keyboard shortcut → **F13**
-
-PeekSwitch handles the shortcut's press *and* release, so a button mapped this way
-behaves exactly like a real mouse button: tap to keep the strip open, hold and release
-to switch. Nothing is lost by going through a keystroke.
-
-Avoid **"Do Nothing"** — that is the one setting that reliably gets you nothing, since
-Options+ discards the press rather than passing it on.
-
-## Using it
-
-There are two ways to drive it, and by default PeekSwitch works out which one you
-meant from how long you held the button.
-
-**Hold** the trigger button and the strip tracks your hand: scroll to move the
-selection, release to switch. Fast, once you know where you're going.
-
-**Tap** it and the strip stays up so you can read the window titles and decide. Click
-a card, or tap the button again, to switch.
-
-| Action | Result |
-| --- | --- |
-| Hold the trigger button | Strip appears next to the cursor and follows the hold |
-| Scroll / thumb wheel | Move the selection, wrapping at both ends |
-| Move onto a card | Select that card |
-| Release after holding | Switch to the selected window |
-| Quick tap | Strip stays open for browsing |
-| Tap again while open | Switch to the selected window |
-| Click a card | Switch to it |
-| Keyboard shortcut | Open the strip and keep it open |
-| Escape, or click outside | Close without switching |
-
-The second card is preselected rather than the first, because the first card is the
-window you are already looking at. Combined with hold mode, that makes a quick
-hold-and-release a "go back to the last window" gesture.
-
-## Settings
-
-- **Trigger button.** Middle, thumb back, thumb forward, or **Detect Button…**, which
-  assigns whatever button you press next. Use that for a Gesture button or any extra
-  button that isn't in the list — there is no need to know its number.
-- **Activation.** Automatic (tap keeps it open, hold switches on release), or force
-  Hold or Toggle if you'd rather it never guess.
-- **Keyboard shortcut.** Pick from a short list. Settings tells you whether the
-  shortcut has actually fired, which matters — see below.
-- **Windows to show.** 5–25.
-- **Permissions.** Live status with links into System Settings.
-
-### If the keyboard shortcut does nothing
-
-`RegisterEventHotKey` returns success even when another app already owns the
-combination — the keystroke just never arrives. So "registered" in the log proves
-nothing. Settings shows **"This shortcut is working"** only once the shortcut has
-genuinely fired; if it still says "Not seen yet" after you press it, something else
-has claimed it. Pick another from the list. **F13** has no stock binding on any Mac
-keyboard and is the reliable fallback.
-
-### A note on the middle button
-
-PeekSwitch has to *consume* its trigger button, otherwise the click would also land in
-whatever is under the cursor. With the default middle button that means middle-click to
-open a link in a new tab stops working in browsers. Settings warns about this.
-
-To move off the middle button, try **Detect Button…** in Settings and press the button
-you want. If nothing is detected, that button is being consumed by Logi Options+ or a
-similar tool — see [Setting up an MX Master](#setting-up-an-mx-master) for the keyboard
-shortcut route, which works for buttons that can't be detected directly.
+---
 
 ## How it works
 
 ```
-Sources/PeekSwitchCore/
-  Models/       WindowEntry, StripLayout, SelectionMath, OverlayPlacement,
-                TriggerButton, Authorization
-  Core/         WindowRegistry, MRUTracker, TriggerMonitor, HotKeyMonitor,
-                ThumbnailService, ActivationService, PermissionsManager,
-                SettingsStore, SwitcherController
-  UI/           OverlayPanel, OverlayView, WindowCardView, MenuBarController,
-                OnboardingView, SettingsView
-  App/          AppDelegate
-Sources/PeekSwitch/
-  main.swift    NSApplication bootstrap
+Sources/VortexflowCore/
+  Models/   WindowEntry, layouts, SelectionMath, IconTint, TriggerButton, KeyResponse
+  Core/     WindowRegistry, MRUTracker, TriggerMonitor, HotKeyMonitor, ThumbnailService,
+            BrowserTabService, BrowserFaviconService, ApplicationCatalog,
+            ActivationService, PermissionsManager, SettingsStore, SwitcherController
+  UI/       OverlayPanel, OverlayView, the card and wedge views, MenuBarController,
+            OnboardingView, SettingsView
 ```
 
-A few decisions worth knowing about before changing things:
+A few decisions worth knowing before changing things.
 
-**Window enumeration combines two APIs.** Accessibility supplies the window set (it
-is the only one that sees minimized windows and the only one that can raise a
-specific window); CGWindowList supplies front-to-back order and CGWindowIDs. They
-are stitched together with `_AXUIElementGetWindow`, resolved at runtime via `dlsym`
-because it is not in any public header. Matching on title plus frame instead breaks
-on exactly the cases that matter: several same-titled windows in one app, and
-windows that share a frame because they are tiled.
+**Window enumeration combines two APIs.** Accessibility supplies the window set — it is
+the only one that sees minimized windows and the only one that can raise a specific
+window. CGWindowList supplies front-to-back order and window IDs. They are stitched
+together with `_AXUIElementGetWindow`, resolved at runtime because it is in no public
+header. Matching on title and frame instead breaks on exactly the cases that matter:
+several same-titled windows in one app, and tiled windows that share a frame.
 
-**There are two event taps, not one.** A persistent one watching only
-`otherMouseDown`/`otherMouseUp`, and a second one for scroll and key events that is
-created disabled and toggled with `CGEvent.tapEnable` while the overlay is open. A
-tap's event mask is fixed at creation, so the alternative would be recreating a tap
-on every presentation — right on the latency path. The tap callback does nothing but
-read one integer and hop to the main queue; anything slower and macOS disables the
-tap out from under you, which is why there is also a re-arm path.
+**The event tap is installed at the HID level,** ahead of session-level taps. Mouse
+utilities install their own tap at the session level and consume the extra buttons
+there, so a session-level tap never sees them. This is why buttons that appear
+undetectable to other apps often work here.
 
-**Presentation is under 150 ms because thumbnails are not on the critical path.**
-The panel goes up showing app icons and captures land underneath as they finish. The
-panel and its hosting view are built once at launch, not per presentation.
+**Presentation stays under 150 ms because thumbnails are not on the critical path.** The
+panel goes up showing icons, and captures land underneath as they finish. The panel and
+its hosting view are built once at launch, not per presentation.
 
 **Hover is polled, not tracked.** The overlay is a non-activating panel that never
-becomes key, which makes AppKit's mouse tracking unreliable for it — especially
-while a mouse button is physically held down, as it always is in hold mode. Instead
-the controller samples the cursor at 60 Hz while the overlay is open and hit-tests
-using the same `StripLayout` arithmetic that drew the cards. That shared arithmetic
-is why the strip does its own layout rather than using a `ScrollView`: a
-`ScrollView`'s offset is not observable, so drawing and hit-testing would be free to
-disagree.
+becomes key, which makes AppKit's mouse tracking unreliable for it — especially while a
+button is physically held down, as it always is in hold mode. The controller samples the
+cursor at 60 Hz and hit-tests using the same arithmetic that drew the cards, so what is
+drawn and what is clickable cannot disagree.
 
 **Activation order is deliberate:** unhide the app, unminimize the window, raise the
-window, *then* activate the app. Activating before raising produces a visible
-flicker as the app's previously frontmost window appears and is then replaced.
+window, *then* activate the app. Activating before raising produces a visible flicker as
+the app's previously frontmost window appears and is immediately replaced.
 
-### Toolchain notes
+---
 
-Two quirks if you build with Command Line Tools rather than Xcode, both handled in
-`Package.swift`:
+## Not there yet
 
-- SwiftUI's `@State` is a macro now, and its plugin ships only with Xcode. The
-  codebase uses `ObservableObject` view models instead, which is the better home for
-  this state anyway.
-- swift-testing's macro plugin sits in a subdirectory the compiler does not scan
-  automatically, and its runtime is not on the default library search path.
-  `Package.swift` detects both and adds the flags only when needed, so an Xcode
-  toolchain is unaffected.
-
-## Not in version 1
-
-Scoped out on purpose, roughly in the order they are worth adding:
-
-- Radial/fan, grid and list-plus-preview layouts (the horizontal strip is the only
-  one)
-- Type-to-filter and fuzzy search
-- Launching applications that are not running
-- App exclude lists and pinned favourites
+- Notarized distribution and Homebrew (right-click to open is the workaround for now)
+- Recency history that survives a restart
+- Excluding specific apps, and pinning favourites
 - Customising size, opacity and animation speed
-- An arbitrary keyboard shortcut (a short preset list is offered instead of a recorder)
-- Persisting MRU history across launches
-- Browser tab switching
 - Full VoiceOver support
-- Homebrew and notarized installer packaging
+
+---
 
 ## Credits
 

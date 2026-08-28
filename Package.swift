@@ -2,17 +2,17 @@
 import Foundation
 import PackageDescription
 
-// PeekSwitch is built with SwiftPM rather than an Xcode project so that the whole
+// Vortexflow is built with SwiftPM rather than an Xcode project so that the whole
 // app can be produced from the command line with only the Command Line Tools
 // installed. `Scripts/build-app.sh` wraps the executable produced here into a
-// proper `PeekSwitch.app` bundle (Info.plist + code signature), which is required
+// proper `Vortexflow.app` bundle (Info.plist + code signature), which is required
 // for the TCC permission prompts (Accessibility / Screen Recording / Input
 // Monitoring) to attach to a stable bundle identity.
 //
 // Layout:
-//   PeekSwitchCore  - every model, service and view. Internal access, so tests
+//   VortexflowCore  - every model, service and view. Internal access, so tests
 //                     reach it with `@testable import`.
-//   PeekSwitch      - thin executable shell: main.swift + NSApplication bootstrap.
+//   Vortexflow      - thin executable shell: main.swift + NSApplication bootstrap.
 //
 // Swift 5 language mode is deliberate: the codebase talks to CGEventTap C
 // callbacks, AXUIElement (an untyped CFTypeRef world) and AppKit main-thread
@@ -75,30 +75,30 @@ func testingRuntimeLinkerSettings() -> [LinkerSetting] {
 let baseSwiftSettings: [SwiftSetting] = [.swiftLanguageMode(.v5)]
 
 let package = Package(
-    name: "PeekSwitch",
+    name: "Vortexflow",
     platforms: [
         .macOS(.v15)
     ],
     products: [
-        .executable(name: "PeekSwitch", targets: ["PeekSwitch"]),
-        .library(name: "PeekSwitchCore", targets: ["PeekSwitchCore"]),
+        .executable(name: "Vortexflow", targets: ["Vortexflow"]),
+        .library(name: "VortexflowCore", targets: ["VortexflowCore"]),
     ],
     targets: [
         .target(
-            name: "PeekSwitchCore",
-            path: "Sources/PeekSwitchCore",
+            name: "VortexflowCore",
+            path: "Sources/VortexflowCore",
             swiftSettings: baseSwiftSettings
         ),
         .executableTarget(
-            name: "PeekSwitch",
-            dependencies: ["PeekSwitchCore"],
-            path: "Sources/PeekSwitch",
+            name: "Vortexflow",
+            dependencies: ["VortexflowCore"],
+            path: "Sources/Vortexflow",
             swiftSettings: baseSwiftSettings
         ),
         .testTarget(
-            name: "PeekSwitchCoreTests",
-            dependencies: ["PeekSwitchCore"],
-            path: "Tests/PeekSwitchCoreTests",
+            name: "VortexflowCoreTests",
+            dependencies: ["VortexflowCore"],
+            path: "Tests/VortexflowCoreTests",
             swiftSettings: baseSwiftSettings + testingMacroPluginSettings(),
             linkerSettings: testingRuntimeLinkerSettings()
         ),

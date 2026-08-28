@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Creates a self-signed code-signing certificate for local PeekSwitch builds.
+# Creates a self-signed code-signing certificate for local Vortexflow builds.
 #
 # Why this exists
 # ---------------
@@ -19,15 +19,15 @@
 #
 # What this does to your machine
 # ------------------------------
-# Adds one certificate named "PeekSwitch Dev" to your *login* keychain. It is not a
+# Adds one certificate named "Vortexflow Dev" to your *login* keychain. It is not a
 # system-wide trust change, it grants nothing to anyone else, and it can be removed
 # any time from Keychain Access or with:
 #
-#   security delete-certificate -c "PeekSwitch Dev"
+#   security delete-certificate -c "Vortexflow Dev"
 #
 set -euo pipefail
 
-IDENTITY_NAME="${1:-PeekSwitch Dev}"
+IDENTITY_NAME="${1:-Vortexflow Dev}"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
 # Note the absence of -v. A self-signed certificate is reported as untrusted
@@ -50,7 +50,7 @@ echo "==> Generating a self-signed code-signing certificate: $IDENTITY_NAME"
 openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
 	-keyout "$WORK_DIR/key.pem" \
 	-out "$WORK_DIR/cert.pem" \
-	-subj "/CN=$IDENTITY_NAME/O=PeekSwitch/C=US" \
+	-subj "/CN=$IDENTITY_NAME/O=Vortexflow/C=US" \
 	-addext "basicConstraints=critical,CA:FALSE" \
 	-addext "keyUsage=critical,digitalSignature" \
 	-addext "extendedKeyUsage=critical,codeSigning" \
@@ -110,11 +110,11 @@ cat <<-NOTE
 
 	It is reported as untrusted, which is expected and harmless: trust affects
 	verifying signatures, not making them. What matters is that the identity now
-	stays the same across rebuilds, so macOS can remember PeekSwitch's permissions.
+	stays the same across rebuilds, so macOS can remember Vortexflow's permissions.
 
 	Next, clear the stale records left behind by the earlier ad-hoc builds and
 	reinstall:
 
-	    tccutil reset All dev.peekswitch.PeekSwitch
+	    tccutil reset All io.vortexflow.Vortexflow
 	    Scripts/build-app.sh --install
 NOTE
