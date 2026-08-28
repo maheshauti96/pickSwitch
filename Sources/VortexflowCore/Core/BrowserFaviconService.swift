@@ -243,7 +243,7 @@ actor BrowserFaviconService {
         request.httpMethod = "GET"
         request.httpShouldHandleCookies = false
         request.setValue(accept, forHTTPHeaderField: "Accept")
-        request.setValue("Vortexflow/1.0 favicon resolver", forHTTPHeaderField: "User-Agent")
+        request.setValue("VortexFlow/1.0 favicon resolver", forHTTPHeaderField: "User-Agent")
 
         do {
             let delegate = SameOriginDelegate(origin: origin)

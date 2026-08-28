@@ -71,14 +71,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.hasCompletedOnboarding = true
         }
 
-        Log.app.info("Vortexflow \(MenuBarController.versionString, privacy: .public) started")
+        Log.app.info("VortexFlow \(MenuBarController.versionString, privacy: .public) started")
     }
 
     /// Requirement 11.4, 11.5.
     public func applicationWillTerminate(_ notification: Notification) {
         controller.stop()
         permissions.endPolling()
-        Log.app.info("Vortexflow terminating")
+        Log.app.info("VortexFlow terminating")
     }
 
     /// Agent apps have no windows to keep alive, but they must not quit when the
@@ -104,7 +104,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKeyHasFired: { [weak self] in self?.controller.hotKeyHasFired ?? false }
         )
         let view = SettingsView(permissions: permissions, model: model)
-        let window = makeWindow(title: "Vortexflow Settings", content: view)
+        let window = makeWindow(title: "VortexFlow Settings", content: view)
         settingsWindow = window
         bringToFront(window)
     }
@@ -118,7 +118,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.settings.hasCompletedOnboarding = true
             self?.onboardingWindow?.close()
         }
-        let window = makeWindow(title: "Vortexflow Setup", content: view)
+        let window = makeWindow(title: "VortexFlow Setup", content: view)
         onboardingWindow = window
         bringToFront(window)
     }
@@ -149,7 +149,7 @@ extension AppDelegate: NSWindowDelegate {
         guard let window = notification.object as? NSWindow else { return }
         if window === settingsWindow { settingsWindow = nil }
         if window === onboardingWindow { onboardingWindow = nil }
-        // Drop back to accessory so closing a window does not leave Vortexflow
+        // Drop back to accessory so closing a window does not leave VortexFlow
         // sitting in the Dock.
         NSApp.setActivationPolicy(.accessory)
     }

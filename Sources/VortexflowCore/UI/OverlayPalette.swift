@@ -694,7 +694,7 @@ struct OverlayPalette {
     /// than three neighbouring ones.
     private static let brandHue: Double = 0.532
 
-    /// Vortexflow's selection colour, `#0088b0`.
+    /// VortexFlow's selection colour, `#0088b0`.
     private static let brand = Color(
         .sRGB,
         red: 0 / 255,

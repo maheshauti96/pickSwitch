@@ -40,7 +40,7 @@ struct WindowEntry: Identifiable {
     /// changes desktop, so animating anything to that rectangle would be nonsense.
     var isOnActiveSpace: Bool = false
 
-    /// When Vortexflow last saw this window on the active Space, if ever.
+    /// When VortexFlow last saw this window on the active Space, if ever.
     ///
     /// Distinct from "used": a window can be seen without being switched to. It exists
     /// because Accessibility only reports the active Space, so a window sitting on another

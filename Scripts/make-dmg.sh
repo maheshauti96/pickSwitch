@@ -6,7 +6,7 @@
 # /Applications, so installing is a drag from one side of the window to the other.
 # A zip lands the app in ~/Downloads, and an app run from there is a problem —
 # macOS ties privacy permissions to a path, and the first tidy-up of the Downloads
-# folder silently revokes everything Vortexflow was granted.
+# folder silently revokes everything VortexFlow was granted.
 #
 # Usage:
 #   Scripts/make-dmg.sh                  # build, then package
@@ -15,7 +15,7 @@
 # IMPORTANT — this image is signed but NOT notarized.
 #
 # Notarization needs a paid Apple Developer account, and without it Gatekeeper
-# refuses a downloaded copy outright: "Vortexflow cannot be opened because the
+# refuses a downloaded copy outright: "VortexFlow cannot be opened because the
 # developer cannot be verified." That wording suggests the app is broken rather
 # than unregistered, so anyone publishing this link has to tell people how to get
 # past it.

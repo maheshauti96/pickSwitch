@@ -22,7 +22,7 @@ private final class OverlayHostingView<Content: View>: NSHostingView<Content> {
 ///   above system alerts.
 /// - `.canJoinAllSpaces` + `.fullScreenAuxiliary`: appears inside a full-screen space
 ///   rather than kicking the user out of it (Requirement 13.6).
-/// - `hidesOnDeactivate = false`: Vortexflow is never the active app, so a panel that
+/// - `hidesOnDeactivate = false`: VortexFlow is never the active app, so a panel that
 ///   hid on deactivation would never be visible at all.
 ///
 /// The panel is created once at launch and reused. Constructing an `NSPanel` and

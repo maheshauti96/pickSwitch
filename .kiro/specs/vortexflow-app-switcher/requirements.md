@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Vortexflow is a free, open-source, menu-bar-only macOS utility that lets a user switch between open windows using only the mouse. Pressing a configured extra mouse button opens a horizontal strip of cards near the cursor. Each card represents one individual window and shows a thumbnail of that window's content, the owning application's icon and name, and the window title. Cards are ordered most-recently-used first. Rotating the scroll wheel or thumb wheel moves the selection.
+VortexFlow is a free, open-source, menu-bar-only macOS utility that lets a user switch between open windows using only the mouse. Pressing a configured extra mouse button opens a horizontal strip of cards near the cursor. Each card represents one individual window and shows a thumbnail of that window's content, the owning application's icon and name, and the window title. Cards are ordered most-recently-used first. Rotating the scroll wheel or thumb wheel moves the selection.
 
 What a release of the button does depends on the Activation_Mode: holding and releasing activates the selected window, while a brief tap leaves the Strip on screen so the user can read it and then click. This was not in the original draft of this document and was added after use: hold-and-release is the faster gesture once the user knows their target, but it cannot serve the equally common case of opening the switcher in order to *look* at what is open.
 
@@ -12,7 +12,7 @@ This document specifies the version 1 minimum viable product only. Section "Out 
 
 ## Glossary
 
-- **Vortexflow_App**: The complete macOS application bundle, including all components below.
+- **VortexFlow_App**: The complete macOS application bundle, including all components below.
 - **Window_Registry**: The component that enumerates windows of running applications and produces Window_Entries.
 - **Window_Entry**: The in-memory record of one individual open window, holding the owning application name, application icon, window title, window identifier, on-screen bounds, and minimized state.
 - **MRU_Tracker**: The component that records and orders per-window last-activation timestamps.
@@ -54,7 +54,7 @@ This document specifies the version 1 minimum viable product only. Section "Out 
 3. THE Window_Registry SHALL record for each Window_Entry the owning application name, the owning application icon, the window title, the window identifier, the on-screen bounds, and the minimized state.
 4. IF a window reports a minimized state, THEN THE Window_Registry SHALL include the window as a Window_Entry and mark the minimized state as true.
 5. THE Window_Registry SHALL restrict Window_Entries to windows that the Accessibility API reports with a standard window role, so that menu bar items, the desktop, notification banners, and system panels stay out of the Window_Entry set.
-6. THE Window_Registry SHALL restrict Window_Entries to windows owned by applications other than the Vortexflow_App.
+6. THE Window_Registry SHALL restrict Window_Entries to windows owned by applications other than the VortexFlow_App.
 7. WHEN a window is opened, closed, or retitled while the Overlay is hidden, THE Window_Registry SHALL reflect the change in the Window_Entry set produced for the next Overlay presentation.
 8. IF the Window_Registry produces zero Window_Entries, THEN THE Overlay SHALL display a single message stating that no switchable windows are open.
 
@@ -69,7 +69,7 @@ This document specifies the version 1 minimum viable product only. Section "Out 
 3. WHEN the Overlay is presented, THE Strip SHALL arrange Window_Cards in MRU_Order from left to right.
 4. WHEN the Overlay is presented, THE Strip SHALL place the Window_Card of the currently focused window in the leftmost position.
 5. WHEN the Overlay is presented, THE Overlay SHALL set the Selected_Card to the second Window_Card in MRU_Order, so that a press and release of the Trigger_Button without pointer movement returns the user to the previously used window.
-6. WHERE a Window_Entry carries no last-activation timestamp from the current Vortexflow_App session, THE MRU_Tracker SHALL assign an initial timestamp derived from the window's front-to-back position in the system window list, with frontmost windows receiving the most recent timestamps.
+6. WHERE a Window_Entry carries no last-activation timestamp from the current VortexFlow_App session, THE MRU_Tracker SHALL assign an initial timestamp derived from the window's front-to-back position in the system window list, with frontmost windows receiving the most recent timestamps.
 7. WHEN the number of Window_Entries exceeds the configured History_Depth, THE Strip SHALL display the History_Depth most recently activated Window_Entries.
 8. WHEN a window closes, THE MRU_Tracker SHALL discard the last-activation timestamp of the matching Window_Entry.
 
@@ -112,7 +112,7 @@ This document specifies the version 1 minimum viable product only. Section "Out 
 
 #### Acceptance Criteria
 
-1. WHEN the Vortexflow_App launches, THE Trigger_Monitor SHALL install a CGEventTap that observes Other_Mouse_Events system-wide.
+1. WHEN the VortexFlow_App launches, THE Trigger_Monitor SHALL install a CGEventTap that observes Other_Mouse_Events system-wide.
 2. WHILE the Overlay is hidden, THE Trigger_Monitor SHALL subscribe the CGEventTap to Other_Mouse_Event types only, so that primary mouse button, secondary mouse button, scroll wheel, and keyboard events bypass the CGEventTap.
 3. WHEN an Other_Mouse_Event whose button number differs from the configured Trigger_Button is observed, THE Trigger_Monitor SHALL forward the event unmodified to the destination application.
 4. WHEN an Other_Mouse_Event whose button number matches the configured Trigger_Button is observed, THE Trigger_Monitor SHALL consume the event and withhold the event from the destination application.
@@ -135,18 +135,18 @@ This document specifies the version 1 minimum viable product only. Section "Out 
 
 ### Requirement 6: Global Hotkey Fallback Trigger
 
-**User Story:** As a user whose mouse buttons are claimed by another tool, I want a keyboard shortcut that opens the same switcher, so that Vortexflow stays usable while I sort out my mouse configuration.
+**User Story:** As a user whose mouse buttons are claimed by another tool, I want a keyboard shortcut that opens the same switcher, so that VortexFlow stays usable while I sort out my mouse configuration.
 
 #### Acceptance Criteria
 
-1. WHEN the Vortexflow_App launches, THE Trigger_Monitor SHALL register the Global_Hotkey as a secondary trigger.
+1. WHEN the VortexFlow_App launches, THE Trigger_Monitor SHALL register the Global_Hotkey as a secondary trigger.
 2. WHEN the Global_Hotkey is pressed, THE Overlay SHALL become visible and remain visible until an activation or a dismissal occurs.
 3. WHILE the Overlay is visible, WHEN the primary mouse button is clicked on a Window_Card, THE Activation_Service SHALL activate the window of that Window_Card.
 4. WHILE the Overlay is visible, WHEN the Return key is pressed, THE Activation_Service SHALL activate the window of the Selected_Card.
 5. IF registration of the Global_Hotkey fails, THEN THE Menu_Bar_Controller SHALL display a warning indicator on the status item reporting the unavailable shortcut.
 6. THE Trigger_Monitor SHALL observe both press and release of the Global_Hotkey, and SHALL apply the same Activation_Mode rules to a Global_Hotkey release as to a Trigger_Button release.
 7. THE Settings_Window SHALL offer the Global_Hotkey as a choice from the preset set, and SHALL include at least one preset that uses no modifier keys.
-8. THE Settings_Window SHALL report whether the configured Global_Hotkey has been observed to fire at least once since registration, because successful registration does not establish that the combination is reaching the Vortexflow_App.
+8. THE Settings_Window SHALL report whether the configured Global_Hotkey has been observed to fire at least once since registration, because successful registration does not establish that the combination is reaching the VortexFlow_App.
 
 Criteria 6 and 7 exist for a hardware reason worth recording. Logi Options+ intercepts the extra buttons on Logitech mice inside its own driver, and a button assigned to "Do Nothing" is discarded rather than passed through, so it never reaches the CGEventTap and cannot be captured. The only route to using such a button is to assign it to a keyboard shortcut in Options+. Handling Global_Hotkey release, and offering a modifier-free preset such as F13, makes a button remapped that way behave identically to a real Trigger_Button.
 
@@ -197,16 +197,16 @@ Criteria 6 and 7 exist for a hardware reason worth recording. Logi Options+ inte
 
 ### Requirement 10: Permissions and First-Launch Setup
 
-**User Story:** As a first-time user, I want Vortexflow to tell me exactly which permissions it needs and why, so that I can get it working without hunting through System Settings.
+**User Story:** As a first-time user, I want VortexFlow to tell me exactly which permissions it needs and why, so that I can get it working without hunting through System Settings.
 
 #### Acceptance Criteria
 
-1. WHEN the Vortexflow_App launches, THE Permissions_Manager SHALL determine the current authorization status of each of the Required_Authorizations.
+1. WHEN the VortexFlow_App launches, THE Permissions_Manager SHALL determine the current authorization status of each of the Required_Authorizations.
 2. IF one or more of the Required_Authorizations is ungranted at launch, THEN THE Permissions_Manager SHALL present the Onboarding_Window.
 3. THE Onboarding_Window SHALL display for each of the Required_Authorizations the purpose of that authorization and the current status of that authorization.
 4. THE Onboarding_Window SHALL provide for each of the Required_Authorizations a control that opens the matching System Settings privacy pane.
 5. WHILE the Onboarding_Window is visible, WHEN an authorization status changes, THE Onboarding_Window SHALL display the new status within 2 seconds.
-6. WHILE all of the Required_Authorizations are granted, THE Permissions_Manager SHALL start the Vortexflow_App without presenting the Onboarding_Window.
+6. WHILE all of the Required_Authorizations are granted, THE Permissions_Manager SHALL start the VortexFlow_App without presenting the Onboarding_Window.
 7. THE Onboarding_Window SHALL display instructions for assigning the Logitech MX Master 3 Gesture button to "Do Nothing" in Logi Options+ so that the Gesture button reaches the CGEventTap as a raw mouse button.
 8. WHILE Screen Recording authorization is ungranted, THE Overlay SHALL display owning application icons as Window_Card images and SHALL continue to support selection and activation.
 9. WHILE Input Monitoring authorization is ungranted, THE Trigger_Monitor SHALL operate with the Global_Hotkey as the only trigger.
@@ -215,19 +215,19 @@ Criteria 6 and 7 exist for a hardware reason worth recording. Logi Options+ inte
 
 ### Requirement 11: Menu Bar Utility Behavior
 
-**User Story:** As a user of a background utility, I want Vortexflow to live in the menu bar and stay out of my Dock and app switcher, so that it behaves like the small tool it is.
+**User Story:** As a user of a background utility, I want VortexFlow to live in the menu bar and stay out of my Dock and app switcher, so that it behaves like the small tool it is.
 
 #### Acceptance Criteria
 
-1. THE Vortexflow_App SHALL declare itself a user interface element agent so that macOS omits the Vortexflow_App from the Dock and from the system application switcher.
-2. WHEN the Vortexflow_App launches, THE Menu_Bar_Controller SHALL display a status item in the system menu bar.
+1. THE VortexFlow_App SHALL declare itself a user interface element agent so that macOS omits the VortexFlow_App from the Dock and from the system application switcher.
+2. WHEN the VortexFlow_App launches, THE Menu_Bar_Controller SHALL display a status item in the system menu bar.
 3. WHEN the user activates the status item, THE Menu_Bar_Controller SHALL display a menu containing a permissions status summary, a control that opens the Settings_Window, the application version, and a quit control.
 4. WHEN the user selects the quit control, THE Trigger_Monitor SHALL remove the CGEventTap and unregister the Global_Hotkey.
-5. WHEN the user selects the quit control, THE Vortexflow_App SHALL terminate within 1 second.
+5. WHEN the user selects the quit control, THE VortexFlow_App SHALL terminate within 1 second.
 
 ### Requirement 12: Version 1 Settings
 
-**User Story:** As a user with a specific mouse and specific habits, I want to choose which button triggers the switcher, how it behaves when I press it, and how many windows it lists, so that Vortexflow fits my hardware rather than the other way round.
+**User Story:** As a user with a specific mouse and specific habits, I want to choose which button triggers the switcher, how it behaves when I press it, and how many windows it lists, so that VortexFlow fits my hardware rather than the other way round.
 
 #### Acceptance Criteria
 
@@ -241,9 +241,9 @@ Criteria 6 and 7 exist for a hardware reason worth recording. Logi Options+ inte
 5. WHEN the user changes the History_Depth value, THE Strip SHALL apply the new value at the next Overlay presentation.
 6. THE permissions status section SHALL display the current status of each of the Required_Authorizations and a control that opens the matching System Settings privacy pane.
 7. THE Settings_Store SHALL persist the Trigger_Button value, the History_Depth value, the Activation_Mode value, and the Global_Hotkey value across application launches, and SHALL persist nothing else.
-8. WHEN the Vortexflow_App launches with no persisted settings, THE Settings_Store SHALL apply a Trigger_Button value of middle mouse button, a History_Depth value of 10, an Activation_Mode of Automatic, and the default Global_Hotkey.
+8. WHEN the VortexFlow_App launches with no persisted settings, THE Settings_Store SHALL apply a Trigger_Button value of middle mouse button, a History_Depth value of 10, an Activation_Mode of Automatic, and the default Global_Hotkey.
 9. IF a persisted value is not recognised, THEN THE Settings_Store SHALL apply the corresponding default rather than failing.
-10. WHEN the user changes the Activation_Mode or the Global_Hotkey, THE Vortexflow_App SHALL apply the change without an application restart.
+10. WHEN the user changes the Activation_Mode or the Global_Hotkey, THE VortexFlow_App SHALL apply the change without an application restart.
 
 ### Requirement 13: Overlay Placement
 
@@ -266,8 +266,8 @@ Criteria 6 and 7 exist for a hardware reason worth recording. Logi Options+ inte
 
 1. WHEN a press of the configured Trigger_Button is observed, THE Overlay SHALL become visible within 150 ms on the Reference_Machine.
 2. WHEN the Overlay is presented, THE Overlay SHALL complete the appearance transition within 200 ms.
-3. WHILE the Overlay is hidden, THE Vortexflow_App SHALL consume less than 1 percent of one CPU core measured as a 60-second average on the Reference_Machine.
-4. WHILE the Overlay is hidden, THE Vortexflow_App SHALL occupy less than 80 MB of resident memory on the Reference_Machine.
+3. WHILE the Overlay is hidden, THE VortexFlow_App SHALL consume less than 1 percent of one CPU core measured as a 60-second average on the Reference_Machine.
+4. WHILE the Overlay is hidden, THE VortexFlow_App SHALL occupy less than 80 MB of resident memory on the Reference_Machine.
 5. WHILE the Overlay is hidden, THE Thumbnail_Service SHALL hold zero active Live_Streams.
 6. WHILE the Overlay is visible, THE Strip SHALL render selection changes at no fewer than 60 frames per second on a 60 Hz display.
 
@@ -288,12 +288,12 @@ Criteria 6 and 7 exist for a hardware reason worth recording. Logi Options+ inte
 
 #### Acceptance Criteria
 
-1. THE Vortexflow_App SHALL perform every function using local system APIs, with zero outbound network connections.
-2. THE Vortexflow_App SHALL ship with zero analytics, telemetry, or crash-reporting components.
+1. THE VortexFlow_App SHALL perform every function using local system APIs, with zero outbound network connections.
+2. THE VortexFlow_App SHALL ship with zero analytics, telemetry, or crash-reporting components.
 3. THE Settings_Store SHALL persist only the Trigger_Button value and the History_Depth value.
 4. THE Window_Registry SHALL hold window titles in volatile memory for the lifetime of the process.
-5. THE Vortexflow_App SHALL request only the Required_Authorizations.
-6. THE Vortexflow_App source repository SHALL include the MIT license text in a LICENSE file at the repository root.
+5. THE VortexFlow_App SHALL request only the Required_Authorizations.
+6. THE VortexFlow_App source repository SHALL include the MIT license text in a LICENSE file at the repository root.
 
 ### Requirement 17: Platform and Implementation Constraints
 
@@ -301,10 +301,10 @@ Criteria 6 and 7 exist for a hardware reason worth recording. Logi Options+ inte
 
 #### Acceptance Criteria
 
-1. THE Vortexflow_App SHALL declare a minimum deployment target of macOS 15.0.
-2. THE Vortexflow_App SHALL build as a universal binary containing arm64 and x86_64 slices.
-3. THE Vortexflow_App SHALL call macOS 15.0 APIs directly, with zero availability branching for macOS versions earlier than 15.0.
-4. THE Vortexflow_App SHALL be implemented in Swift, using SwiftUI for the Overlay presentation and AppKit for window management and event handling.
+1. THE VortexFlow_App SHALL declare a minimum deployment target of macOS 15.0.
+2. THE VortexFlow_App SHALL build as a universal binary containing arm64 and x86_64 slices.
+3. THE VortexFlow_App SHALL call macOS 15.0 APIs directly, with zero availability branching for macOS versions earlier than 15.0.
+4. THE VortexFlow_App SHALL be implemented in Swift, using SwiftUI for the Overlay presentation and AppKit for window management and event handling.
 5. THE Window_Registry SHALL enumerate windows using the Accessibility API and the Core Graphics window list.
 6. THE Thumbnail_Service SHALL capture window images using ScreenCaptureKit.
 

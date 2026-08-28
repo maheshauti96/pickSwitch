@@ -84,7 +84,7 @@ final class MRUTracker {
     ///
     /// 1. **Used.** An observed activation: the user switched to this window. Authoritative.
     /// 2. **Seen.** The window was on the active Space at a known time, but never focused
-    ///    while Vortexflow was watching. This tier exists for windows on other desktops:
+    ///    while VortexFlow was watching. This tier exists for windows on other desktops:
     ///    Accessibility cannot see them, so they have no focus history, and without it they
     ///    would be ordered by their position in the window server's all-Spaces list — which
     ///    is arbitrary. "When you last had it in front of you" is a much better answer.

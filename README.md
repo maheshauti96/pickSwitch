@@ -1,4 +1,4 @@
-# Vortexflow
+# VortexFlow
 
 A free, open-source window switcher for macOS, built for the mouse.
 
@@ -35,7 +35,7 @@ properly tend to be paid, closed, and quietly sending usage data somewhere.
 
 ---
 
-## What Vortexflow does about them
+## What VortexFlow does about them
 
 **Every window is its own card.** Four Finder windows are four cards, each with its own
 title, its own thumbnail and its own place in the recency order. Minimized windows and
@@ -49,12 +49,12 @@ because they are.
 
 **Mouse-first, keyboard optional.** Hold a mouse button and the switcher appears next
 to the cursor; scroll to choose, let go to switch. Your hand never moves. If you would
-rather use the keyboard, a global shortcut does the same job, and Vortexflow treats its
+rather use the keyboard, a global shortcut does the same job, and VortexFlow treats its
 press and release exactly like a button's.
 
 **Any mouse, any button.** Middle click works with no setup. For a side or thumb
 button, press **Detect Button** and then press the button — no need to know its number.
-Vortexflow watches for buttons earlier in the pipeline than most mouse utilities, so
+VortexFlow watches for buttons earlier in the pipeline than most mouse utilities, so
 buttons that other apps cannot see usually still work here. For a button your mouse
 keeps to itself, assign it to a keyboard shortcut and use that instead.
 
@@ -79,31 +79,31 @@ leaving for Spotlight. If nothing matches, Return searches the web.
 
 **Local and private.** No accounts, no telemetry, no analytics, no network calls —
 except one, described plainly: to show the icon of a site open in your browser,
-Vortexflow fetches that icon from that site's own address, with no cookies and nothing
+VortexFlow fetches that icon from that site's own address, with no cookies and nothing
 identifying, and never for a private browsing window.
 
 ---
 
 ## Download
 
-**[Download Vortexflow 1.0.0 (.dmg)](https://github.com/maheshauti96/vortexflow/releases/latest/download/Vortexflow-1.0.0.dmg)** —
+**[Download VortexFlow 1.0.0 (.dmg)](https://github.com/maheshauti96/VortexFlow/releases/latest/download/Vortexflow-1.0.0.dmg)** —
 2 MB, universal (Apple Silicon and Intel), macOS 15 or newer.
 
-All releases are on the [releases page](https://github.com/maheshauti96/vortexflow/releases).
+All releases are on the [releases page](https://github.com/maheshauti96/VortexFlow/releases).
 
 ### Installing
 
-1. Open the disk image and drag **Vortexflow** to your Applications folder.
+1. Open the disk image and drag **VortexFlow** to your Applications folder.
 2. Open it. macOS will refuse, and say the developer cannot be verified. This is
    expected — keep going.
 3. Open **System Settings → Privacy & Security**, scroll down to the **Security**
-   section, and click **Open Anyway** next to Vortexflow. Authenticate when asked.
+   section, and click **Open Anyway** next to VortexFlow. Authenticate when asked.
 4. Grant the permissions it asks for. The setup window explains what each one buys you.
 
-You only do this once; macOS then remembers Vortexflow as an exception, as described in
+You only do this once; macOS then remembers VortexFlow as an exception, as described in
 [Apple's own documentation](https://support.apple.com/en-us/guide/mac-help/mh40616/mac).
 
-The reason is worth stating plainly rather than hiding: Vortexflow is signed, but it is
+The reason is worth stating plainly rather than hiding: VortexFlow is signed, but it is
 not *notarized*, because notarizing requires a paid Apple Developer account. macOS
 blocks unnotarized downloads, and the wording it uses — "cannot be verified" — reads as
 though the app is broken rather than simply unregistered.
@@ -129,7 +129,7 @@ minute and produces a copy signed on your own machine — see
 
 ## Permissions
 
-Vortexflow asks for three permissions and explains each one on first launch. It runs
+VortexFlow asks for three permissions and explains each one on first launch. It runs
 with any subset of them and tells you what you are missing rather than failing quietly.
 
 | Permission | What it buys you | Without it |
@@ -147,7 +147,7 @@ You can reopen the setup window at any time from the menu bar icon.
 
 ## Using it
 
-By default Vortexflow works out what you meant from how long you held the button.
+By default VortexFlow works out what you meant from how long you held the button.
 
 **Hold** it and the switcher tracks your hand: scroll to move the selection, release to
 switch. Fast, once you know where you are going.
@@ -197,9 +197,9 @@ Return to switch — or entirely from the mouse. Neither is the "real" way.
 
 ### A note on the middle button
 
-Vortexflow has to *consume* whichever button triggers it, or the click would also land
+VortexFlow has to *consume* whichever button triggers it, or the click would also land
 in whatever is under the cursor. With the default middle button, that means
-middle-clicking a link to open it in a new tab stops working while Vortexflow is
+middle-clicking a link to open it in a new tab stops working while VortexFlow is
 running. Settings warns about this. Moving to a side button avoids it — press **Detect
 Button** and then that button.
 
@@ -208,8 +208,8 @@ Button** and then that button.
 ## Building from source
 
 ```sh
-git clone https://github.com/maheshauti96/vortexflow.git vortexflow
-cd vortexflow
+git clone https://github.com/maheshauti96/VortexFlow.git VortexFlow
+cd VortexFlow
 Scripts/create-signing-certificate.sh   # once
 Scripts/build-app.sh --install
 open /Applications/Vortexflow.app
@@ -249,7 +249,7 @@ To use your own identity instead:
 VORTEXFLOW_SIGN_IDENTITY="Developer ID Application: You (TEAMID)" Scripts/build-app.sh
 ```
 
-### If Vortexflow will not appear in a privacy list
+### If VortexFlow will not appear in a privacy list
 
 Almost always leftover records from a build with a different identity:
 
@@ -258,7 +258,7 @@ tccutil reset All io.vortexflow.Vortexflow    # no sudo needed
 Scripts/build-app.sh --install
 ```
 
-Then grant permissions from Vortexflow's own setup window rather than the `+` button —
+Then grant permissions from VortexFlow's own setup window rather than the `+` button —
 the app asks the system directly, which is more reliable than adding it by hand. Check
 what it sees with:
 

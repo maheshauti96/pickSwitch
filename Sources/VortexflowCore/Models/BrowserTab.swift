@@ -3,7 +3,7 @@ import Foundation
 
 /// One open browser tab, as a thing the user can switch to.
 ///
-/// Tabs are not windows, and Vortexflow's whole enumeration path is built on windows —
+/// Tabs are not windows, and VortexFlow's whole enumeration path is built on windows —
 /// CGWindowIDs, Accessibility elements, z-order. A tab has none of those. It is
 /// addressable only through the browser's own scripting interface, by the browser's
 /// internal window identifier plus a position in that window's tab list.

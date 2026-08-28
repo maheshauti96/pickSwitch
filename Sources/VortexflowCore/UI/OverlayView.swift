@@ -66,7 +66,7 @@ struct OverlayView: View {
         .frame(width: layout.panelSize.width, height: layout.panelSize.height)
         .environment(\.overlayPalette, palette)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Vortexflow window switcher")
+        .accessibilityLabel("VortexFlow window switcher")
     }
 
     @ViewBuilder

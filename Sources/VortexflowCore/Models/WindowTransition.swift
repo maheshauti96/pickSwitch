@@ -5,7 +5,7 @@ import Foundation
 ///
 /// ## What is actually animated
 ///
-/// Not the window. Vortexflow cannot animate another application's window — `AXRaise` raises
+/// Not the window. VortexFlow cannot animate another application's window — `AXRaise` raises
 /// it immediately and offers no hook — so this describes a ghost: the card's thumbnail, flown
 /// and scaled from where the card was to where the window actually is. The real activation
 /// happens at once underneath, so the switch is no slower than before; the ghost is purely an

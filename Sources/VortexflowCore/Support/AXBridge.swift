@@ -18,7 +18,7 @@ enum AXBridge {
     ///
     /// This started at 0.05 s to protect the 50 ms enumeration budget, and that was the
     /// wrong trade. AX calls are IPC round trips, and they get slow exactly when the
-    /// system is busiest — which is the instant after Vortexflow activates a window,
+    /// system is busiest — which is the instant after VortexFlow activates a window,
     /// and therefore the instant before the user is most likely to reopen the switcher.
     /// A timeout that tight made every application's window query fail at once, and
     /// enumeration returned nothing, which surfaced as a "no switchable windows are
