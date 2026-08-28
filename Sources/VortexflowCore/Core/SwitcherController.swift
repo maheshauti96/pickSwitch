@@ -126,6 +126,10 @@ public final class SwitcherController {
     /// soon as the scripting id lands, so the item does not have to wait on pairing to exist.
     private var pendingTabSearchWindowID: CGWindowID?
 
+    /// A tile or Move to Display that is waiting for Full Screen to finish leaving.
+    /// Bumped so a second click replaces the first wait rather than stacking.
+    private var fullScreenFollowThroughGeneration: UInt64 = 0
+
     /// True while a card's context menu is tracking.
     ///
     /// Choosing a menu item is a primary click, and a primary click is what dismisses the overlay —
@@ -1974,6 +1978,9 @@ public final class SwitcherController {
     /// menu bar and the Dock. `DisplayInfo` carries both, in the same Quartz global space that
     /// `kAXPositionAttribute` speaks, so there is no coordinate conversion left to get wrong here —
     /// it was done once where the two spaces are documented together.
+    ///
+    /// A Full Screen window occupies a Space, so the frame is applied after leaving it.
+    /// That is what lets a window on a live-shared display be tiled or moved off it.
     private func tileWindow(_ entry: WindowEntry, to tile: WindowTile) {
         guard let element = entry.axElement else { return }
         guard let display = state.displayLayout.placementDisplay(
@@ -1984,6 +1991,17 @@ public final class SwitcherController {
             return
         }
 
+        afterLeavingFullScreenIfNeeded(entry, element: element) { [weak self] in
+            self?.applyTile(entry, element: element, tile: tile, display: display)
+        }
+    }
+
+    private func applyTile(
+        _ entry: WindowEntry,
+        element: AXUIElement,
+        tile: WindowTile,
+        display: DisplayInfo
+    ) {
         let frame = tile.frame(in: display.visibleBounds)
         let applied = AXBridge.setFrame(element, frame)
         Log.overlay.info("""
@@ -2029,10 +2047,56 @@ public final class SwitcherController {
             """)
     }
 
+    /// How long a tile may wait for Full Screen to finish leaving its Space.
+    private static let fullScreenExitTimeout: TimeInterval = 2.0
+
+    /// Leave Full Screen if needed, then run `then`. The Space change dismisses the
+    /// overlay; the follow-through still has to fire, or Move to Display from a
+    /// shared screen would never land.
+    private func afterLeavingFullScreenIfNeeded(
+        _ entry: WindowEntry,
+        element: AXUIElement,
+        then: @escaping () -> Void
+    ) {
+        guard Self.windowIsFullScreen(entry) else {
+            then()
+            return
+        }
+
+        fullScreenFollowThroughGeneration &+= 1
+        let generation = fullScreenFollowThroughGeneration
+        setFullScreen(entry, false)
+
+        Task { @MainActor [weak self] in
+            let deadline = Date().addingTimeInterval(Self.fullScreenExitTimeout)
+            while Date() < deadline {
+                guard let self, self.fullScreenFollowThroughGeneration == generation else { return }
+                if !(AXBridge.bool(element, "AXFullScreen") ?? false) {
+                    // The restored desktop frame lands a beat after the flag flips.
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    guard self.fullScreenFollowThroughGeneration == generation else { return }
+                    then()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            guard let self, self.fullScreenFollowThroughGeneration == generation else { return }
+            Log.overlay.info("full screen exit wait elapsed; placing the window anyway")
+            then()
+        }
+    }
+
     /// Centre the window on another display, shrinking it if that display is smaller.
     private func moveWindow(_ entry: WindowEntry, to display: DisplayInfo) {
         guard let element = entry.axElement else { return }
-        let frame = display.frameForMovedWindow(size: entry.frame.size)
+        afterLeavingFullScreenIfNeeded(entry, element: element) { [weak self] in
+            self?.applyMove(entry, element: element, to: display)
+        }
+    }
+
+    private func applyMove(_ entry: WindowEntry, element: AXUIElement, to display: DisplayInfo) {
+        let size = AXBridge.size(element, kAXSizeAttribute as String) ?? entry.frame.size
+        let frame = display.frameForMovedWindow(size: size)
         let applied = AXBridge.setFrame(element, frame)
         Log.overlay.info("""
             moved \(entry.applicationName, privacy: .public) to \

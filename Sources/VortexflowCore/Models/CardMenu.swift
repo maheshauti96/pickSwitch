@@ -19,9 +19,10 @@ import Foundation
 ///   it is impossible, and offering it would be a lie.
 /// - Tiling is withheld for a minimized window. Its frame is not where it is or how big it looks, so
 ///   moving it to half a screen you cannot see it on changes nothing you can observe.
-/// - Tiling and Move to Display are withheld in Full Screen. The window occupies a Space, not a
-///   resizable frame on a desktop — the same reason macOS greys those items out. Exit Full Screen
-///   is offered instead.
+/// - Full Screen still occupies a Space, so a tile or Move to Display first leaves that Space
+///   and then places the window. The items stay offered: hiding them would block moving a
+///   shared-screen window onto another display. Exit Full Screen remains for leaving without
+///   placing.
 /// - Muting appears only for a window actually making noise. It is not a toggle and not a preference;
 ///   it acts on what is playing right now, and there is nothing to act on otherwise.
 enum CardMenuItem: Equatable {
@@ -134,13 +135,17 @@ enum CardMenu {
             // what keeps a slightly long throw from closing the window.
             rows.windowControls.append(.minimizeWindow)
             rows.windowControls.append(.closeWindow)
-            if !context.isMinimized, !context.isFullScreen {
+            if !context.isMinimized {
                 rows.moveResize = WindowTile.moveResize.map(CardMenuItem.tileWindow)
                 rows.fillArrange = WindowTile.fillArrange.map(CardMenuItem.tileWindow)
-                rows.placement.append(.enterFullScreen)
+                // A full-screen window can still be placed: the action leaves the Space
+                // first. Exit is offered instead of Enter, because the flag is already true.
+                if context.isFullScreen {
+                    rows.placement.append(.exitFullScreen)
+                } else {
+                    rows.placement.append(.enterFullScreen)
+                }
                 rows.placement.append(contentsOf: context.otherDisplays.map(CardMenuItem.moveToDisplay))
-            } else if !context.isMinimized, context.isFullScreen {
-                rows.placement.append(.exitFullScreen)
             }
         }
 

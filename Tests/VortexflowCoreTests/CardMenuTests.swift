@@ -120,9 +120,10 @@ struct CardMenuTests {
         #expect(CardMenuItem.moveToDisplay(other).title == "Move to DELL U2720Q")
     }
 
-    /// Full Screen is a Space, not a resizable frame. macOS greys out tiling and Move to Display
-    /// there because they cannot act; we omit them and offer Exit Full Screen instead.
-    @Test func aFullScreenWindowOffersExitInsteadOfTiling() {
+    /// Full Screen is a Space, but the items still have to be offered: choosing one
+    /// leaves the Space and then places the window. That is the live-share case —
+    /// Move to Display has to remain reachable. Enter is replaced by Exit.
+    @Test func aFullScreenWindowStillOffersTilingAndExit() {
         var context = browserContext
         context.isFullScreen = true
         let other = DisplayInfo(
@@ -133,9 +134,10 @@ struct CardMenuTests {
         )
         context.otherDisplays = [other]
         let result = rows(window(), context)
-        #expect(result.placement == [.exitFullScreen])
-        #expect(result.moveResize.isEmpty)
-        #expect(result.fillArrange.isEmpty)
+        #expect(result.moveResize == WindowTile.moveResize.map(CardMenuItem.tileWindow))
+        #expect(result.fillArrange == WindowTile.fillArrange.map(CardMenuItem.tileWindow))
+        #expect(result.placement == [.exitFullScreen, .moveToDisplay(other)])
+        #expect(!result.placement.contains(.enterFullScreen))
         #expect(result.windowControls.contains(.closeWindow))
         #expect(CardMenuItem.exitFullScreen.title == "Exit Full Screen")
     }
