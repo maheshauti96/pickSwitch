@@ -150,7 +150,7 @@ final class HotKeyMonitor {
         pressTimestamp = DispatchTime.now()
         if !hasEverFired {
             hasEverFired = true
-            Log.trigger.info("global hotkey fired for the first time; the shortcut is reaching Vortexflow")
+            Log.trigger.info("global hotkey fired for the first time; the shortcut is reaching VortexFlow")
         } else {
             Log.trigger.debug("global hotkey fired")
         }

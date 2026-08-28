@@ -7,7 +7,7 @@
 #
 #   * TCC (Accessibility / Screen Recording / Input Monitoring) attaches grants to a
 #     bundle identity. A loose executable gets re-prompted or silently denied.
-#   * LSUIElement lives in Info.plist, and it is what keeps Vortexflow out of the
+#   * LSUIElement lives in Info.plist, and it is what keeps VortexFlow out of the
 #     Dock and out of Cmd-Tab.
 #   * NSStatusItem and the non-activating panel both want a real bundled app.
 #
@@ -19,7 +19,7 @@
 #
 # Signing:
 #   Run Scripts/create-signing-certificate.sh once. Without a stable signing
-#   identity, macOS forgets Vortexflow's permissions on every rebuild and can end up
+#   identity, macOS forgets VortexFlow's permissions on every rebuild and can end up
 #   refusing to add it to the privacy lists at all.
 #
 set -euo pipefail
@@ -185,7 +185,7 @@ if [[ "$INSTALL" -eq 1 ]]; then
 	INSTALLED_PATH="/Applications/$APP_NAME.app"
 
 	# Remove the staging copy once it has been installed. Leaving it behind gave Spotlight two
-	# identical "Vortexflow" results with no way to tell which was which, and the wrong one is a
+	# identical "VortexFlow" results with no way to tell which was which, and the wrong one is a
 	# trap: build/ is deleted on the next build, so a privacy grant given to it points at a path
 	# that no longer exists. Without --install the bundle stays put, since then it is the product.
 	rm -rf "$APP_BUNDLE"
@@ -215,5 +215,5 @@ fi
 echo "Run it with:  open '$INSTALLED_PATH'"
 echo "Check setup:  '$INSTALLED_PATH/Contents/MacOS/$APP_NAME' --probe"
 echo
-echo "Vortexflow will ask for Input Monitoring, Accessibility and Screen Recording."
+echo "VortexFlow will ask for Input Monitoring, Accessibility and Screen Recording."
 echo "Grant all three for the full experience; it degrades gracefully without each."

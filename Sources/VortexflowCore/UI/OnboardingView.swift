@@ -40,9 +40,9 @@ struct OnboardingView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("Welcome to Vortexflow")
+            Text("Welcome to VortexFlow")
                 .font(.system(size: 19, weight: .semibold))
-            Text("Switch windows with your mouse. Vortexflow needs three macOS permissions to do its job, and nothing else.")
+            Text("Switch windows with your mouse. VortexFlow needs three macOS permissions to do its job, and nothing else.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -77,10 +77,10 @@ struct OnboardingView: View {
                 bullet("Open the configuration app that came with your mouse, if it has one.")
                 bullet("Check the button is not set to \u{201C}Do Nothing\u{201D}; that swallows the press.")
                 bullet("Assign it to Forward or Back, then try Detect Button again.")
-                bullet("Or assign it to a keyboard shortcut, and pick the same one in Vortexflow Settings.")
+                bullet("Or assign it to a keyboard shortcut, and pick the same one in VortexFlow Settings.")
             }
 
-            Text("Vortexflow watches for mouse buttons earlier in the pipeline than mouse utilities do, so most extra buttons are reachable directly. A button the mouse keeps to itself never reaches the Mac at all, and the keyboard shortcut route covers that \u{2014} Vortexflow handles the press and the release, so it behaves exactly like a mouse button: tap to keep the switcher open, hold and release to switch.")
+            Text("VortexFlow watches for mouse buttons earlier in the pipeline than mouse utilities do, so most extra buttons are reachable directly. A button the mouse keeps to itself never reaches the Mac at all, and the keyboard shortcut route covers that \u{2014} VortexFlow handles the press and the release, so it behaves exactly like a mouse button: tap to keep the switcher open, hold and release to switch.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -103,7 +103,7 @@ struct OnboardingView: View {
                     .foregroundStyle(.green)
                     .font(.system(size: 12, weight: .medium))
             } else {
-                Text("You can start using Vortexflow now; missing permissions only reduce what it can do.")
+                Text("You can start using VortexFlow now; missing permissions only reduce what it can do.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

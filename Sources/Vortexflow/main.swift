@@ -3,7 +3,7 @@ import VortexflowCore
 
 // Manual NSApplication bootstrap rather than `@main` on a SwiftUI `App` type.
 //
-// Vortexflow is a menu-bar agent whose main surface is a non-activating overlay
+// VortexFlow is a menu-bar agent whose main surface is a non-activating overlay
 // panel. SwiftUI's `App` lifecycle insists on owning at least one scene and manages
 // window activation in ways that fight both of those. AppKit's lifecycle gives
 // direct control over the activation policy, the status item and the panel; the

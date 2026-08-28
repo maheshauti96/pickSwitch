@@ -71,7 +71,7 @@ protocol TriggerMonitorDelegate: AnyObject {
 ///
 /// ## Pass-through discipline
 ///
-/// The callback consumes an event only when it is one Vortexflow acts on
+/// The callback consumes an event only when it is one VortexFlow acts on
 /// (Requirement 5.4, 5.7). Every other event is returned untouched
 /// (Requirement 5.3). Getting this wrong would break middle-click-to-open-in-new-tab
 /// system-wide, so the button-number comparison is the first thing the callback does
@@ -381,7 +381,7 @@ final class TriggerMonitor {
     /// while other applications used it perfectly well. `.cghidEventTap` sits ahead of
     /// session-level taps, so the button arrives before anything else can swallow it.
     ///
-    /// Creating a HID-level tap needs Input Monitoring, which Vortexflow already
+    /// Creating a HID-level tap needs Input Monitoring, which VortexFlow already
     /// requires. Session level is kept as a fallback for the case where the HID tap
     /// cannot be created, since a session tap is still better than no trigger at all.
     private static let tapLocations: [CGEventTapLocation] = [

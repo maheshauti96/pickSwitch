@@ -109,9 +109,9 @@ struct WindowRegistryTests {
         #expect(!none.liveWindowIDs.isEmpty)
     }
 
-    /// Vortexflow's own overlay must never appear as something to switch to
+    /// VortexFlow's own overlay must never appear as something to switch to
     /// (Requirement 1.6), and the second pass is a new chance to get that wrong.
-    @Test("Vortexflow never lists its own windows")
+    @Test("VortexFlow never lists its own windows")
     func ownWindowsAreExcluded() {
         let subject = snapshot()
         let ownPID = ProcessInfo.processInfo.processIdentifier

@@ -14,7 +14,7 @@ import Foundation
 public enum Diagnostics {
 
     public static func runProbe() {
-        print("Vortexflow \(MenuBarController.versionString) diagnostics")
+        print("VortexFlow \(MenuBarController.versionString) diagnostics")
         print(String(repeating: "-", count: 52))
 
         reportPermissions()
@@ -43,7 +43,7 @@ public enum Diagnostics {
 
                   Caveat: this probe runs as a child of your terminal, and macOS
                   attributes some checks to the parent process rather than to
-                  Vortexflow — Screen Recording especially. A "not granted" line here
+                  VortexFlow — Screen Recording especially. A "not granted" line here
                   may be your terminal's status, not the app's.
 
                   For the app's own reading:
@@ -86,7 +86,7 @@ public enum Diagnostics {
             }
         } else {
             print("  could not create an event tap; Input Monitoring is probably not granted")
-            print("  (when run from a terminal this may reflect the terminal, not Vortexflow)")
+            print("  (when run from a terminal this may reflect the terminal, not VortexFlow)")
         }
     }
 

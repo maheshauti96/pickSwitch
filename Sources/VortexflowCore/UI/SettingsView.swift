@@ -65,7 +65,7 @@ struct SettingsView: View {
 
     /// Placed right next to the Detect control, because this is where someone discovers that
     /// a button they can plainly feel under their thumb cannot be detected, and needs to know
-    /// why before concluding Vortexflow is broken.
+    /// why before concluding VortexFlow is broken.
     ///
     /// Deliberately names no vendor. Every mouse maker ships a configuration app, several of
     /// them capture the extra buttons the same way, and naming one would date the advice while
@@ -79,7 +79,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Extra button not detected?")
                 .font(.system(size: 11, weight: .semibold))
-            Text("Some mice hold their extra buttons inside the mouse itself, using the configuration app that came with it. A button held that way never reaches macOS, so no application can see it \u{2014} Vortexflow included. Setting it to \u{201C}Do Nothing\u{201D} does not help; that still swallows the press.")
+            Text("Some mice hold their extra buttons inside the mouse itself, using the configuration app that came with it. A button held that way never reaches macOS, so no application can see it \u{2014} VortexFlow included. Setting it to \u{201C}Do Nothing\u{201D} does not help; that still swallows the press.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -87,7 +87,7 @@ struct SettingsView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Alternative: assign it to a keyboard shortcut there, record a combination you can actually type such as \u{2318}\u{2325}\u{2303}Space, and pick the same one under Keyboard shortcut below. Vortexflow treats it exactly like a mouse button.")
+            Text("Alternative: assign it to a keyboard shortcut there, record a combination you can actually type such as \u{2318}\u{2325}\u{2303}Space, and pick the same one under Keyboard shortcut below. VortexFlow treats it exactly like a mouse button.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -423,7 +423,7 @@ struct SettingsView: View {
     private var privacySection: some View {
         Section {
             // Requirement 16.1, 16.2 stated where a user will actually see it.
-            Text("Vortexflow runs entirely on this Mac. It makes no network connections and collects nothing.")
+            Text("VortexFlow runs entirely on this Mac. It makes no network connections and collects nothing.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

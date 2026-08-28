@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Creates a self-signed code-signing certificate for local Vortexflow builds.
+# Creates a self-signed code-signing certificate for local VortexFlow builds.
 #
 # Why this exists
 # ---------------
@@ -110,7 +110,7 @@ cat <<-NOTE
 
 	It is reported as untrusted, which is expected and harmless: trust affects
 	verifying signatures, not making them. What matters is that the identity now
-	stays the same across rebuilds, so macOS can remember Vortexflow's permissions.
+	stays the same across rebuilds, so macOS can remember VortexFlow's permissions.
 
 	Next, clear the stale records left behind by the earlier ad-hoc builds and
 	reinstall:

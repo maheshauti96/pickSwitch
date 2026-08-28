@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Scanning is intentionally synchronous: the controller owns where it runs and calls this on
 /// a dedicated utility queue at launch. Results are cached for the process lifetime because an
-/// Applications directory changing during one Vortexflow session is uncommon, while walking it
+/// Applications directory changing during one VortexFlow session is uncommon, while walking it
 /// every time the overlay appears would put disk I/O on a latency-sensitive interaction.
 final class ApplicationCatalog: @unchecked Sendable {
 

@@ -14,7 +14,7 @@ import IOKit.hid
 ///   stream. Observed directly: pressing the thumb button produced an event for
 ///   *button 2*, the wheel click, rather than a distinct number.
 ///
-/// This is why other applications can bind that button while Vortexflow could not, and
+/// This is why other applications can bind that button while VortexFlow could not, and
 /// why they tend to label it something like "Aux Button" instead of giving it a mouse
 /// button number — they are reading HID usages, not mouse events.
 ///
@@ -26,7 +26,7 @@ import IOKit.hid
 /// button has nothing to interfere with. For buttons that *do* produce mouse events,
 /// the event tap remains in charge, because it can withhold them.
 ///
-/// Requires Input Monitoring, which Vortexflow already requires for the event tap.
+/// Requires Input Monitoring, which VortexFlow already requires for the event tap.
 final class HIDButtonMonitor {
 
     /// Button index in the same space `TriggerButton` uses, i.e. the value a
@@ -51,7 +51,7 @@ final class HIDButtonMonitor {
     /// watching the raw stream while the user presses the button is definitive.
     ///
     /// It cannot be a command-line flag: run from a terminal, macOS attributes Input
-    /// Monitoring to the terminal rather than to Vortexflow, and the HID manager fails
+    /// Monitoring to the terminal rather than to VortexFlow, and the HID manager fails
     /// to open. It has to run inside the app.
     private var isVerbose = false
     /// Highest button usage seen, purely for diagnostics: it tells a user how many

@@ -36,7 +36,7 @@ final class MenuBarController {
     }
 
     private func configureButton() {
-        applyAppearance(hasWarning: false, tooltip: "Vortexflow")
+        applyAppearance(hasWarning: false, tooltip: "VortexFlow")
         statusItem.menu = buildMenu()
         logVisibility(context: "initial")
     }
@@ -70,7 +70,7 @@ final class MenuBarController {
         let hasWarning = !warnings.isEmpty
         applyAppearance(
             hasWarning: hasWarning,
-            tooltip: hasWarning ? Self.warningSummary(warnings) : "Vortexflow"
+            tooltip: hasWarning ? Self.warningSummary(warnings) : "VortexFlow"
         )
         // Rebuild so the permissions line reflects current status.
         statusItem.menu = buildMenu()
@@ -91,7 +91,7 @@ final class MenuBarController {
 
         button.imagePosition = .imageOnly
         button.toolTip = tooltip
-        button.setAccessibilityLabel(hasWarning ? "Vortexflow, needs attention" : "Vortexflow")
+        button.setAccessibilityLabel(hasWarning ? "VortexFlow, needs attention" : "VortexFlow")
 
         if let image = Self.icon(hasWarning: hasWarning) {
             image.isTemplate = true
@@ -102,7 +102,7 @@ final class MenuBarController {
             // invisible.
             button.image = nil
             button.imagePosition = .noImage
-            button.title = hasWarning ? "Vortexflow !" : "Vortexflow"
+            button.title = hasWarning ? "VortexFlow !" : "VortexFlow"
         }
     }
 
@@ -123,7 +123,7 @@ final class MenuBarController {
                 "square.on.square",
                 "macwindow",
             ]
-        let description = hasWarning ? "Vortexflow needs attention" : "Vortexflow"
+        let description = hasWarning ? "VortexFlow needs attention" : "VortexFlow"
 
         for name in candidates {
             if let image = NSImage(systemSymbolName: name, accessibilityDescription: description) {
@@ -207,11 +207,11 @@ final class MenuBarController {
 
         menu.addItem(.separator())
 
-        let version = NSMenuItem(title: "Vortexflow \(Self.versionString)", action: nil, keyEquivalent: "")
+        let version = NSMenuItem(title: "VortexFlow \(Self.versionString)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
 
-        let quit = NSMenuItem(title: "Quit Vortexflow", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit VortexFlow", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
 

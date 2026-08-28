@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Vortexflow</string>
+	<string>VortexFlow</string>
 	<key>CFBundleExecutable</key>
 	<string>Vortexflow</string>
 	<key>CFBundleIdentifier</key>
@@ -11,7 +11,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Vortexflow</string>
+	<string>VortexFlow</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,11 +23,11 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Vortexflow searches your open browser tabs so you can jump straight to one by name, and switches to the tab you pick.</string>
+	<string>VortexFlow searches your open browser tabs so you can jump straight to one by name, and switches to the tab you pick.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>MIT Licensed. Vortexflow contributors.</string>
+	<string>MIT Licensed. VortexFlow contributors.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>

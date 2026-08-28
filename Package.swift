@@ -2,7 +2,7 @@
 import Foundation
 import PackageDescription
 
-// Vortexflow is built with SwiftPM rather than an Xcode project so that the whole
+// VortexFlow is built with SwiftPM rather than an Xcode project so that the whole
 // app can be produced from the command line with only the Command Line Tools
 // installed. `Scripts/build-app.sh` wraps the executable produced here into a
 // proper `Vortexflow.app` bundle (Info.plist + code signature), which is required

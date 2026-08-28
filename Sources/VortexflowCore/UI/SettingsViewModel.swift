@@ -130,7 +130,7 @@ final class SettingsViewModel: ObservableObject {
     /// Start listening for the next key combination.
     ///
     /// A local `NSEvent` monitor rather than the overlay's event tap: recording happens while
-    /// the Settings window is focused, which is the one time Vortexflow has a key window and
+    /// the Settings window is focused, which is the one time VortexFlow has a key window and
     /// can simply read its own key events. It also means recording needs no permissions at
     /// all, unlike the tap.
     func beginShortcutCapture() {

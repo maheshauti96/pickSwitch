@@ -90,6 +90,6 @@ struct TriggerButton: Equatable, Hashable, Codable, Sendable {
 
     var conflictWarning: String? {
         guard hasCommonConflict else { return nil }
-        return "Vortexflow has to consume this button, so middle-click to open a link in a new tab will stop working in browsers. A thumb button avoids that."
+        return "VortexFlow has to consume this button, so middle-click to open a link in a new tab will stop working in browsers. A thumb button avoids that."
     }
 }

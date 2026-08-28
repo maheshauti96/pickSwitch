@@ -150,7 +150,7 @@ enum CardMenu {
         }
 
         // Under the preview, because it is about what the picture contains. For a tabbed
-        // window that is a tab, and Vortexflow's own search is already the fastest way there.
+        // window that is a tab, and VortexFlow's own search is already the fastest way there.
         if context.hasSearchableTabs {
             rows.contents.append(.searchWindowTabs(count: context.knownTabCount))
         }

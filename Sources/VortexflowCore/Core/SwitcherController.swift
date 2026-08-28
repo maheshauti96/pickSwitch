@@ -2338,7 +2338,7 @@ public final class SwitcherController {
     private func installClickMonitors() {
         removeClickMonitors()
 
-        // Clicks delivered to Vortexflow, including the normal card-click path.
+        // Clicks delivered to VortexFlow, including the normal card-click path.
         localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
             guard let self else { return event }
             let point = event.window?.convertPoint(toScreen: event.locationInWindow)

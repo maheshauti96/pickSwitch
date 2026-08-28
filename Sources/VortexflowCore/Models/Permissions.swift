@@ -1,6 +1,6 @@
 import Foundation
 
-/// The three authorizations Vortexflow needs, and nothing else
+/// The three authorizations VortexFlow needs, and nothing else
 /// (Requirement 10, Requirement 16.5).
 enum Authorization: String, CaseIterable, Identifiable, Sendable {
     case inputMonitoring
@@ -23,11 +23,11 @@ enum Authorization: String, CaseIterable, Identifiable, Sendable {
     var purpose: String {
         switch self {
         case .inputMonitoring:
-            return "Lets Vortexflow notice when you hold your extra mouse button. Without it, only the keyboard shortcut opens the switcher."
+            return "Lets VortexFlow notice when you hold your extra mouse button. Without it, only the keyboard shortcut opens the switcher."
         case .accessibility:
-            return "Lets Vortexflow list individual windows and raise the exact one you pick. Without it, Vortexflow can only bring a whole app forward."
+            return "Lets VortexFlow list individual windows and raise the exact one you pick. Without it, VortexFlow can only bring a whole app forward."
         case .screenRecording:
-            return "Lets Vortexflow show a thumbnail of each window. Without it, cards show app icons instead of previews."
+            return "Lets VortexFlow show a thumbnail of each window. Without it, cards show app icons instead of previews."
         }
     }
 
