@@ -59,7 +59,7 @@ struct OverlayView: View {
                     .id(state.presentationID)
             }
 
-            if state.isSearching {
+            if state.showsSearch {
                 searchField
             }
         }
@@ -699,7 +699,9 @@ struct OverlayView: View {
     /// true reads as a bug.
     private var emptyState: some View {
         VStack(spacing: 6) {
-            if state.isSearching {
+            if state.tabScope != nil {
+                tabScopeEmptyView
+            } else if state.isSearching {
                 searchMissView
             } else {
                 Image(systemName: "macwindow.badge.plus")
@@ -714,6 +716,27 @@ struct OverlayView: View {
         .padding(.vertical, 22)
         // Clear of the search field when one is showing.
         .padding(.top, layout.searchChrome)
+    }
+
+    /// A tab-scoped list that is empty. Distinguished from "no switchable windows" because
+    /// the windows are still open — they were just asked not to be shown.
+    @ViewBuilder
+    private var tabScopeEmptyView: some View {
+        Image(systemName: "magnifyingglass")
+            .font(.system(size: 26, weight: .light))
+            .foregroundStyle(palette.secondaryText)
+        if !state.hasLoadedTabs {
+            Text("Looking for tabs…")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.text)
+        } else {
+            Text("No tabs in this window")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.text)
+        }
+        Text("Esc to go back")
+            .font(.system(size: 10))
+            .foregroundStyle(palette.secondaryText)
     }
 
     /// What an unresolved or final search miss says.

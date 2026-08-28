@@ -246,12 +246,34 @@ struct BrowserTabTests {
     func safariUsesItsOwnTerms() {
         #expect(BrowserTab.Browser.safari.titleProperty == "name")
         #expect(BrowserTab.Browser.safari.usesCurrentTab)
+        #expect(!BrowserTab.Browser.safari.usesSelectedTab)
 
-        for browser in BrowserTab.Browser.allCases where browser != .safari {
+        for browser in BrowserTab.Browser.allCases
+            where browser != .safari && browser != .terminal
+        {
             #expect(browser.titleProperty == "title")
             #expect(!browser.usesCurrentTab)
+            #expect(!browser.usesSelectedTab)
+            #expect(browser.hasTabURLs)
         }
     }
+
+    /// Terminal's dictionary is a third vocabulary: no tab `name`, no URL, and selection is
+    /// a boolean on the tab rather than an index on the window.
+    @Test("Terminal uses its own scripting terms")
+    func terminalUsesItsOwnTerms() {
+        let terminal = BrowserTab.Browser.terminal
+        #expect(terminal.bundleIdentifier == "com.apple.Terminal")
+        #expect(terminal.scriptingName == "Terminal")
+        #expect(terminal.titleProperty == "custom title")
+        #expect(terminal.usesSelectedTab)
+        #expect(!terminal.usesCurrentTab)
+        #expect(!terminal.hasTabURLs)
+        #expect(!terminal.reportsWindowMode)
+        #expect(terminal.needsWindowInspection)
+    }
+
+
 
     // MARK: - Parsing tabs
 
@@ -362,5 +384,50 @@ struct BrowserTabTests {
         let tabs = BrowserTabService.parseTabs(output, browser: .chrome)
         #expect(tabs.count == 1)
         #expect(tabs[0].title == "Real")
+    }
+
+    /// Terminal has no URL and no browsing mode. A custom title is enough to keep the tab,
+    /// and nothing about it is eligible for a favicon fetch.
+    @Test("Terminal tabs parse from titles and bounds")
+    func terminalTabsParseFromTitlesAndBounds() {
+        let output = [
+            "7659", "0", "70", "877", "605", "project — zsh",
+        ].joined(separator: Self.field)
+
+        let tabs = BrowserTabService.parseTerminalTabs(output)
+        #expect(tabs.count == 1)
+        #expect(tabs[0].windowIdentifier == 7659)
+        #expect(tabs[0].tabIndex == 1)
+        #expect(tabs[0].title == "project — zsh")
+        #expect(!tabs[0].allowsFaviconRequest)
+        #expect(tabs[0].url.isEmpty)
+        #expect(tabs[0].groupKey == nil, "a lone window is not a tab group")
+    }
+
+    /// The pills in Terminal's title bar are other windows sharing a frame, not `tabs of window`.
+    /// Grouping on bounds is what lets Search through Tabs list both.
+    @Test("Terminal windows that share a frame are one tab group")
+    func terminalWindowsThatShareAFrameAreOneTabGroup() {
+        let output = [
+            ["7659", "0", "70", "877", "605", "grok"].joined(separator: Self.field),
+            ["7656", "0", "70", "877", "605", "zsh"].joined(separator: Self.field),
+        ].joined(separator: Self.record)
+
+        let tabs = BrowserTabService.parseTerminalTabs(output)
+        #expect(tabs.map(\.title) == ["grok", "zsh"])
+        #expect(tabs.map(\.windowIdentifier) == [7659, 7656])
+        #expect(Set(tabs.compactMap(\.groupKey)).count == 1)
+        #expect(tabs[0].groupKey == "0,70,877,605")
+    }
+
+    @Test("Terminal windows on different frames stay separate")
+    func terminalWindowsOnDifferentFramesStaySeparate() {
+        let output = [
+            ["1", "0", "70", "877", "605", "left"].joined(separator: Self.field),
+            ["2", "900", "70", "1777", "605", "right"].joined(separator: Self.field),
+        ].joined(separator: Self.record)
+
+        let tabs = BrowserTabService.parseTerminalTabs(output)
+        #expect(tabs.allSatisfy { $0.groupKey == nil })
     }
 }

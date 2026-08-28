@@ -21,7 +21,7 @@ struct CardMenuTests {
 
     private var browserContext: CardMenu.Context {
         CardMenu.Context(
-            isBrowserWindow: true,
+            hasSearchableTabs: true,
             knownTabCount: 23,
             isAudible: false,
             hasAccessibilityElement: true,
@@ -44,8 +44,11 @@ struct CardMenuTests {
         let result = rows(window(), context)
 
         #expect(result.windowControls == [.minimizeWindow, .closeWindow])
-        #expect(result.tiling == [.tileWindow(.leftHalf), .tileWindow(.rightHalf)])
-        #expect(result.actions == [.searchWindowTabs(count: 23), .muteAudible])
+        #expect(result.moveResize == WindowTile.moveResize.map(CardMenuItem.tileWindow))
+        #expect(result.fillArrange == WindowTile.fillArrange.map(CardMenuItem.tileWindow))
+        #expect(result.placement == [.enterFullScreen])
+        #expect(result.contents == [.searchWindowTabs(count: 23)])
+        #expect(result.actions == [.muteAudible])
     }
 
     /// Close is last, so it lands furthest into the corner. The pointer is least accurate at the end of
@@ -56,14 +59,16 @@ struct CardMenuTests {
 
     /// For a browser, the useful thing is the tab, and the fastest route to a tab is the search the
     /// overlay already has. So it leads its row.
-    @Test func aBrowserWindowLeadsItsActionsWithTabSearch() {
-        #expect(rows(window(), browserContext).actions.first == .searchWindowTabs(count: 23))
+    @Test func aBrowserWindowOffersTabSearchUnderThePreview() {
+        #expect(rows(window(), browserContext).contents == [.searchWindowTabs(count: 23)])
+        #expect(!rows(window(), browserContext).actions.contains(.searchWindowTabs(count: 23)))
     }
 
     @Test func theTabCountIsShownWhenKnownAndOmittedWhenNot() {
-        #expect(CardMenuItem.searchWindowTabs(count: 23).title == "Search this window's 23 tabs")
+        #expect(CardMenuItem.searchWindowTabs(count: 23).title == "Search through 23 Tabs")
+        #expect(CardMenuItem.searchWindowTabs(count: 1).title == "Search through 1 Tab")
         // Tabs are not fetched until the user types, so the item has to stand without a number.
-        #expect(CardMenuItem.searchWindowTabs(count: nil).title == "Search this window's tabs")
+        #expect(CardMenuItem.searchWindowTabs(count: nil).title == "Search through Tabs")
     }
 
     // MARK: - What was deliberately taken away
@@ -86,13 +91,29 @@ struct CardMenuTests {
         #expect(!titles.contains { $0.localizedCaseInsensitiveContains("pin") })
     }
 
-    /// Only the vertical halves. A half-height window shows too few lines to be worth the click.
-    @Test func onlyTheTwoVerticalHalvesAreOffered() {
-        let tiles = rows(window(), browserContext).tiling.compactMap { item -> WindowTile? in
-            if case .tileWindow(let tile) = item { return tile }
-            return nil
-        }
-        #expect(tiles == [.leftHalf, .rightHalf])
+    /// The two rows match macOS's own window menu: four halves, then fill and the remaining
+    /// arrangements, then Full Screen. Move to Display is absent until there is another screen.
+    @Test func thePlacementsMatchTheSystemWindowMenu() {
+        let result = rows(window(), browserContext)
+        let move = result.moveResize.compactMap(Self.tile)
+        let fill = result.fillArrange.compactMap(Self.tile)
+        #expect(move == WindowTile.moveResize)
+        #expect(fill == WindowTile.fillArrange)
+        #expect(result.placement == [.enterFullScreen])
+    }
+
+    @Test func anotherDisplayIsOfferedAsAMoveTarget() {
+        let other = DisplayInfo(
+            number: 2,
+            bounds: CGRect(x: 1920, y: 0, width: 1920, height: 1080),
+            isBuiltIn: false,
+            name: "DELL U2720Q"
+        )
+        var context = browserContext
+        context.otherDisplays = [other]
+        let result = rows(window(), context)
+        #expect(result.placement == [.enterFullScreen, .moveToDisplay(other)])
+        #expect(CardMenuItem.moveToDisplay(other).title == "Move to DELL U2720Q")
     }
 
     // MARK: - What is withheld, and why
@@ -119,9 +140,12 @@ struct CardMenuTests {
         let result = rows(window(), context)
 
         #expect(result.windowControls.isEmpty)
-        #expect(result.tiling.isEmpty)
+        #expect(result.moveResize.isEmpty)
+        #expect(result.fillArrange.isEmpty)
+        #expect(result.placement.isEmpty)
         // Tab search survives: it never needed Accessibility, only the browser's scripting id.
-        #expect(result.actions == [.searchWindowTabs(count: 23)])
+        #expect(result.contents == [.searchWindowTabs(count: 23)])
+        #expect(result.actions.isEmpty)
     }
 
     /// A minimized window's frame is not where it is or how big it looks, so sending it to half a
@@ -131,7 +155,9 @@ struct CardMenuTests {
         context.isMinimized = true
         let result = rows(window(minimized: true), context)
 
-        #expect(result.tiling.isEmpty)
+        #expect(result.moveResize.isEmpty)
+        #expect(result.fillArrange.isEmpty)
+        #expect(result.placement.isEmpty)
         // Close still applies: a minimized window can be closed from the Dock too.
         #expect(result.windowControls.contains(.closeWindow))
     }
@@ -150,8 +176,9 @@ struct CardMenuTests {
 
     @Test func aNonBrowserWindowIsNotOfferedTabSearch() {
         var context = browserContext
-        context.isBrowserWindow = false
+        context.hasSearchableTabs = false
         let result = rows(window(app: "Warp"), context)
+        #expect(result.contents.isEmpty)
         #expect(!result.actions.contains(.searchWindowTabs(count: 23)))
         #expect(!result.actions.contains(.searchWindowTabs(count: nil)))
     }
@@ -162,7 +189,10 @@ struct CardMenuTests {
     @Test func aWindowWithNothingAvailableGetsNoMenu() {
         let result = rows(window(app: "Warp"), CardMenu.Context())
         #expect(result.windowControls.isEmpty)
-        #expect(result.tiling.isEmpty)
+        #expect(result.moveResize.isEmpty)
+        #expect(result.fillArrange.isEmpty)
+        #expect(result.placement.isEmpty)
+        #expect(result.contents.isEmpty)
         #expect(result.actions.isEmpty)
         #expect(result.isEmpty)
     }
@@ -174,7 +204,10 @@ struct CardMenuTests {
         context.hasAccessibilityElement = true
         let result = rows(window(app: "Warp"), context)
         #expect(result.windowControls == [.minimizeWindow, .closeWindow])
-        #expect(result.tiling.count == 2)
+        #expect(result.moveResize.count == 4)
+        #expect(result.fillArrange.count == 4)
+        #expect(result.placement == [.enterFullScreen])
+        #expect(result.contents.isEmpty)
         #expect(result.actions.isEmpty)
         #expect(!result.isEmpty)
     }
@@ -197,7 +230,14 @@ struct CardMenuTests {
     @Test func everySymbolResolvesOnThisSystem() {
         var context = browserContext
         context.isAudible = true
-        for item in everyAction(in: rows(window(), context)) + [.searchWindowTabs(count: nil)] {
+        let extra: [CardMenuItem] = [
+            .searchWindowTabs(count: nil),
+            .enterFullScreen,
+            .moveToDisplay(DisplayInfo(
+                number: 1, bounds: .zero, isBuiltIn: true, name: "Built-in Retina Display"
+            )),
+        ]
+        for item in everyAction(in: rows(window(), context)) + extra {
             let name = item.icon.symbolName
             #expect(
                 NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
@@ -224,7 +264,7 @@ struct CardMenuTests {
     }
 
     /// Two tiles that looked alike would make the row a guessing game.
-    @Test func theTwoTilesAreDistinct() {
+    @Test func theTilesAreDistinct() {
         let symbols = WindowTile.allCases.map { CardMenuItem.tileWindow($0).icon.symbolName }
         #expect(Set(symbols).count == WindowTile.allCases.count)
         let labels = WindowTile.allCases.map { CardMenuItem.tileWindow($0).icon.label }
@@ -232,6 +272,16 @@ struct CardMenuTests {
     }
 
     private func everyAction(in rows: CardMenu.Rows) -> [CardMenuItem] {
-        rows.windowControls + rows.tiling + rows.actions
+        rows.windowControls
+            + rows.contents
+            + rows.moveResize
+            + rows.fillArrange
+            + rows.placement
+            + rows.actions
+    }
+
+    private static func tile(_ item: CardMenuItem) -> WindowTile? {
+        if case .tileWindow(let tile) = item { return tile }
+        return nil
     }
 }

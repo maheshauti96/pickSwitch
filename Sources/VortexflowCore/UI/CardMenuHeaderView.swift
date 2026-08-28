@@ -33,28 +33,44 @@ struct CardMenuHeaderView: View {
     let details: CardDetails
     /// The live capture of this window, when one has arrived.
     let thumbnail: CGImage?
-    /// Favicon for a matched browser window, otherwise the application's icon. Stands in for a
-    /// capture that has not arrived, and identifies the application beside the title either way.
+    /// The application's icon. Identifies whose window this is, and stands in for a capture that
+    /// has not arrived.
     let icon: NSImage?
-    /// Minimize and close, drawn into the top-right corner.
+    /// Minimize and close, drawn into the top-right of the identity bar.
     var windowControls: [CardMenuItem] = []
-    /// Where the window can be sent, drawn into the bottom-left corner.
-    var tiling: [CardMenuItem] = []
+    /// Tab search, drawn as a labelled row immediately under the preview.
+    var contents: [CardMenuItem] = []
+    /// The four halves, matching macOS Move & Resize.
+    var moveResize: [CardMenuItem] = []
+    /// Fill and the remaining arrangements, matching macOS Fill & Arrange.
+    var fillArrange: [CardMenuItem] = []
+    /// Full Screen and Move to another display.
+    var placement: [CardMenuItem] = []
     @ObservedObject var hover: CardMenuHoverModel
     let onAction: (CardMenuItem) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !windowControls.isEmpty { controlStrip }
+            identityBar
             preview
-            caption
-            if hasFooter {
+            if !contents.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(contents.enumerated()), id: \.offset) { _, action in
+                        placementRow(action)
+                    }
+                }
+            }
+            if hasArrangement {
                 Divider().opacity(0.6)
-                footer
+                arrangement
+            }
+            if hasFacts {
+                Divider().opacity(0.6)
+                facts
             }
         }
         .padding(.horizontal, Self.horizontalPadding)
-        .padding(.top, windowControls.isEmpty ? 10 : 6)
+        .padding(.top, 6)
         .padding(.bottom, 6)
         .frame(width: Self.width, alignment: .leading)
         // No `allowsHitTesting(false)` any more, and that is the consequence of moving the controls
@@ -65,8 +81,12 @@ struct CardMenuHeaderView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private var hasFooter: Bool {
-        !details.rows.isEmpty || details.displayNumber != nil || !tiling.isEmpty
+    private var hasArrangement: Bool {
+        !moveResize.isEmpty || !fillArrange.isEmpty || !placement.isEmpty
+    }
+
+    private var hasFacts: Bool {
+        !details.rows.isEmpty
     }
 
     // MARK: - Pieces
@@ -103,112 +123,104 @@ struct CardMenuHeaderView: View {
         )
     }
 
-    private var caption: some View {
-        HStack(alignment: .top, spacing: 7) {
-            // Repeated beside the title even when it is also standing in for the preview above: at
-            // 52pt in the well it reads as artwork, and at 16pt here it reads as identification.
+    /// Application icon and name on the left, minimize and close on the right.
+    ///
+    /// One bar above the preview rather than a caption below it. The picture *is* the window, so
+    /// repeating its title underneath cost a row that distinguished nothing, and the display chip
+    /// that used to share that row is gone for the same reason.
+    private var identityBar: some View {
+        HStack(alignment: .center, spacing: 7) {
             if let icon {
                 Image(nsImage: icon)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: 16, height: 16)
             }
-
-            VStack(alignment: .leading, spacing: 1) {
-                // Two lines, because window titles carry the useful part at either end — a document
-                // name at the front, a site or project at the back — and one line too often cuts off
-                // whichever end distinguishes this window from the next.
-                Text(details.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .foregroundStyle(.primary)
-
-                Text(details.source)
-                    .font(.system(size: 10.5))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        // One element for everything descriptive: the title, what it belongs to, the facts and the
-        // screen. VoiceOver would otherwise stop on each half of every fact row separately — "Tabs",
-        // then "23 tabs" — and the facts and chip below are hidden because they are spoken here.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    /// Minimize and close in the top-right corner.
-    ///
-    /// Right-aligned on a line of their own rather than laid over the preview. Over the picture they
-    /// would cover whatever is in that corner of the window — often a real close button — and give the
-    /// pointer a target that moves with the content behind it.
-    private var controlStrip: some View {
-        HStack(spacing: 2) {
-            Spacer(minLength: 0)
+            Text(details.applicationName)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(.primary)
+            Spacer(minLength: 4)
             ForEach(Array(windowControls.enumerated()), id: \.offset) { _, action in
                 CardMenuGlyphButton(action: action, hover: hover, onAction: onAction)
             }
         }
+        // One element for everything descriptive: whose window, its title, the facts. VoiceOver
+        // reads the menu item this view belongs to, so the facts have to arrive as that item's
+        // label rather than as separate elements it would never visit.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    /// The bottom line: where the window can be sent on the left, which screen it is on at the right.
+    /// The two grids macOS itself uses, then Full Screen and Move to another display.
     ///
-    /// Opposite corners because they are opposite kinds of thing — one is a control, one is a label —
-    /// and putting them at the two ends means neither has to be read past to reach the other. The facts
-    /// sit above this line rather than beside it, since they would otherwise compete with the tiling
-    /// glyphs for the leading edge.
-    private var footer: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !details.rows.isEmpty { facts }
-            HStack(alignment: .bottom, spacing: 8) {
-                ForEach(Array(tiling.enumerated()), id: \.offset) { _, action in
-                    CardMenuGlyphButton(action: action, hover: hover, onAction: onAction)
-                }
-                Spacer(minLength: 0)
-                if let number = details.displayNumber {
-                    displayChip(number)
+    /// Below the preview rather than in a corner of it, because eight placements do not fit in a
+    /// corner and because that is where the system menu puts them.
+    private var arrangement: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !moveResize.isEmpty {
+                tileSection(title: "Move & Resize", actions: moveResize)
+            }
+            if !fillArrange.isEmpty {
+                tileSection(title: "Fill & Arrange", actions: fillArrange)
+            }
+            if !placement.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(placement.enumerated()), id: \.offset) { _, action in
+                        Divider().opacity(0.6)
+                        placementRow(action)
+                    }
                 }
             }
         }
     }
 
-    /// Which screen, as a colour first and a number second.
-    ///
-    /// The colour is what makes this quicker than the row it replaced: two menus opened on two windows
-    /// answer "same screen or not" without either number being read. It is keyed on the display number
-    /// so it is stable for a session — the same screen is the same colour every time the menu opens.
-    private func displayChip(_ number: Int) -> some View {
-        let tint = Self.displayTint(number)
-        return Text("Display \(number)")
-            .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-                Capsule().fill(tint.opacity(0.16))
-            )
-            .overlay(
-                Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 0.5)
-            )
-            .fixedSize()
-            // Spoken as part of the caption instead, so the screen is not announced twice.
-            .accessibilityHidden(true)
+    private func tileSection(title: String, actions: [CardMenuItem]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 2) {
+                ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                    CardMenuGlyphButton(
+                        action: action,
+                        fillsWidth: true,
+                        hover: hover,
+                        onAction: onAction
+                    )
+                }
+            }
+        }
     }
 
-    /// One colour per screen, wrapping if someone runs more displays than there are colours.
-    ///
-    /// Chosen to stay apart from each other rather than to be pretty: adjacent entries differ in hue
-    /// far enough that two chips seen a second apart are not mistaken for one another, which is the
-    /// only job the colour has.
-    static func displayTint(_ number: Int) -> Color {
-        let palette: [Color] = [.blue, .purple, .teal, .orange, .pink, .green]
-        // Display numbers are 1-based, and a hostile or unset value must not trap on a negative index.
-        let index = max(0, number - 1) % palette.count
-        return palette[index]
+    /// A labelled row, matching how macOS draws Full Screen and Move to Display under the grids.
+    private func placementRow(_ action: CardMenuItem) -> some View {
+        Button {
+            onAction(action)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: action.icon.symbolName)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 16)
+                Text(action.title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(hover.isHovered(action) ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(hover.isHovered(action) ? Color.accentColor : .clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.setHovered(action, $0) }
+        .accessibilityLabel(action.title)
+        .help(action.title)
     }
 
     /// A two-column grid, so the values line up whatever the labels are. Run together as
@@ -238,11 +250,11 @@ struct CardMenuHeaderView: View {
     /// facts have to arrive as that item's label rather than as separate elements it would never
     /// visit.
     private var accessibilityLabel: String {
-        var parts = [details.title, details.source]
+        var parts = [details.applicationName, details.title]
+        if details.source != details.applicationName {
+            parts.append(details.source)
+        }
         parts += details.rows.map { "\($0.label): \($0.value)" }
-        // Spoken, because the chip's colour carries meaning that a screen reader cannot convey and
-        // must not be the only way the screen is identified.
-        if let number = details.displayNumber { parts.append("Display \(number)") }
         return parts.joined(separator: ", ")
     }
 }

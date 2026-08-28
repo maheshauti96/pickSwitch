@@ -29,7 +29,6 @@ struct CardDetailsTests {
     private func details(
         for entry: WindowEntry,
         siteHost: String? = nil,
-        displayNumber: Int? = nil,
         tabCount: Int? = nil,
         windowPosition: (index: Int, count: Int)? = nil,
         isIncognito: Bool = false,
@@ -39,7 +38,6 @@ struct CardDetailsTests {
         CardDetails.make(
             entry: entry,
             siteHost: siteHost,
-            displayNumber: displayNumber,
             tabCount: tabCount,
             windowPosition: windowPosition,
             isIncognito: isIncognito,
@@ -70,32 +68,19 @@ struct CardDetailsTests {
         #expect(value("Size", in: result) == nil)
     }
 
-    /// The screen is a chip, not a row. A row spelling out "Screen 1" carried the same fact for the
-    /// price of a full line.
-    @Test func theScreenIsCarriedAsAChipRatherThanARow() {
-        let result = details(for: window(), displayNumber: 2)
-        #expect(result.displayNumber == 2)
+    /// The screen is not a fact. It used to be a coloured chip, and before that a row, and both
+    /// spent height on a number the menu does not act on.
+    @Test func theScreenIsNotMentioned() {
+        let result = details(for: window())
         #expect(value("Screen", in: result) == nil)
         #expect(value("Display", in: result) == nil)
-    }
-
-    /// A tab's screen is its browser's, so a chip on a tab would describe something other than the
-    /// thing the menu is about.
-    @Test func aTabGetsNoScreenChip() {
-        let tab = WindowEntry.tabEntry(
-            BrowserTab(
-                browser: .chrome, windowIdentifier: 1, tabIndex: 2,
-                title: "ChatGPT", url: "https://chatgpt.com/"
-            ),
-            application: nil
-        )
-        #expect(details(for: tab, displayNumber: 1).displayNumber == nil)
     }
 
     @Test func theTitleAndSourceAreAlwaysPresent() {
         let result = details(for: window(title: "Quarterly plan"))
         #expect(result.title == "Quarterly plan")
         #expect(result.source == "Google Chrome")
+        #expect(result.applicationName == "Google Chrome")
     }
 
     /// A browser window is identified by its site, but the application is kept too: the site says
@@ -209,7 +194,6 @@ struct CardDetailsTests {
     @Test func rowsAreOrderedFromConsequentialToDescriptive() {
         let result = details(
             for: window(onActiveSpace: false, lastSeen: Self.now - 60),
-            displayNumber: 2,
             tabCount: 12,
             windowPosition: (2, 3),
             isPlayingAudio: true

@@ -56,6 +56,11 @@ final class OverlayState: ObservableObject {
 
     var isSearching: Bool { !searchQuery.isEmpty }
 
+    /// The search pill, and the chrome it needs, while a query is typed *or* while results are
+    /// restricted to one window's tabs. A scope with no visible sign looks like the switcher lost
+    /// most of its results.
+    var showsSearch: Bool { isSearching || tabScope != nil }
+
     /// Whether the whole query is selected, so the next edit replaces it.
     ///
     /// The overlay has no text field, no caret and no selection range — the query is one string —
@@ -326,7 +331,7 @@ final class OverlayState: ObservableObject {
             availableContentWidth: availableContentWidth,
             availableContentHeight: availableContentHeight,
             visibleStart: visibleStart,
-            isSearching: isSearching
+            isSearching: showsSearch
         )
     }
 
@@ -427,7 +432,20 @@ final class OverlayState: ObservableObject {
     /// How many fetched tabs belong to one browser window. `0` before the tabs have been fetched,
     /// which callers distinguish with `hasLoadedTabs`.
     func tabCount(forWindowIdentifier identifier: Int) -> Int {
-        tabEntries.reduce(0) { $0 + ($1.tab?.windowIdentifier == identifier ? 1 : 0) }
+        tabsInScope(identifier).count
+    }
+
+    /// Tabs that belong to one scoped window, including Terminal windows that share its
+    /// frame (macOS window-tabbing).
+    private func tabsInScope(_ windowIdentifier: Int) -> [WindowEntry] {
+        let sameWindow = tabEntries.filter { $0.tab?.windowIdentifier == windowIdentifier }
+        let keys = Set(sameWindow.compactMap { $0.tab?.groupKey })
+        guard !keys.isEmpty else { return sameWindow }
+        return tabEntries.filter { entry in
+            guard let tab = entry.tab else { return false }
+            if tab.windowIdentifier == windowIdentifier { return true }
+            return tab.groupKey.map(keys.contains) ?? false
+        }
     }
 
     /// Restrict results to one browser window's tabs, or clear the restriction with `nil`.
@@ -449,12 +467,17 @@ final class OverlayState: ObservableObject {
 
         let matches: [WindowEntry]
         if let tabScope {
+            // Choosing "Search through Tabs" fetches the tabs, so they are not here yet. Applying
+            // an empty scoped list in that interval is what showed "No switchable windows are
+            // open" for a window that does have tabs. Keep the current cards until `setTabs`
+            // arrives; that call re-enters here with `hasLoadedTabs` true.
+            guard hasLoadedTabs else { return false }
             // Scoped to one window's tabs: an empty query lists them all, which is what makes this
             // both "see all tabs" and "search them" without being two separate features. Windows,
             // installed applications and the web offers are all withheld — the user asked about the
             // inside of one window, and answering with anything else would be answering a different
             // question.
-            let scoped = tabEntries.filter { $0.tab?.windowIdentifier == tabScope }
+            let scoped = tabsInScope(tabScope)
             matches = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? scoped
                 : WindowSearch.filter(scoped, query: query)

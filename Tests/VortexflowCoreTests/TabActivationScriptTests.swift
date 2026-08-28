@@ -79,4 +79,21 @@ struct TabActivationScriptTests {
         let raise = try #require(offset(of: "set index of targetWindow to 1", in: script))
         #expect(activate < raise, "Safari lost the ordering fix")
     }
+
+    /// Terminal selects by setting `selected` on the tab, not an index on the window.
+    @Test func terminalKeepsItsOwnSelectionForm() throws {
+        let script = BrowserTabService.activationScript(
+            for: tab(browser: .terminal, windowIdentifier: 7659, tabIndex: 2)
+        )
+        #expect(script.contains("tell application \"Terminal\""))
+        #expect(script.contains("window id 7659"))
+        #expect(script.contains("set selected of tab 2 of targetWindow to true"))
+        #expect(!script.contains("active tab index"))
+        #expect(!script.contains("current tab"))
+        let activate = try #require(offset(of: "activate", in: script))
+        let select = try #require(offset(of: "set selected of tab 2", in: script))
+        let raise = try #require(offset(of: "set index of targetWindow to 1", in: script))
+        #expect(activate < raise, "Terminal lost the ordering fix")
+        #expect(select < raise)
+    }
 }

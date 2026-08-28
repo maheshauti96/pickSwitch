@@ -82,11 +82,13 @@ actor BrowserTabService {
     /// roughly 300 ms to enumerate their tabs. It still never runs on the 150 ms trigger path.
     ///
     /// Safari is excluded. Its scripting dictionary has no equivalent of `mode`, so a Safari
-    /// private window is indistinguishable from an ordinary one from out here.
+    /// private window is indistinguishable from an ordinary one from out here. Terminal is
+    /// included even without a mode: its windows have to be paired so "Search through Tabs"
+    /// can name the window whose tabs to list.
     func windows(allowPermissionPrompt: Bool = true) async -> [ScriptedBrowserWindow] {
         let running = await MainActor.run { Self.runningBrowsers() }
         let scriptable = running.filter {
-            $0.reportsWindowMode
+            $0.needsWindowInspection
                 && !deniedBrowsers.contains($0)
                 && (allowPermissionPrompt || authorizedBrowsers.contains($0))
         }
@@ -140,10 +142,15 @@ actor BrowserTabService {
     /// and the script it guarded still failed. A fixed delay in its place was not needed either —
     /// activating first works with no pause at all, across every delay tried from 0 to 0.5 s.
     static func activationScript(for tab: BrowserTab) -> String {
-        let selection = tab.browser.usesCurrentTab
+        let selection: String
+        if tab.browser.usesCurrentTab {
             // Safari addresses the selected tab by object, not by index.
-            ? "set current tab of targetWindow to tab \(tab.tabIndex) of targetWindow"
-            : "set active tab index of targetWindow to \(tab.tabIndex)"
+            selection = "set current tab of targetWindow to tab \(tab.tabIndex) of targetWindow"
+        } else if tab.browser.usesSelectedTab {
+            selection = "set selected of tab \(tab.tabIndex) of targetWindow to true"
+        } else {
+            selection = "set active tab index of targetWindow to \(tab.tabIndex)"
+        }
 
         return """
         tell application "\(tab.browser.scriptingName)"
@@ -191,6 +198,10 @@ actor BrowserTabService {
     /// One event per window rather than one per tab. See the type comment for why that
     /// distinction is worth the slightly awkward script.
     private static func enumerate(_ browser: BrowserTab.Browser) -> TabsOutcome {
+        if browser == .terminal {
+            return enumerateTerminalTabs()
+        }
+
         // Safari has no `mode`, and asking for a property a dictionary does not declare fails the
         // whole script rather than that one field. Substituting a literal keeps one script for
         // every browser while leaving Safari's tabs correctly ineligible for an icon request.
@@ -222,6 +233,56 @@ actor BrowserTabService {
         }
     }
 
+    /// Terminal has no `name` or `URL` on a tab. `custom title` is what the user set; `tty` is
+    /// always present and is the fallback so an untitled session is still findable.
+    ///
+    /// Indexed loops rather than `repeat with w in windows`: Terminal's dictionary does not
+    /// resolve `item N of every window`, which is what that form of repeat produces.
+    ///
+    /// Each record also carries the window's bounds. Terminal's title-bar pills are often
+    /// *other windows* merged by macOS window-tabbing, each with one session, sharing a
+    /// rectangle. `parseTerminalTabs` groups those so a scope on the front window includes
+    /// its neighbours.
+    private static func enumerateTerminalTabs() -> TabsOutcome {
+        let source = """
+        set AppleScript's text item delimiters to "\(itemDelimiter)"
+        tell application "Terminal"
+            set collected to {}
+            repeat with i from 1 to (count of windows)
+                set w to window i
+                set edges to bounds of w
+                set labels to {}
+                repeat with j from 1 to (count of tabs of w)
+                    set t to tab j of w
+                    set label to ""
+                    try
+                        set label to custom title of t
+                    end try
+                    if label is "" then set label to tty of t
+                    set end of labels to label
+                end repeat
+                set end of collected to ((id of w as text) & "\(fieldDelimiter)" ¬
+                    & (item 1 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 2 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 3 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 4 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (labels as text))
+            end repeat
+        end tell
+        set AppleScript's text item delimiters to "\(recordDelimiter)"
+        return collected as text
+        """
+
+        switch run(source) {
+        case .success(let output):
+            return .success(parseTerminalTabs(output))
+        case .denied:
+            return .denied
+        case .failed(let message):
+            return .failed(message)
+        }
+    }
+
     private enum WindowsOutcome {
         case success([ScriptedBrowserWindow])
         case denied
@@ -232,6 +293,10 @@ actor BrowserTabService {
     /// window. The URL read is isolated per window: one transient or browser-specific failure
     /// leaves that record usable with the browser icon fallback instead of failing the batch.
     private static func enumerateWindows(_ browser: BrowserTab.Browser) -> WindowsOutcome {
+        if browser == .terminal {
+            return enumerateTerminalWindows()
+        }
+
         let source = """
         set collected to {}
         tell application "\(browser.scriptingName)"
@@ -258,6 +323,39 @@ actor BrowserTabService {
         switch run(source) {
         case .success(let output):
             return .success(parseWindows(output, browser: browser))
+        case .denied:
+            return .denied
+        case .failed(let message):
+            return .failed(message)
+        }
+    }
+
+    /// Terminal has no `mode` and no active-tab URL. Asking for either fails the whole window
+    /// listing. The rest of the record is the same shape `parseWindows` already understands.
+    private static func enumerateTerminalWindows() -> WindowsOutcome {
+        let source = """
+        set collected to {}
+        tell application "Terminal"
+            repeat with i from 1 to (count of windows)
+                set w to window i
+                set edges to bounds of w
+                set end of collected to ((id of w as text) & "\(fieldDelimiter)" ¬
+                    & "unknown" & "\(fieldDelimiter)" ¬
+                    & (name of w as text) & "\(fieldDelimiter)" ¬
+                    & (item 1 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 2 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 3 of edges as text) & "\(fieldDelimiter)" ¬
+                    & (item 4 of edges as text) & "\(fieldDelimiter)" ¬
+                    & "")
+            end repeat
+        end tell
+        set AppleScript's text item delimiters to "\(recordDelimiter)"
+        return collected as text
+        """
+
+        switch run(source) {
+        case .success(let output):
+            return .success(parseWindows(output, browser: .terminal))
         case .denied:
             return .denied
         case .failed(let message):
@@ -305,6 +403,54 @@ actor BrowserTabService {
             )
         }
         return windows
+    }
+
+    /// Terminal records: window id, four bound edges, then session titles. Windows that share
+    /// a rectangle get the same `groupKey` so a tab scope on the front one includes the rest.
+    static func parseTerminalTabs(_ output: String) -> [BrowserTab] {
+        struct Record {
+            let identifier: Int
+            let groupKey: String
+            let titles: [String]
+        }
+
+        var records: [Record] = []
+        for record in output.components(separatedBy: recordDelimiter) where !record.isEmpty {
+            let fields = record.components(separatedBy: fieldDelimiter)
+            guard
+                fields.count == 6,
+                let identifier = Int(fields[0]),
+                let left = Double(fields[1]),
+                let top = Double(fields[2]),
+                let right = Double(fields[3]),
+                let bottom = Double(fields[4])
+            else { continue }
+            let titles = fields[5].components(separatedBy: itemDelimiter).filter { !$0.isEmpty }
+            guard !titles.isEmpty else { continue }
+            let groupKey = "\(Int(left.rounded())),\(Int(top.rounded())),\(Int(right.rounded())),\(Int(bottom.rounded()))"
+            records.append(Record(identifier: identifier, groupKey: groupKey, titles: titles))
+        }
+
+        let groupedCounts = Dictionary(grouping: records, by: \.groupKey).mapValues(\.count)
+        var tabs: [BrowserTab] = []
+        for record in records {
+            // A unique frame is just a window, not a tab bar.
+            let groupKey = (groupedCounts[record.groupKey] ?? 0) > 1 ? record.groupKey : nil
+            for (offset, title) in record.titles.enumerated() {
+                tabs.append(
+                    BrowserTab(
+                        browser: .terminal,
+                        windowIdentifier: record.identifier,
+                        tabIndex: offset + 1,
+                        title: title,
+                        url: "",
+                        allowsFaviconRequest: false,
+                        groupKey: groupKey
+                    )
+                )
+            }
+        }
+        return tabs
     }
 
     static func parseTabs(_ output: String, browser: BrowserTab.Browser) -> [BrowserTab] {

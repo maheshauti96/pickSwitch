@@ -33,8 +33,12 @@ enum CardMenuItem: Equatable {
 
     case closeWindow
     case minimizeWindow
-    /// Send the window to half its screen.
+    /// Send the window to a region of its screen.
     case tileWindow(WindowTile)
+    /// Enter macOS Full Screen, which is a Space rather than a tiled frame.
+    case enterFullScreen
+    /// Move the window onto another display, centred in that display's usable area.
+    case moveToDisplay(DisplayInfo)
 
 }
 
@@ -42,8 +46,9 @@ enum CardMenu {
 
     /// Everything the menu needs to know that is not on the entry itself.
     struct Context: Equatable {
-        /// Whether this window belongs to a browser whose tabs can be listed.
-        var isBrowserWindow: Bool = false
+        /// Whether this window's tabs can be listed through its application's scripting
+        /// interface, and this card has been paired to that application's window id.
+        var hasSearchableTabs: Bool = false
         /// Tabs known to belong to this window, or `nil` if they have not been fetched.
         var knownTabCount: Int?
         /// Whether this window is making noise right now.
@@ -52,13 +57,15 @@ enum CardMenu {
         var hasAccessibilityElement: Bool = false
         /// Whether the window is currently in the Dock.
         var isMinimized: Bool = false
+        /// Displays the window is *not* on, for "Move to …". Empty on a single-display desk.
+        var otherDisplays: [DisplayInfo] = []
     }
 
-    /// The menu in the two rows it is drawn as.
+    /// The menu in the groups it is drawn as.
     ///
-    /// Two ordered lists rather than one flat list with separators in it. The separators used to mark
+    /// Separate lists rather than one flat list with separators in it. The separators used to mark
     /// these same groups in a vertical list of words, and now that the groups are laid out as
-    /// separate rows the boundary is carried by the layout — so a model that still emitted separators
+    /// distinct rows the boundary is carried by the layout — so a model that still emitted separators
     /// would be describing a shape the menu no longer has.
     struct Rows: Equatable {
 
@@ -69,16 +76,29 @@ enum CardMenu {
         /// is what lets the view place them without pattern-matching cases back out of a mixed list.
         var windowControls: [CardMenuItem] = []
 
-        /// Where the window can be sent. A separate group from the title-bar controls because it is
-        /// answering a different question — not "get this out of my way" but "put this beside
-        /// something" — and the two sit in opposite corners for that reason.
-        var tiling: [CardMenuItem] = []
+        /// The four halves, matching macOS Move & Resize.
+        var moveResize: [CardMenuItem] = []
+        /// Fill and the remaining arrangements, matching macOS Fill & Arrange.
+        var fillArrange: [CardMenuItem] = []
+        /// Full Screen and Move to another display.
+        var placement: [CardMenuItem] = []
 
-        /// What is about the window's *contents* rather than the window, which the preview does not
-        /// show. Its own row, since these need words and the corner glyphs do not.
+        /// What the window *contains* — tab search — drawn as a labelled row immediately under
+        /// the preview. That is the first question a tabbed window raises, and it belongs next
+        /// to the picture rather than at the foot of the menu.
+        var contents: [CardMenuItem] = []
+
+        /// Remaining content actions that still need a captioned glyph, currently mute.
         var actions: [CardMenuItem] = []
 
-        var isEmpty: Bool { windowControls.isEmpty && tiling.isEmpty && actions.isEmpty }
+        var isEmpty: Bool {
+            windowControls.isEmpty
+                && moveResize.isEmpty
+                && fillArrange.isEmpty
+                && placement.isEmpty
+                && contents.isEmpty
+                && actions.isEmpty
+        }
     }
 
     static func rows(for entry: WindowEntry, context: Context) -> Rows {
@@ -93,15 +113,17 @@ enum CardMenu {
             rows.windowControls.append(.minimizeWindow)
             rows.windowControls.append(.closeWindow)
             if !context.isMinimized {
-                rows.tiling.append(contentsOf: WindowTile.allCases.map(CardMenuItem.tileWindow))
+                rows.moveResize = WindowTile.moveResize.map(CardMenuItem.tileWindow)
+                rows.fillArrange = WindowTile.fillArrange.map(CardMenuItem.tileWindow)
+                rows.placement.append(.enterFullScreen)
+                rows.placement.append(contentsOf: context.otherDisplays.map(CardMenuItem.moveToDisplay))
             }
         }
 
-        // The browser action leads the second row, because it is the one thing here about what the
-        // window *contains* rather than about the window. For a browser that is what the user is
-        // actually looking for — a tab — and Vortexflow's own search is already the fastest way there.
-        if context.isBrowserWindow {
-            rows.actions.append(.searchWindowTabs(count: context.knownTabCount))
+        // Under the preview, because it is about what the picture contains. For a tabbed
+        // window that is a tab, and Vortexflow's own search is already the fastest way there.
+        if context.hasSearchableTabs {
+            rows.contents.append(.searchWindowTabs(count: context.knownTabCount))
         }
         if context.isAudible {
             rows.actions.append(.muteAudible)
@@ -141,6 +163,10 @@ extension CardMenuItem {
             return Icon(symbolName: "xmark", label: "Close")
         case .tileWindow(let tile):
             return Icon(symbolName: tile.symbolName, label: tile.title)
+        case .enterFullScreen:
+            return Icon(symbolName: "arrow.up.left.and.arrow.down.right", label: "Full Screen")
+        case .moveToDisplay:
+            return Icon(symbolName: "display", label: "Move")
         }
     }
 
@@ -152,7 +178,9 @@ extension CardMenuItem {
     var isDestructive: Bool {
         switch self {
         case .closeWindow: return true
-        case .searchWindowTabs, .muteAudible, .minimizeWindow, .tileWindow: return false
+        case .searchWindowTabs, .muteAudible, .minimizeWindow, .tileWindow,
+             .enterFullScreen, .moveToDisplay:
+            return false
         }
     }
 
@@ -162,8 +190,8 @@ extension CardMenuItem {
     var title: String {
         switch self {
         case .searchWindowTabs(let count):
-            guard let count else { return "Search this window's tabs" }
-            return "Search this window's \(count) tabs"
+            guard let count else { return "Search through Tabs" }
+            return count == 1 ? "Search through 1 Tab" : "Search through \(count) Tabs"
         case .muteAudible:
             return "Mute what's playing"
         case .closeWindow:
@@ -172,6 +200,10 @@ extension CardMenuItem {
             return "Minimize window"
         case .tileWindow(let tile):
             return tile.title
+        case .enterFullScreen:
+            return "Full Screen"
+        case .moveToDisplay(let display):
+            return display.name.isEmpty ? "Move to \(display.label)" : "Move to \(display.name)"
         }
     }
 }

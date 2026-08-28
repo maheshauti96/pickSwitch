@@ -875,7 +875,7 @@ public final class SwitcherController {
 
     private func browserWindowCandidates(in entries: [WindowEntry]) -> [WindowEntry] {
         let browsers = Set(
-            BrowserTab.Browser.allCases.filter(\.reportsWindowMode).map(\.bundleIdentifier)
+            BrowserTab.Browser.allCases.filter(\.needsWindowInspection).map(\.bundleIdentifier)
         )
         return entries.filter { entry in
             entry.isWindow && entry.bundleIdentifier.map(browsers.contains) == true
@@ -1771,12 +1771,6 @@ public final class SwitcherController {
         let details = CardDetails.make(
             entry: entry,
             siteHost: state.siteHost(for: entry),
-            // The layout directly rather than `state.display(for:)`, which withholds the screen on a
-            // single-display setup. That rule is right for a card badge, which competes for space with
-            // everything else on the card, but the chip is in a corner of a menu that is already open
-            // — and showing it always means the colour is learned before a second display appears
-            // rather than the first time one does.
-            displayNumber: state.displayLayout.display(for: entry.frame)?.number,
             tabCount: scriptedID.flatMap { identifier in
                 state.hasLoadedTabs ? state.tabCount(forWindowIdentifier: identifier) : nil
             },
@@ -1797,9 +1791,12 @@ public final class SwitcherController {
             rootView: CardMenuHeaderView(
                 details: details,
                 thumbnail: preview,
-                icon: state.displayIcon(for: entry),
+                icon: entry.applicationIcon,
                 windowControls: rows.windowControls,
-                tiling: rows.tiling,
+                contents: rows.contents,
+                moveResize: rows.moveResize,
+                fillArrange: rows.fillArrange,
+                placement: rows.placement,
                 hover: hover,
                 onAction: menuAction(for: entry, menu: menu)
             )
@@ -1854,17 +1851,19 @@ public final class SwitcherController {
         let browser = BrowserTab.Browser.allCases.first {
             $0.bundleIdentifier == entry.bundleIdentifier
         }
+        let currentDisplay = state.displayLayout.display(for: entry.frame)
         return CardMenu.Context(
-            // A browser we can list tabs for *and* have paired to its scripting id. Without the
-            // pairing there is no way to say which tabs belong to this window, so the item would
-            // scope to nothing.
-            isBrowserWindow: browser != nil && scriptedID != nil,
+            // An application we can list tabs for *and* have paired to its scripting id. Without
+            // the pairing there is no way to say which tabs belong to this window, so the item
+            // would scope to nothing.
+            hasSearchableTabs: browser != nil && scriptedID != nil,
             knownTabCount: scriptedID.flatMap { identifier in
                 state.hasLoadedTabs ? state.tabCount(forWindowIdentifier: identifier) : nil
             },
             isAudible: state.isPlayingAudio(entry) || state.isUsingMicrophone(entry),
             hasAccessibilityElement: entry.axElement != nil,
-            isMinimized: entry.isMinimized
+            isMinimized: entry.isMinimized,
+            otherDisplays: state.displayLayout.displays.filter { $0.number != currentDisplay?.number }
         )
     }
 
@@ -1904,13 +1903,19 @@ public final class SwitcherController {
         case .tileWindow(let tile):
             tileWindow(entry, to: tile)
 
+        case .enterFullScreen:
+            enterFullScreen(entry)
+
+        case .moveToDisplay(let display):
+            moveWindow(entry, to: display)
+
         case .muteAudible:
             // Not wired yet; the menu does not offer mute until it is.
             break
         }
     }
 
-    /// Send a window to half of the screen it is on.
+    /// Send a window to a region of the screen it is on.
     ///
     /// Tiled to the screen's *visible* bounds, not its full bounds, or the window slides under the
     /// menu bar and the Dock. `DisplayInfo` carries both, in the same Quartz global space that
@@ -1946,6 +1951,38 @@ public final class SwitcherController {
         // The overlay stays open. Tiling is the one action here a user is likely to repeat — try the
         // left half, then the top — and it changes the window rather than which window is in front,
         // so there is nothing to switch to.
+    }
+
+    /// Full Screen is a Space, not a frame, so it is a boolean on the window rather than a resize.
+    ///
+    /// The overlay will dismiss itself when the Space change lands, which is the right follow-through:
+    /// the window has left the desktop the overlay was drawn on.
+    private func enterFullScreen(_ entry: WindowEntry) {
+        guard let element = entry.axElement else { return }
+        let applied = AXBridge.setBool(element, "AXFullScreen", true)
+        Log.overlay.info("""
+            full screen \(entry.applicationName, privacy: .public); \
+            accepted: \(applied, privacy: .public)
+            """)
+    }
+
+    /// Centre the window on another display, shrinking it if that display is smaller.
+    private func moveWindow(_ entry: WindowEntry, to display: DisplayInfo) {
+        guard let element = entry.axElement else { return }
+        let frame = display.frameForMovedWindow(size: entry.frame.size)
+        let applied = AXBridge.setFrame(element, frame)
+        Log.overlay.info("""
+            moved \(entry.applicationName, privacy: .public) to \
+            screen \(display.number, privacy: .public) \
+            \(display.name, privacy: .public) at \
+            \(Int(frame.minX), privacy: .public),\(Int(frame.minY), privacy: .public) \
+            \(Int(frame.width), privacy: .public)×\(Int(frame.height), privacy: .public); \
+            accepted: \(applied, privacy: .public)
+            """)
+        if let origin = AXBridge.point(element, kAXPositionAttribute as String),
+           let size = AXBridge.size(element, kAXSizeAttribute as String) {
+            state.setFrame(CGRect(origin: origin, size: size), forWindowID: entry.windowID)
+        }
     }
 
     private func cardIndex(atScreenPoint point: CGPoint, panel: OverlayPanel) -> Int? {
@@ -2485,6 +2522,11 @@ extension SwitcherController: TriggerMonitorDelegate {
             }
             return
         }
+
+        // A tab-scope fetch has to wait for the real list. Settling empty here is what
+        // left "Search through Tabs" showing "No switchable windows are open" while the
+        // browser was still answering — and then dropped the late result as stale.
+        if state.tabScope != nil { return }
 
         Log.registry.info("browser tab search exceeded 750 ms; continuing with applications")
         settleBrowserTabs([])

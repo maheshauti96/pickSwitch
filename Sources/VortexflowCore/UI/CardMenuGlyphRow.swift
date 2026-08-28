@@ -9,9 +9,9 @@ import SwiftUI
 /// does not load its plugin, so a view that uses it will not build with Command Line Tools.
 ///
 /// Keyed on the action rather than on a position, so one model serves every group in the menu — the
-/// two title-bar controls in one corner, the tiling pair in another, the content actions in a row.
-/// Keying on an index would have needed a model per group and would have let two groups both believe
-/// their first glyph was hovered.
+/// title-bar controls, the two placement grids, and the content actions in a row. Keying on an index
+/// would have needed a model per group and would have let two groups both believe their first glyph
+/// was hovered.
 final class CardMenuHoverModel: ObservableObject {
 
     @Published private var hoveredKey: String?
@@ -66,9 +66,7 @@ struct CardMenuGlyphButton: View {
     private var content: some View {
         let isHovered = hover.isHovered(action)
         return VStack(spacing: 3) {
-            Image(systemName: action.icon.symbolName)
-                .font(.system(size: 13, weight: .medium))
-                .frame(height: 15)
+            glyph
             if showsCaption {
                 Text(action.icon.label)
                     .font(.system(size: 9.5))
@@ -88,6 +86,17 @@ struct CardMenuGlyphButton: View {
         )
         // The gap between a glyph and its caption is still part of the button.
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        if case .tileWindow(let tile) = action {
+            WindowTileGlyph(tile: tile)
+        } else {
+            Image(systemName: action.icon.symbolName)
+                .font(.system(size: 13, weight: .medium))
+                .frame(height: 15)
+        }
     }
 
     /// Closing is red before it is hovered, not only once the pointer is on it.
@@ -131,5 +140,99 @@ struct CardMenuGlyphRow: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
         .frame(width: CardMenuHeaderView.width)
+    }
+}
+
+/// The shapes macOS draws in its Move & Resize / Fill & Arrange grids.
+///
+/// SF Symbols come close for the four halves and then drift: there is no stock symbol for the
+/// large-left-plus-two-stacked-right pane, and `rectangle.split.2x2` is heavier than the outline
+/// macOS uses. Drawing the eight icons here keeps the row readable as the same set of choices.
+struct WindowTileGlyph: View {
+
+    let tile: WindowTile
+
+    private let corner: CGFloat = 3.2
+    private let lineWidth: CGFloat = 1.35
+
+    var body: some View {
+        ZStack {
+            halfFill
+            WindowTileDividers(tile: tile)
+                .stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt, lineJoin: .round))
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .strokeBorder(lineWidth: lineWidth)
+        }
+        .frame(width: 28, height: 18)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var halfFill: some View {
+        switch tile {
+        case .leftHalf:
+            HStack(spacing: 0) {
+                Rectangle()
+                Color.clear
+            }
+            .clipShape(insetClip)
+            .padding(lineWidth)
+        case .rightHalf:
+            HStack(spacing: 0) {
+                Color.clear
+                Rectangle()
+            }
+            .clipShape(insetClip)
+            .padding(lineWidth)
+        case .topHalf:
+            VStack(spacing: 0) {
+                Rectangle()
+                Color.clear
+            }
+            .clipShape(insetClip)
+            .padding(lineWidth)
+        case .bottomHalf:
+            VStack(spacing: 0) {
+                Color.clear
+                Rectangle()
+            }
+            .clipShape(insetClip)
+            .padding(lineWidth)
+        default:
+            EmptyView()
+        }
+    }
+
+    private var insetClip: RoundedRectangle {
+        RoundedRectangle(cornerRadius: max(0, corner - lineWidth), style: .continuous)
+    }
+}
+
+/// Interior lines for the Fill & Arrange outlines: two columns, left-plus-quarters, and 2×2.
+private struct WindowTileDividers: Shape {
+
+    let tile: WindowTile
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let inset: CGFloat = 1.35
+        switch tile {
+        case .leftTwoThirds:
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY + inset))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - inset))
+        case .rightTwoThirds:
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY + inset))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - inset))
+            path.move(to: CGPoint(x: rect.midX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX - inset, y: rect.midY))
+        case .topLeft:
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY + inset))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - inset))
+            path.move(to: CGPoint(x: rect.minX + inset, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX - inset, y: rect.midY))
+        default:
+            break
+        }
+        return path
     }
 }

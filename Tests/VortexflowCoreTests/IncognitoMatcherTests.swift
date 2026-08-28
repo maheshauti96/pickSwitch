@@ -260,11 +260,15 @@ struct IncognitoMatcherTests {
         #expect(windows[0].identifier == 8)
     }
 
-    /// Safari has no `mode`, so it is never asked and never badged.
+    /// Safari has no `mode`, so it is never asked and never badged. Terminal has no browsing
+    /// mode either; it is inspected only so its windows can be paired for tab search.
     @Test("Only Chromium browsers report a window mode")
     func onlyChromiumReportsMode() {
         #expect(!BrowserTab.Browser.safari.reportsWindowMode)
-        for browser in BrowserTab.Browser.allCases where browser != .safari {
+        #expect(!BrowserTab.Browser.terminal.reportsWindowMode)
+        for browser in BrowserTab.Browser.allCases
+            where browser != .safari && browser != .terminal
+        {
             #expect(browser.reportsWindowMode, "\(browser) should report a mode")
         }
     }

@@ -22,25 +22,21 @@ struct CardDetails: Equatable {
         let value: String
     }
 
-    /// The window's own title, which is the heading.
+    /// The window's own title, kept for VoiceOver. The preview already shows it, so it is not drawn
+    /// as a heading of its own.
     let title: String
 
     /// What the window belongs to: the application, or the site for a browser window.
     let source: String
 
-    let rows: [Row]
+    /// The application name drawn above the preview. Always the application, never the site: the
+    /// picture is the window, and the line above it is whose window.
+    let applicationName: String
 
-    /// Which screen the window is on, shown as a coloured chip rather than a row.
-    ///
-    /// It was a row saying "Screen 1" and earned no line: a label spelling out a number carries the
-    /// same fact as a chip in the corner while costing a full row of the height the preview needs. As
-    /// a chip it is also comparable at a glance — the colour is per screen, so two menus opened on two
-    /// windows say "same screen" or "different screens" without either number being read.
-    let displayNumber: Int?
+    let rows: [Row]
 
     /// - Parameters:
     ///   - siteHost: the active site, already checked against private browsing by the caller.
-    ///   - displayNumber: the screen the window is on, for the chip.
     ///   - tabCount: tabs known to be in this window, or `nil` before they have been fetched.
     ///   - windowPosition: which of its application's windows this is, and how many there are.
     ///   - now: the clock `WindowEntry.lastSeenOnActiveSpace` is stamped from, passed in so the
@@ -48,7 +44,6 @@ struct CardDetails: Equatable {
     static func make(
         entry: WindowEntry,
         siteHost: String?,
-        displayNumber: Int?,
         tabCount: Int?,
         windowPosition: (index: Int, count: Int)?,
         isIncognito: Bool,
@@ -118,10 +113,8 @@ struct CardDetails: Equatable {
         return CardDetails(
             title: entry.displayTitle,
             source: source,
-            rows: rows,
-            // Only a real window sits on a screen. A tab's screen is its browser's, so a chip on a tab
-            // would be describing something other than the thing the menu is about.
-            displayNumber: entry.isWindow ? displayNumber : nil
+            applicationName: entry.applicationName,
+            rows: rows
         )
     }
 }

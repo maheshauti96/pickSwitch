@@ -118,18 +118,19 @@ struct TabScopeTests {
     }
 
     /// Choosing the menu item is what fetches the tabs, so they arrive *after* the scope is set and
-    /// with no query typed — the one case a plain `isSearching` check would miss, leaving the list
-    /// empty for a window that does have tabs.
+    /// with no query typed. The list has to keep showing the current windows until that fetch lands
+    /// — applying an empty scoped list in between is what read as "No switchable windows are open".
     @Test func tabsArrivingAfterTheScopeFillTheList() {
         let state = OverlayState()
         state.availableContentWidth = 1200
         state.availableContentHeight = 800
-        state.load(
-            entries: [Fixture.entry(id: 1121, app: "Google Chrome", title: "Window B")],
-            selectedIndex: 0
-        )
+        let window = Fixture.entry(id: 1121, app: "Google Chrome", title: "Window B")
+        state.load(entries: [window], selectedIndex: 0)
         state.setTabScope(Self.chromeWindowB)
-        #expect(state.entries.isEmpty, "nothing to show until the tabs are fetched")
+
+        #expect(state.entries.map(\.id) == [window.id], "windows stay until the tabs arrive")
+        #expect(state.showsSearch, "the pill has to show that a scope is active")
+        #expect(!state.hasLoadedTabs)
 
         let changed = state.setTabs([
             tab("ChatGPT", window: Self.chromeWindowB, index: 1),
@@ -140,10 +141,67 @@ struct TabScopeTests {
         #expect(state.entries.map(\.displayTitle) == ["ChatGPT"])
     }
 
+    /// Typing before the fetch lands must not empty the list either. The query is remembered and
+    /// applied when the tabs arrive.
+    @Test func typingBeforeTabsArriveDoesNotEmptyTheList() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        let window = Fixture.entry(id: 1121, app: "Google Chrome", title: "Window B")
+        state.load(entries: [window], selectedIndex: 0)
+        state.setTabScope(Self.chromeWindowB)
+        #expect(!state.appendToSearch("chat"))
+        #expect(state.searchQuery == "chat")
+        #expect(state.entries.map(\.id) == [window.id])
+
+        #expect(state.setTabs([
+            tab("ChatGPT", window: Self.chromeWindowB, index: 1),
+            tab("Grok", window: Self.chromeWindowB, index: 2),
+        ]))
+        #expect(state.entries.map(\.displayTitle) == ["ChatGPT"])
+    }
+
     @Test func theTabCountIsPerWindow() {
         let state = loaded()
         #expect(state.tabCount(forWindowIdentifier: Self.chromeWindowB) == 2)
         #expect(state.tabCount(forWindowIdentifier: Self.chromeWindowA) == 1)
         #expect(state.tabCount(forWindowIdentifier: 999) == 0)
+    }
+
+    /// Terminal's title-bar pills are other windows sharing a frame. A scope on the front
+    /// window has to include those neighbours or Search through Tabs shows only one session.
+    @Test func terminalWindowTabsThatShareAFrameAreListedTogether() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        let window = Fixture.entry(id: 42, app: "Terminal", title: "grok")
+        state.load(entries: [window], selectedIndex: 0)
+
+        let front = WindowEntry.tabEntry(
+            BrowserTab(
+                browser: .terminal,
+                windowIdentifier: 7659,
+                tabIndex: 1,
+                title: "grok",
+                url: "",
+                groupKey: "0,70,877,605"
+            ),
+            application: nil
+        )
+        let neighbour = WindowEntry.tabEntry(
+            BrowserTab(
+                browser: .terminal,
+                windowIdentifier: 7656,
+                tabIndex: 1,
+                title: "zsh",
+                url: "",
+                groupKey: "0,70,877,605"
+            ),
+            application: nil
+        )
+        state.setTabScope(7659)
+        #expect(state.setTabs([front, neighbour]))
+        #expect(state.entries.map(\.displayTitle) == ["grok", "zsh"])
+        #expect(state.tabCount(forWindowIdentifier: 7659) == 2)
     }
 }

@@ -16,26 +16,32 @@ import Testing
 struct CardMenuHeaderViewTests {
 
     private func header(
-        title: String,
+        applicationName: String = "Google Chrome",
+        title: String = "A window",
         rows: [CardDetails.Row] = [],
         thumbnail: CGImage? = nil,
         icon: NSImage? = nil,
-        displayNumber: Int? = 1,
         windowControls: [CardMenuItem] = [],
-        tiling: [CardMenuItem] = [],
+        contents: [CardMenuItem] = [],
+        moveResize: [CardMenuItem] = [],
+        fillArrange: [CardMenuItem] = [],
+        placement: [CardMenuItem] = [],
         hover: CardMenuHoverModel = CardMenuHoverModel()
     ) -> NSHostingView<CardMenuHeaderView> {
         let view = CardMenuHeaderView(
             details: CardDetails(
                 title: title,
-                source: "Google Chrome",
-                rows: rows,
-                displayNumber: displayNumber
+                source: applicationName,
+                applicationName: applicationName,
+                rows: rows
             ),
             thumbnail: thumbnail,
             icon: icon,
             windowControls: windowControls,
-            tiling: tiling,
+            contents: contents,
+            moveResize: moveResize,
+            fillArrange: fillArrange,
+            placement: placement,
             hover: hover,
             onAction: { _ in }
         )
@@ -49,45 +55,46 @@ struct CardMenuHeaderViewTests {
     private func fullHeader(hover: CardMenuHoverModel = CardMenuHoverModel())
         -> NSHostingView<CardMenuHeaderView> {
         header(
-            title: "Mail",
-            rows: [CardDetails.Row(label: "Tabs", value: "23 tabs")],
+            applicationName: "Google Chrome",
+            rows: [CardDetails.Row(label: "Window", value: "1 of 2")],
             windowControls: [.minimizeWindow, .closeWindow],
-            tiling: WindowTile.allCases.map(CardMenuItem.tileWindow),
+            contents: [.searchWindowTabs(count: 23)],
+            moveResize: WindowTile.moveResize.map(CardMenuItem.tileWindow),
+            fillArrange: WindowTile.fillArrange.map(CardMenuItem.tileWindow),
+            placement: [.enterFullScreen],
             hover: hover
         )
     }
 
     /// The point of the whole view.
-    @Test func theHeaderIsTheSameWidthWhateverTheTitle() {
-        let short = header(title: "Mail")
+    @Test func theHeaderIsTheSameWidthWhateverTheApplicationName() {
+        let short = header(applicationName: "Mail")
         let long = header(
-            title: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5)
+            applicationName: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5)
         )
         #expect(short.fittingSize.width == CardMenuHeaderView.width)
         #expect(long.fittingSize.width == CardMenuHeaderView.width)
     }
 
-    /// A long title is allowed to cost a second line, and no more: the cap is what keeps a title from
-    /// pushing the actions off the bottom of the screen.
-    @Test func aLongTitleCostsAtMostOneExtraLine() {
-        let short = header(title: "Mail")
+    /// The application name is one line. The window title used to be allowed a second, and that is
+    /// what pushed the grids down; the picture is the window now, so the name above it truncates.
+    @Test func theApplicationNameStaysOnOneLine() {
+        let short = header(applicationName: "Mail")
         let long = header(
-            title: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5)
+            applicationName: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5)
         )
-        let growth = long.fittingSize.height - short.fittingSize.height
-        #expect(growth > 0, "a two-line title should be taller than a one-line title")
-        #expect(growth < 24, "growth of \(growth)pt suggests the title is not capped at two lines")
+        #expect(long.fittingSize.height == short.fittingSize.height)
+        #expect(long.fittingSize.width == CardMenuHeaderView.width)
     }
 
     /// Facts have to actually reach the layout; a grid that silently rendered nothing would still
     /// pass the width test.
     @Test func factsAddHeightWithoutAddingWidth() {
-        let bare = header(title: "Mail")
+        let bare = header(applicationName: "Mail")
         let detailed = header(
-            title: "Mail",
+            applicationName: "Mail",
             rows: [
                 CardDetails.Row(label: "Desktop", value: "Another · 20m ago"),
-                CardDetails.Row(label: "Screen", value: "DELL U2720Q"),
                 CardDetails.Row(label: "Tabs", value: "23 tabs"),
             ]
         )
@@ -98,37 +105,41 @@ struct CardMenuHeaderViewTests {
     /// A value long enough to widen the column is truncated instead.
     @Test func anOverlongFactValueDoesNotWidenTheHeader() {
         let view = header(
-            title: "Mail",
+            applicationName: "Mail",
             rows: [
                 CardDetails.Row(
-                    label: "Screen",
-                    value: String(repeating: "DELL U2720Q Ultrasharp ", count: 6)
+                    label: "Desktop",
+                    value: String(repeating: "Another space a long time ago ", count: 6)
                 )
             ]
         )
         #expect(view.fittingSize.width == CardMenuHeaderView.width)
     }
 
-    /// A ceiling on the whole header, because it is only half of what has to fit on screen. The
-    /// action items sit below it, and a header that grew unchecked would push them off the bottom
-    /// when the menu opens near it. Every row `CardDetails` can produce is present here.
+    /// A ceiling on the whole header, because the menu still has to fit on screen when it opens
+    /// near the bottom edge. The two placement grids now live inside this block, so the budget is
+    /// the preview, the facts, and those grids together. Every row `CardDetails` can produce is
+    /// present here.
     @Test func theFullyPopulatedHeaderStaysWithinItsBudget() {
         let view = header(
-            title: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5),
+            applicationName: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5),
             rows: [
                 CardDetails.Row(label: "Desktop", value: "Another · 20m ago"),
-                CardDetails.Row(label: "Screen", value: "DELL U2720Q"),
                 CardDetails.Row(label: "State", value: "Minimized"),
                 CardDetails.Row(label: "Tabs", value: "23 tabs"),
                 CardDetails.Row(label: "Session", value: "Private window"),
                 CardDetails.Row(label: "Audio", value: "Playing · microphone"),
                 CardDetails.Row(label: "Window", value: "2 of 3"),
-                CardDetails.Row(label: "Size", value: "1920 × 1080"),
-            ]
+            ],
+            windowControls: [.minimizeWindow, .closeWindow],
+            contents: [.searchWindowTabs(count: 23)],
+            moveResize: WindowTile.moveResize.map(CardMenuItem.tileWindow),
+            fillArrange: WindowTile.fillArrange.map(CardMenuItem.tileWindow),
+            placement: [.enterFullScreen]
         )
         #expect(
-            view.fittingSize.height < 400,
-            "header is \(view.fittingSize.height)pt tall; the actions still have to fit below it"
+            view.fittingSize.height < 560,
+            "header is \(view.fittingSize.height)pt tall; the menu still has to fit on screen"
         )
     }
 
@@ -149,23 +160,47 @@ struct CardMenuHeaderViewTests {
     @Test func theCornerGroupsDoNotWidenTheHeader() {
         #expect(fullHeader().fittingSize.width == CardMenuHeaderView.width)
         #expect(
-            header(title: "Mail", windowControls: [.minimizeWindow, .closeWindow])
+            header(applicationName: "Mail", windowControls: [.minimizeWindow, .closeWindow])
                 .fittingSize.width == CardMenuHeaderView.width
         )
         #expect(
-            header(title: "Mail", tiling: WindowTile.allCases.map(CardMenuItem.tileWindow))
+            header(
+                applicationName: "Mail",
+                contents: [.searchWindowTabs(count: nil)],
+                moveResize: WindowTile.moveResize.map(CardMenuItem.tileWindow),
+                fillArrange: WindowTile.fillArrange.map(CardMenuItem.tileWindow)
+            )
                 .fittingSize.width == CardMenuHeaderView.width
         )
     }
 
-    /// Highlighting a glyph must not move anything. The corner groups sit against the block's edges,
-    /// so a hover that changed a button's size would shift the preview or the chip beside it.
+    /// The two grids and the Full Screen row have to actually land in the layout. A section that
+    /// compiled but drew at zero height would still pass the width tests.
+    @Test func theArrangementAddsHeightBelowThePreview() {
+        let without = header(
+            applicationName: "Mail",
+            windowControls: [.minimizeWindow, .closeWindow]
+        )
+        let with = fullHeader()
+        #expect(with.fittingSize.height > without.fittingSize.height)
+        #expect(with.fittingSize.width == CardMenuHeaderView.width)
+    }
+
+    /// Highlighting a glyph must not move anything. The identity bar and the grids sit against the
+    /// block's edges, so a hover that changed a button's size would shift the preview beside it.
     @Test func hoveringAGlyphDoesNotResizeTheHeader() {
         let hover = CardMenuHoverModel()
         let view = fullHeader(hover: hover)
         let resting = view.fittingSize
 
-        for action in [CardMenuItem.closeWindow, .minimizeWindow, .tileWindow(.leftHalf)] {
+        for action in [
+            CardMenuItem.closeWindow,
+            .minimizeWindow,
+            .searchWindowTabs(count: 23),
+            .tileWindow(.leftHalf),
+            .tileWindow(.fill),
+            .enterFullScreen,
+        ] {
             hover.setHovered(action, true)
             view.layoutSubtreeIfNeeded()
             #expect(view.fittingSize == resting, "hovering \(action) resized the header")
@@ -206,59 +241,19 @@ struct CardMenuHeaderViewTests {
         return hosting.fittingSize.width
     }
 
-    // MARK: - The screen chip
-
-    /// The colour is the point: two menus opened on two windows should answer "same screen or not"
-    /// without either number being read, which only works if neighbouring screens differ.
-    @Test func neighbouringScreensGetDifferentColours() {
-        let tints = (1...6).map { CardMenuHeaderView.displayTint($0) }
-        #expect(Set(tints.map(String.init(describing:))).count == tints.count)
-    }
-
-    /// The same screen must be the same colour every time the menu opens, or the colour says nothing.
-    @Test func aScreenKeepsItsColour() {
-        #expect(CardMenuHeaderView.displayTint(3) == CardMenuHeaderView.displayTint(3))
-        #expect(CardMenuHeaderView.displayTint(1) != CardMenuHeaderView.displayTint(2))
-    }
-
-    /// More displays than colours wraps rather than trapping, and a zero or negative number — which
-    /// should never arrive, but would index out of bounds if it did — is clamped.
-    @Test func theTintSurvivesNumbersOutsideThePalette() {
-        #expect(CardMenuHeaderView.displayTint(7) == CardMenuHeaderView.displayTint(1))
-        #expect(CardMenuHeaderView.displayTint(0) == CardMenuHeaderView.displayTint(1))
-        #expect(CardMenuHeaderView.displayTint(-4) == CardMenuHeaderView.displayTint(1))
-    }
-
-    /// The chip shares the bottom line with the tiling glyphs rather than taking a line of its own.
-    ///
-    /// That is what the opposite corners buy: the line exists for the controls, and the label rides
-    /// along at the far end of it for free. A chip that added height whenever the controls were present
-    /// would mean the two were stacked rather than paired.
-    @Test func theChipRidesAlongWithTheTilingGlyphs() {
-        let rows = [CardDetails.Row(label: "Tabs", value: "23 tabs")]
-        let tiling = WindowTile.allCases.map(CardMenuItem.tileWindow)
-
-        let withChip = header(title: "Mail", rows: rows, displayNumber: 4, tiling: tiling)
-        let withoutChip = header(title: "Mail", rows: rows, displayNumber: nil, tiling: tiling)
-        #expect(withChip.fittingSize.height == withoutChip.fittingSize.height)
-        #expect(withChip.fittingSize.width == CardMenuHeaderView.width)
-    }
-
-    /// With no controls to share it with, the chip is worth one line and no more.
-    @Test func theChipAloneCostsASingleLine() {
-        let rows = [CardDetails.Row(label: "Tabs", value: "23 tabs")]
-        let growth = header(title: "Mail", rows: rows, displayNumber: 4).fittingSize.height
-            - header(title: "Mail", rows: rows, displayNumber: nil).fittingSize.height
-        #expect(growth > 0)
-        #expect(growth < 30, "the chip added \(growth)pt, which is more than one line")
-    }
-
-    /// With no facts at all the chip is still shown, and is still the only thing on its line.
-    @Test func theChipAppearsEvenWithNoFacts() {
-        let bare = header(title: "Mail", displayNumber: nil)
-        let chipOnly = header(title: "Mail", displayNumber: 2)
-        #expect(chipOnly.fittingSize.height > bare.fittingSize.height)
-        #expect(chipOnly.fittingSize.width == CardMenuHeaderView.width)
+    /// Tab search is a labelled row under the preview, not a captioned glyph at the foot of the menu.
+    @Test func tabSearchAddsHeightBelowThePreviewWithoutWidening() {
+        let without = header(
+            applicationName: "Google Chrome",
+            windowControls: [.minimizeWindow, .closeWindow]
+        )
+        let with = header(
+            applicationName: "Google Chrome",
+            windowControls: [.minimizeWindow, .closeWindow],
+            contents: [.searchWindowTabs(count: 23)]
+        )
+        #expect(with.fittingSize.height > without.fittingSize.height)
+        #expect(with.fittingSize.width == CardMenuHeaderView.width)
     }
 
     /// The preview well is reserved whether or not a capture has arrived, so the menu does not change
@@ -272,8 +267,8 @@ struct CardMenuHeaderViewTests {
         let image = context?.makeImage()
         #expect(image != nil, "failed to build a test capture")
 
-        let without = header(title: "Mail")
-        let with = header(title: "Mail", thumbnail: image)
+        let without = header(applicationName: "Mail")
+        let with = header(applicationName: "Mail", thumbnail: image)
         #expect(with.fittingSize.height == without.fittingSize.height)
         #expect(with.fittingSize.width == CardMenuHeaderView.width)
     }
