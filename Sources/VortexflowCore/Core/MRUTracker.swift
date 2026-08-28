@@ -98,12 +98,34 @@ final class MRUTracker {
     ///   whatever their recency. Everything inside the pinned group is still ordered by
     ///   the tiers above, so pinning changes *where* a window sits rather than replacing
     ///   the ordering with something arbitrary.
+    ///
+    /// Two lists come back, and the distinction is the point: the history depth decides what is
+    /// *drawn* before the user types, and never what the switcher knows about.
+    struct Ordering: Equatable {
+
+        /// Every window, ranked. What search looks through — so a window trimmed from the resting list
+        /// is still one keystroke away rather than denied.
+        ///
+        /// Keeping only the trimmed list here is what made the original report so bad. The truncated
+        /// array was handed to `OverlayState.load`, which assigned it to the searchable set, so a
+        /// window over the depth was not merely off-screen: typing its name found nothing, and the
+        /// switcher answered "that application is not running" about an application that was.
+        let all: [WindowEntry]
+
+        /// What is drawn with no query.
+        let resting: [WindowEntry]
+    }
+
+    /// - Parameter pinnedApplications: bundle identifiers whose windows come first,
+    ///   whatever their recency. Everything inside the pinned group is still ordered by
+    ///   the tiers above, so pinning changes *where* a window sits rather than replacing
+    ///   the ordering with something arbitrary.
     func ordered(
         _ entries: [WindowEntry],
         historyDepth: Int,
         pinnedApplications: Set<String> = []
-    ) -> [WindowEntry] {
-        guard !entries.isEmpty else { return [] }
+    ) -> Ordering {
+        guard !entries.isEmpty else { return Ordering(all: [], resting: []) }
 
         let ranked = entries.map { entry -> (entry: WindowEntry, stamp: TimeInterval, pinned: Bool) in
             let pinned = entry.bundleIdentifier.map(pinnedApplications.contains) ?? false
@@ -154,7 +176,16 @@ final class MRUTracker {
             sorted.insert(front, at: 0)
         }
 
-        let result = sorted.count > historyDepth ? Array(sorted.prefix(historyDepth)) : sorted
+        let result = Self.resting(sorted, historyDepth: historyDepth)
+
+        if result.count != sorted.count {
+            Log.registry.info("""
+                history depth \(historyDepth, privacy: .public) trimmed \
+                \(sorted.count - result.count, privacy: .public) of \
+                \(sorted.count, privacy: .public) windows from the resting list; \
+                all \(sorted.count, privacy: .public) remain searchable
+                """)
+        }
 
         // The head of the list, and which tier put it there. Ordering complaints are otherwise
         // impossible to diagnose from the outside: the list looks wrong, and nothing says whether a
@@ -172,7 +203,50 @@ final class MRUTracker {
         }
         Log.registry.info("ordered by recency: \(summary.joined(separator: ", "), privacy: .public)")
 
-        return result
+        return Ordering(all: sorted, resting: result)
+    }
+
+    /// Cut the resting list down to `historyDepth` without ever hiding an application.
+    ///
+    /// The old rule was a flat `prefix(historyDepth)`, and what it cut was the worst possible choice.
+    /// Every window on the current desktop is stamped as seen during enumeration, so it ranks above
+    /// any window merely discovered on another desktop — which means the flat cut removed
+    /// off-desktop windows first, every time, deterministically. Those are precisely the windows a
+    /// switcher is *for*: the ones the user cannot find by looking at the screen. With ten windows on
+    /// the current desktop and a depth of ten, the allowance was spent before an off-desktop window
+    /// was even considered, and an application the user was looking for — Slack, in the report that
+    /// prompted this — simply was not there.
+    ///
+    /// So the depth now limits *extra windows of applications already listed*, and an application's
+    /// last remaining window is never cut. Every running application stays reachable, which is the
+    /// contract users already have from Command-Tab, and the depth still does its real job of keeping
+    /// twenty browser windows from burying everything else.
+    ///
+    /// The consequence, stated plainly: with more applications than the depth allows, the resting list
+    /// is longer than the depth. That is deliberate. A crowded switcher is a smaller problem than one
+    /// that denies a running application exists, and the radial layouts already page a list too long
+    /// to seat rather than dropping the remainder silently.
+    static func resting(_ sorted: [WindowEntry], historyDepth: Int) -> [WindowEntry] {
+        guard sorted.count > historyDepth else { return sorted }
+
+        var keep = Set<Int>()
+        var represented = Set<String>()
+        // First window of each application, in rank order, so the one kept is the best-ranked.
+        for (index, entry) in sorted.enumerated() {
+            let application = entry.bundleIdentifier ?? entry.applicationName
+            if represented.insert(application).inserted {
+                keep.insert(index)
+            }
+        }
+        // Then fill whatever the depth still allows with the best-ranked of the rest.
+        for index in sorted.indices where !keep.contains(index) {
+            guard keep.count < historyDepth else { break }
+            keep.insert(index)
+        }
+
+        // Rebuilt by walking the sorted list rather than by collecting as we went, so the result keeps
+        // the ranking and does not come out grouped by application.
+        return sorted.enumerated().filter { keep.contains($0.offset) }.map(\.element)
     }
 
     // MARK: - Live observation

@@ -299,8 +299,18 @@ final class SettingsViewModel: ObservableObject {
             : "\(pinnedApplications.count) pinned. Their windows come first, after the window you are currently in."
     }
 
+    /// Says what the number actually governs now, which is neither "how many windows exist" nor even
+    /// "how many are shown".
+    ///
+    /// It used to read "Showing N most recently used windows", and that was true of a rule that could
+    /// hide a running application — so the sentence was describing the bug rather than the intent. Both
+    /// guarantees are stated because both are load-bearing: an application never disappears, and
+    /// nothing is ever unfindable.
     var historyDepthDescription: String {
-        "Showing \(Int(historyDepth.rounded())) most recently used windows."
+        """
+        Showing \(Int(historyDepth.rounded())) most recently used windows, plus one for every other \
+        application so none is hidden. Anything not shown is still found by typing.
+        """
     }
 
     /// Shortcuts offered in the picker: the presets, plus the current one when it was

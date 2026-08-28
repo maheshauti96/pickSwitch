@@ -612,8 +612,11 @@ public final class SwitcherController {
         state.canCloseWindows = permissions.accessibilityGranted
         state.isCloseButtonHovered = false
         state.load(
-            entries: ordered,
-            selectedIndex: SelectionMath.initialSelection(count: ordered.count)
+            entries: ordered.resting,
+            // Everything found, so a window the history depth kept out of the resting view is still
+            // one keystroke away instead of being denied.
+            searchable: ordered.all,
+            selectedIndex: SelectionMath.initialSelection(count: ordered.resting.count)
         )
 
         let size = state.layout.panelSize
@@ -628,7 +631,7 @@ public final class SwitcherController {
         // and the first frame on screen would show whatever the strip contained last.
         // The empty-state message always gets a plate, whatever the style, so it also
         // always gets the panel shadow that goes with one.
-        let hasPlate = ordered.isEmpty || layoutStyle.drawsBackdrop
+        let hasPlate = ordered.resting.isEmpty || layoutStyle.drawsBackdrop
         // Read per presentation rather than at launch, so toggling it takes effect on the next
         // trigger instead of needing a restart.
         panel.setIncludedInScreenshots(settings.includeOverlayInScreenshots)
@@ -645,7 +648,10 @@ public final class SwitcherController {
         // while the flag says otherwise silently swallows every press.
         Log.overlay.debug("panel ordered front; isVisible now true")
         presentedAt = Date().timeIntervalSinceReferenceDate
-        Log.overlay.info("presenting \(ordered.count) cards")
+        Log.overlay.info("""
+            presenting \(ordered.resting.count, privacy: .public) cards \
+            (\(ordered.all.count, privacy: .public) searchable)
+            """)
         stopwatch.log()
 
         // Requirement 5.6: scroll, keys, and reliable primary-card clicks become
@@ -669,18 +675,26 @@ public final class SwitcherController {
             self?.state.reveal(token: revealToken)
         }
 
-        applyKnownIncognitoWindows(to: ordered)
-        refreshAudioActivity(for: ordered, presentationID: revealToken)
+        // Everything found, not only what is drawn. These decorate a window's identity — private
+        // browsing, what is making noise, which site a browser window is on — and a window the history
+        // depth trimmed can still be reached by typing, so it has to arrive already identified rather
+        // than as a bare icon. All three are per application or served from cache, so covering the
+        // wider list costs no extra round trip per window.
+        applyKnownIncognitoWindows(to: ordered.all)
+        refreshAudioActivity(for: ordered.all, presentationID: revealToken)
         // Costs nothing and needs no browser: any window still showing the tab its icon was
         // verified against gets that icon in the first frame instead of waiting for an Apple
         // Event that may take seconds.
-        applyRememberedBrowserIcons(to: ordered, presentationID: revealToken)
+        applyRememberedBrowserIcons(to: ordered.all, presentationID: revealToken)
         // This starts only after the panel is on screen. It is restricted to browsers that have
         // already answered an Apple Event this session, so no Automation prompt can steal focus.
-        refreshBrowserWindows(for: ordered, presentationID: revealToken)
+        refreshBrowserWindows(for: ordered.all, presentationID: revealToken)
 
-        guard !ordered.isEmpty else { return }
-        startCaptures(for: ordered, backingScale: backingScale)
+        guard !ordered.resting.isEmpty else { return }
+        // The drawn list only. A capture is a screen grab per window, which is the one cost here that
+        // scales with the number of windows rather than the number of applications, and a window that
+        // is not on screen has nowhere to put one.
+        startCaptures(for: ordered.resting, backingScale: backingScale)
 
         // A release that beat enumeration to the finish line.
         if activateAsSoonAsReady {

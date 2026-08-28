@@ -33,7 +33,7 @@ struct MRUTrackerTests {
             Fixture.entry(id: 1, zOrder: 0),
             Fixture.entry(id: 2, zOrder: 1),
         ]
-        #expect(ids(tracker.ordered(entries, historyDepth: 10)) == [1, 2, 3])
+        #expect(ids(tracker.ordered(entries, historyDepth: 10).resting) == [1, 2, 3])
     }
 
     /// Requirement 2.3 combined with 2.4.
@@ -51,7 +51,7 @@ struct MRUTrackerTests {
         tracker.recordActivation(windowID: 2)
 
         // 1 is frontmost so it is pinned leftmost; 2 and 3 follow in MRU order.
-        #expect(ids(tracker.ordered(entries, historyDepth: 10)) == [1, 2, 3])
+        #expect(ids(tracker.ordered(entries, historyDepth: 10).resting) == [1, 2, 3])
     }
 
     @Test("The most recently activated window leads the non-frontmost group")
@@ -70,7 +70,7 @@ struct MRUTrackerTests {
         clock.advance()
         tracker.recordActivation(windowID: 2)
 
-        let result = ids(tracker.ordered(entries, historyDepth: 10))
+        let result = ids(tracker.ordered(entries, historyDepth: 10).resting)
         #expect(result.first == 1, "frontmost window must be leftmost")
         #expect(Array(result.dropFirst()) == [2, 3])
     }
@@ -88,20 +88,21 @@ struct MRUTrackerTests {
         clock.advance()
         tracker.recordActivation(windowID: 3)
 
-        #expect(ids(tracker.ordered(entries, historyDepth: 10)).first == 2)
+        #expect(ids(tracker.ordered(entries, historyDepth: 10).resting).first == 2)
     }
 
     @Test("Ordering is stable across repeated calls")
     func orderingIsStable() {
         let (tracker, _) = makeTracker()
         let entries = Fixture.entries(count: 6)
-        #expect(ids(tracker.ordered(entries, historyDepth: 10)) == ids(tracker.ordered(entries, historyDepth: 10)))
+        #expect(ids(tracker.ordered(entries, historyDepth: 10).resting) == ids(tracker.ordered(entries, historyDepth: 10).resting))
     }
 
     @Test("Empty input produces empty output")
     func emptyInput() {
         let (tracker, _) = makeTracker()
-        #expect(tracker.ordered([], historyDepth: 10).isEmpty)
+        #expect(tracker.ordered([], historyDepth: 10).resting.isEmpty)
+        #expect(tracker.ordered([], historyDepth: 10).all.isEmpty)
     }
 
     // MARK: - History depth
@@ -110,7 +111,7 @@ struct MRUTrackerTests {
     @Test("History depth truncates the list")
     func historyDepthTruncates() {
         let (tracker, _) = makeTracker()
-        let result = tracker.ordered(Fixture.entries(count: 20), historyDepth: 7)
+        let result = tracker.ordered(Fixture.entries(count: 20), historyDepth: 7).resting
         #expect(result.count == 7)
         #expect(ids(result) == [1, 2, 3, 4, 5, 6, 7])
     }
@@ -118,7 +119,115 @@ struct MRUTrackerTests {
     @Test("A history depth above the window count keeps everything")
     func historyDepthAboveCount() {
         let (tracker, _) = makeTracker()
-        #expect(tracker.ordered(Fixture.entries(count: 4), historyDepth: 25).count == 4)
+        #expect(tracker.ordered(Fixture.entries(count: 4), historyDepth: 25).resting.count == 4)
+    }
+
+    // MARK: - The depth must never hide an application
+
+    /// The reported failure, reproduced.
+    ///
+    /// Ten windows on the current desktop and one on another, at a depth of ten. Every window on the
+    /// current desktop is stamped as seen during enumeration, so it outranks anything merely discovered
+    /// elsewhere — which meant a flat `prefix(10)` spent the whole allowance before reaching the
+    /// eleventh, and the application on the other desktop was simply absent. The user went looking for
+    /// Slack in the morning and it was not there.
+    @Test("An application on another desktop survives a full history depth")
+    func anApplicationOnAnotherDesktopIsNeverTrimmedAway() {
+        let (tracker, _) = makeTracker()
+        var entries: [WindowEntry] = (0..<10).map { index in
+            var entry = Fixture.entry(id: CGWindowID(index + 1), app: "App\(index)", zOrder: index)
+            entry.isOnActiveSpace = true
+            entry.lastSeenOnActiveSpace = 5_000
+            return entry
+        }
+        var slack = Fixture.entry(id: 99, app: "Slack", zOrder: 50)
+        slack.isOnActiveSpace = false
+        entries.append(slack)
+
+        let result = tracker.ordered(entries, historyDepth: 10)
+        #expect(result.resting.contains { $0.applicationName == "Slack" }, "Slack was hidden again")
+        #expect(result.all.contains { $0.applicationName == "Slack" })
+    }
+
+    /// The rule stated generally: no application present in the input may be missing from the resting
+    /// list, whatever the depth.
+    @Test("Every application keeps at least one window at any depth")
+    func everyApplicationKeepsAWindow() {
+        let (tracker, _) = makeTracker()
+        let entries = (0..<12).map { index in
+            Fixture.entry(id: CGWindowID(index + 1), app: "App\(index)", zOrder: index)
+        }
+        for depth in [5, 7, 10, 25] {
+            let resting = tracker.ordered(entries, historyDepth: depth).resting
+            let applications = Set(resting.map(\.applicationName))
+            #expect(
+                applications.count == 12,
+                "depth \(depth) hid \(12 - applications.count) application(s)"
+            )
+        }
+    }
+
+    /// What the depth still does: extra windows of an application already listed are what it cuts, so
+    /// twenty browser windows cannot bury everything else.
+    @Test("Extra windows of one application are what the depth trims")
+    func extraWindowsOfOneApplicationAreTrimmedFirst() {
+        let (tracker, _) = makeTracker()
+        var entries = (0..<10).map { index in
+            Fixture.entry(id: CGWindowID(index + 1), app: "Google Chrome", zOrder: index)
+        }
+        entries.append(Fixture.entry(id: 50, app: "Slack", zOrder: 20))
+        entries.append(Fixture.entry(id: 51, app: "Warp", zOrder: 21))
+
+        let resting = tracker.ordered(entries, historyDepth: 5).resting
+        #expect(resting.contains { $0.applicationName == "Slack" })
+        #expect(resting.contains { $0.applicationName == "Warp" })
+        // Three of the five slots go to the three applications; the rest to Chrome's extras.
+        #expect(resting.filter { $0.applicationName == "Google Chrome" }.count == 3)
+        #expect(resting.count == 5)
+    }
+
+    /// The deliberate consequence: more applications than the depth allows makes the resting list
+    /// longer than the depth. A crowded switcher beats one that denies an application exists.
+    @Test("More applications than the depth allows overflows rather than hiding any")
+    func moreApplicationsThanDepthOverflows() {
+        let (tracker, _) = makeTracker()
+        let entries = (0..<12).map { index in
+            Fixture.entry(id: CGWindowID(index + 1), app: "App\(index)", zOrder: index)
+        }
+        #expect(tracker.ordered(entries, historyDepth: 5).resting.count == 12)
+    }
+
+    /// Trimming changes what is drawn, never what is known. This is the half that made the original
+    /// report so bad: the truncated list was the only list, so typing the name found nothing.
+    @Test("Everything stays searchable no matter what the depth trims")
+    func everythingRemainsSearchable() {
+        let (tracker, _) = makeTracker()
+        let entries = Fixture.entries(count: 20)
+        let result = tracker.ordered(entries, historyDepth: 7)
+        #expect(result.resting.count == 7)
+        #expect(result.all.count == 20)
+    }
+
+    /// The resting list keeps the ranking. Reserving a slot per application walks the list once for the
+    /// first of each and again for the remainder, so a naive implementation returns them grouped by
+    /// application instead of by recency.
+    @Test("Trimming preserves the ranking rather than grouping by application")
+    func trimmingPreservesRanking() {
+        let (tracker, _) = makeTracker()
+        var entries: [WindowEntry] = []
+        for index in 0..<8 {
+            // Alternating applications, so grouping would be obvious in the result.
+            entries.append(
+                Fixture.entry(
+                    id: CGWindowID(index + 1),
+                    app: index.isMultiple(of: 2) ? "Alpha" : "Beta",
+                    zOrder: index
+                )
+            )
+        }
+        let resting = tracker.ordered(entries, historyDepth: 6).resting
+        let order = ids(resting)
+        #expect(order == order.sorted(), "the resting list came back out of rank order: \(order)")
     }
 
     /// Truncation must not be able to drop the window the user is currently in.
@@ -138,7 +247,7 @@ struct MRUTrackerTests {
             clock.advance()
         }
 
-        let result = ids(tracker.ordered(entries, historyDepth: 5))
+        let result = ids(tracker.ordered(entries, historyDepth: 5).resting)
         #expect(result.count == 5)
         #expect(result.first == 20)
     }
@@ -199,7 +308,7 @@ struct MRUTrackerTests {
             Fixture.entry(id: 2, zOrder: 0),
             Fixture.entry(id: 3, zOrder: 1),
         ]
-        let result = ids(tracker.ordered(entries, historyDepth: 10))
+        let result = ids(tracker.ordered(entries, historyDepth: 10).resting)
         #expect(result == [2, 3, 1])
         #expect(result.contains(1))
     }
@@ -236,7 +345,7 @@ extension MRUTrackerTests {
         let older = seen(id: 1, at: 100)
         let newer = seen(id: 2, at: 200)
 
-        #expect(ids(tracker.ordered([older, newer], historyDepth: 10)) == [2, 1])
+        #expect(ids(tracker.ordered([older, newer], historyDepth: 10).resting) == [2, 1])
     }
 
     /// A window the user actually switched to always beats one merely seen, however long
@@ -252,7 +361,7 @@ extension MRUTrackerTests {
 
         tracker.recordActivation(windowID: 1)
 
-        #expect(ids(tracker.ordered([justSeen, used], historyDepth: 10)) == [1, 2])
+        #expect(ids(tracker.ordered([justSeen, used], historyDepth: 10).resting) == [1, 2])
     }
 
     /// And a window that was seen at some point beats one never seen at all, whatever its
@@ -265,7 +374,7 @@ extension MRUTrackerTests {
         // Seen a long time ago, and still ahead of a window never seen at all.
         let longAgo = seen(id: 2, at: -50_000)
 
-        #expect(ids(tracker.ordered([neverSeen, longAgo], historyDepth: 10)) == [2, 1])
+        #expect(ids(tracker.ordered([neverSeen, longAgo], historyDepth: 10).resting) == [2, 1])
     }
 
     /// The three tiers together, which is the ordering a user with several desktops sees.
@@ -280,7 +389,7 @@ extension MRUTrackerTests {
 
         tracker.recordActivation(windowID: 1)
 
-        let order = ids(tracker.ordered([neverSeen, seenEarlier, seenRecently, used], historyDepth: 10))
+        let order = ids(tracker.ordered([neverSeen, seenEarlier, seenRecently, used], historyDepth: 10).resting)
         #expect(order == [1, 2, 3, 4])
     }
 
@@ -293,12 +402,12 @@ extension MRUTrackerTests {
         let seenLater = seen(id: 1, at: clock.now)
         let seenEarlier = seen(id: 2, at: clock.now - 500)
 
-        #expect(ids(tracker.ordered([seenLater, seenEarlier], historyDepth: 10)) == [1, 2])
+        #expect(ids(tracker.ordered([seenLater, seenEarlier], historyDepth: 10).resting) == [1, 2])
 
         // The user switches to the older one.
         clock.advance()
         tracker.recordActivation(windowID: 2)
-        #expect(ids(tracker.ordered([seenLater, seenEarlier], historyDepth: 10)) == [2, 1])
+        #expect(ids(tracker.ordered([seenLater, seenEarlier], historyDepth: 10).resting) == [2, 1])
     }
 
     /// Ordering must not shuffle between presentations when nothing has changed.
@@ -311,9 +420,9 @@ extension MRUTrackerTests {
             seen(id: 3, at: 100, zOrder: 10),
         ]
 
-        let first = ids(tracker.ordered(entries, historyDepth: 10))
-        #expect(first == ids(tracker.ordered(entries, historyDepth: 10)))
-        #expect(first == ids(tracker.ordered(entries.reversed(), historyDepth: 10)))
+        let first = ids(tracker.ordered(entries, historyDepth: 10).resting)
+        #expect(first == ids(tracker.ordered(entries, historyDepth: 10).resting))
+        #expect(first == ids(tracker.ordered(entries.reversed(), historyDepth: 10).resting))
     }
 
     /// Two windows seen in the same enumeration share a stamp, so something else has to
@@ -327,8 +436,8 @@ extension MRUTrackerTests {
             seen(id: 5, at: 500, zOrder: 3),
         ]
 
-        let order = ids(tracker.ordered(entries, historyDepth: 10))
-        #expect(order == ids(tracker.ordered(entries.shuffled(), historyDepth: 10)))
+        let order = ids(tracker.ordered(entries, historyDepth: 10).resting)
+        #expect(order == ids(tracker.ordered(entries.shuffled(), historyDepth: 10).resting))
     }
 
     /// The tie is broken front-to-back, and that decides almost the whole list rather than a
@@ -348,7 +457,7 @@ extension MRUTrackerTests {
             seen(id: 5, at: 500, zOrder: 3),
         ]
 
-        #expect(ids(tracker.ordered(entries, historyDepth: 10)) == [3, 7, 5])
+        #expect(ids(tracker.ordered(entries, historyDepth: 10).resting) == [3, 7, 5])
     }
 
     /// The case the user hit: nothing observed yet, because the app had just been relaunched, and
@@ -368,7 +477,7 @@ extension MRUTrackerTests {
             seen(id: CGWindowID(100 + index), at: 500, zOrder: index, app: "Other \(index)")
         }
 
-        let order = ids(tracker.ordered([current, previous] + older, historyDepth: 25))
+        let order = ids(tracker.ordered([current, previous] + older, historyDepth: 25).resting)
         #expect(order.first == 40)
         #expect(order.dropFirst().first == 900, "got \(order)")
     }
@@ -405,11 +514,11 @@ extension MRUTrackerTests {
         clock.advance(1000)
         tracker.recordActivation(windowID: 2)
 
-        let order = ids(tracker.ordered([pinned, recent], historyDepth: 10, pinnedApplications: ["com.slack"]))
+        let order = ids(tracker.ordered([pinned, recent], historyDepth: 10, pinnedApplications: ["com.slack"]).resting)
         #expect(order == [1, 2])
 
         // Without the pin, recency decides and the order reverses.
-        #expect(ids(tracker.ordered([pinned, recent], historyDepth: 10)) == [2, 1])
+        #expect(ids(tracker.ordered([pinned, recent], historyDepth: 10).resting) == [2, 1])
     }
 
     /// Pinning reorders groups; it does not throw away the ordering inside them.
@@ -431,7 +540,7 @@ extension MRUTrackerTests {
             [older, newer, unpinned],
             historyDepth: 10,
             pinnedApplications: ["com.slack"]
-        ))
+        ).resting)
         #expect(order == [2, 1, 3])
     }
 
@@ -445,7 +554,7 @@ extension MRUTrackerTests {
         let current = owned(id: 1, bundle: "com.other", zOrder: 0)
         let pinned = owned(id: 2, bundle: "com.slack", zOrder: 5)
 
-        let order = ids(tracker.ordered([current, pinned], historyDepth: 10, pinnedApplications: ["com.slack"]))
+        let order = ids(tracker.ordered([current, pinned], historyDepth: 10, pinnedApplications: ["com.slack"]).resting)
         #expect(order == [1, 2])
     }
 
@@ -467,7 +576,7 @@ extension MRUTrackerTests {
             [slack, notes, other],
             historyDepth: 10,
             pinnedApplications: ["com.slack", "com.notes"]
-        ))
+        ).resting)
         #expect(order == [2, 1, 3])
     }
 
@@ -478,8 +587,8 @@ extension MRUTrackerTests {
         let entries = [owned(id: 1, bundle: "com.other"), owned(id: 2, bundle: "com.another")]
 
         #expect(
-            ids(tracker.ordered(entries, historyDepth: 10, pinnedApplications: ["com.absent"]))
-                == ids(tracker.ordered(entries, historyDepth: 10))
+            ids(tracker.ordered(entries, historyDepth: 10, pinnedApplications: ["com.absent"]).resting)
+                == ids(tracker.ordered(entries, historyDepth: 10).resting)
         )
     }
 
@@ -492,7 +601,7 @@ extension MRUTrackerTests {
         let anonymous = owned(id: 1, bundle: nil)
         let pinned = owned(id: 2, bundle: "com.slack")
 
-        let order = ids(tracker.ordered([anonymous, pinned], historyDepth: 10, pinnedApplications: ["com.slack"]))
+        let order = ids(tracker.ordered([anonymous, pinned], historyDepth: 10, pinnedApplications: ["com.slack"]).resting)
         #expect(order == [2, 1])
     }
 
@@ -512,7 +621,7 @@ extension MRUTrackerTests {
         pinned.lastSeenOnActiveSpace = nil
         entries.append(pinned)
 
-        let order = ids(tracker.ordered(entries, historyDepth: 3, pinnedApplications: ["com.slack"]))
+        let order = ids(tracker.ordered(entries, historyDepth: 3, pinnedApplications: ["com.slack"]).resting)
         #expect(order.count == 3)
         #expect(order.contains(99))
     }
@@ -531,8 +640,8 @@ extension MRUTrackerTests {
         }
 
         let pins: Set<String> = ["com.slack"]
-        let first = ids(tracker.ordered(entries, historyDepth: 10, pinnedApplications: pins))
-        #expect(first == ids(tracker.ordered(entries, historyDepth: 10, pinnedApplications: pins)))
-        #expect(first == ids(tracker.ordered(entries.reversed(), historyDepth: 10, pinnedApplications: pins)))
+        let first = ids(tracker.ordered(entries, historyDepth: 10, pinnedApplications: pins).resting)
+        #expect(first == ids(tracker.ordered(entries, historyDepth: 10, pinnedApplications: pins).resting))
+        #expect(first == ids(tracker.ordered(entries.reversed(), historyDepth: 10, pinnedApplications: pins).resting))
     }
 }

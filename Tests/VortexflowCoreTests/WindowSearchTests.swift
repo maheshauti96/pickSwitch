@@ -413,3 +413,82 @@ struct WindowSearchTests {
         }
     }
 }
+
+/// What the history depth is allowed to affect, and what it must not.
+///
+/// The reported failure was that a running application was missing from the switcher. The half of it
+/// that lived here was worse than the missing card: the trimmed list was the *only* list the state
+/// held, so a window over the depth could not be found by typing either — the switcher answered "that
+/// application is not running" about an application that was.
+@MainActor
+struct RestingListAndSearchTests {
+
+    private func window(_ id: CGWindowID, _ app: String) -> WindowEntry {
+        Fixture.entry(id: id, app: app, title: "\(app) window", zOrder: Int(id))
+    }
+
+    /// Ten drawn, eleven known.
+    private func loaded() -> (state: OverlayState, trimmed: WindowEntry) {
+        let shown = (1...10).map { window(CGWindowID($0), "App\($0)") }
+        let slack = window(99, "Slack")
+        let state = OverlayState()
+        state.load(entries: shown, searchable: shown + [slack], selectedIndex: 0)
+        return (state, slack)
+    }
+
+    @Test("The resting list is what the depth allowed, not everything")
+    func restingListHonoursTheDepth() {
+        let (state, _) = loaded()
+        #expect(state.entries.count == 10)
+        #expect(!state.entries.contains { $0.applicationName == "Slack" })
+    }
+
+    /// The fix. A window the depth trimmed is one keystroke away rather than denied.
+    @Test("A window the depth trimmed is still found by typing")
+    func aTrimmedWindowIsStillSearchable() {
+        let (state, _) = loaded()
+        #expect(state.appendToSearch("slack"))
+        #expect(state.entries.contains { $0.applicationName == "Slack" })
+    }
+
+    /// The trap in holding two lists: clearing a search has to return to the resting one. Reading the
+    /// searchable list back for an empty query would silently ignore the depth from then on.
+    @Test("Clearing the search returns to the resting list, not to everything")
+    func clearingTheSearchReturnsToTheRestingList() {
+        let (state, _) = loaded()
+        state.appendToSearch("slack")
+        #expect(state.entries.contains { $0.applicationName == "Slack" })
+
+        state.clearSearch()
+        #expect(state.entries.count == 10)
+        #expect(!state.entries.contains { $0.applicationName == "Slack" })
+    }
+
+    /// Closing a window has to remove it from both lists, or clearing a search brings the dead card
+    /// back from whichever list the empty query reads.
+    @Test("A closed window does not come back when the search is cleared")
+    func aClosedWindowStaysGone() {
+        let (state, _) = loaded()
+        state.appendToSearch("slack")
+        #expect(state.remove(windowID: 99))
+
+        state.clearSearch()
+        #expect(!state.entries.contains { $0.applicationName == "Slack" })
+        #expect(!state.appendToSearch("slack") || !state.entries.contains { $0.windowID == 99 })
+    }
+
+    /// Callers with nothing trimmed pass one list and must behave exactly as before.
+    @Test("Loading without a wider list leaves search over the same entries")
+    func loadingWithoutAWiderListIsUnchanged() {
+        let shown = [window(1, "Finder"), window(2, "Warp"), window(3, "Slack")]
+        let state = OverlayState()
+        state.load(entries: shown, selectedIndex: 0)
+        #expect(state.entries.count == 3)
+
+        #expect(state.appendToSearch("slack"))
+        #expect(state.localEntries.map(\.applicationName) == ["Slack"])
+
+        state.clearSearch()
+        #expect(state.entries.count == 3)
+    }
+}

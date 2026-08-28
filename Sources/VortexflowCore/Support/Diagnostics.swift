@@ -139,18 +139,36 @@ public enum Diagnostics {
 
         let tracker = MRUTracker()
         let ordered = tracker.ordered(entries, historyDepth: SettingsStore().historyDepth)
-        let minimized = ordered.filter(\.isMinimized).count
-        let appLevelOnly = ordered.filter { $0.axElement == nil }.count
+        let resting = ordered.resting
+        let minimized = resting.filter(\.isMinimized).count
+        let appLevelOnly = resting.filter { $0.axElement == nil }.count
 
         print("  minimized among them: \(minimized)")
         print("  remembered from other Spaces: \(registry.rememberedWindowCount)")
         if appLevelOnly > 0 {
             print("  activating by application only (no Accessibility handle): \(appLevelOnly)")
         }
+        // Reported whenever the two lists differ, because "why is X missing" is exactly the question
+        // this probe exists to answer, and the answer is usually this line.
+        if ordered.all.count != resting.count {
+            print("""
+                  history depth trimmed \(ordered.all.count - resting.count) window(s) from the \
+                resting list; all \(ordered.all.count) remain findable by typing
+                """)
+        }
         print("\n  Strip contents, in order:")
-        for (index, entry) in ordered.enumerated() {
+        for (index, entry) in resting.enumerated() {
             let marker = entry.isMinimized ? " (minimized)" : ""
             print("    \(index + 1). \(entry.applicationName) — \(entry.displayTitle)\(marker)")
+        }
+        let trimmed = ordered.all.filter { candidate in
+            !resting.contains { $0.windowID == candidate.windowID }
+        }
+        if !trimmed.isEmpty {
+            print("\n  Searchable but not shown:")
+            for entry in trimmed {
+                print("    · \(entry.applicationName) — \(entry.displayTitle)")
+            }
         }
     }
 

@@ -23,7 +23,15 @@ final class OverlayState: ObservableObject {
 
     /// Everything enumerated this presentation, before filtering. Kept so clearing the
     /// query restores the full list without re-enumerating.
+    /// Every window the presentation found, ranked. What search looks through.
     private var allEntries: [WindowEntry] = []
+
+    /// What is drawn with no query: `allEntries` less whatever the history depth trimmed.
+    ///
+    /// Held separately rather than derived, because clearing a search has to return to *this* list.
+    /// Reading `allEntries` back for an empty query — which is what the code did when the two were the
+    /// same array — would quietly ignore the depth the moment a search was cleared.
+    private var restingEntries: [WindowEntry] = []
 
     /// Browser tabs, searched but never listed by default.
     ///
@@ -455,7 +463,8 @@ final class OverlayState: ObservableObject {
             return true
         }
         if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            matches = allEntries
+            // The resting list, not everything: the history depth governs what is shown unasked.
+            matches = restingEntries
         } else {
             // Switching remains primary. Apps are offered only after both the real-window list
             // and the asynchronously fetched browser tabs have definitely missed.
@@ -506,8 +515,15 @@ final class OverlayState: ObservableObject {
         }
     }
 
-    func load(entries: [WindowEntry], selectedIndex: Int?) {
-        allEntries = entries
+    /// - Parameters:
+    ///   - entries: what is drawn before the user types, already trimmed to the history depth.
+    ///   - searchable: every window the presentation found. Defaults to `entries` for the callers that
+    ///     have no wider list, but when the depth trimmed anything this is the untrimmed one — a window
+    ///     the depth removed from the resting view must still be findable by name, or the switcher is
+    ///     claiming a running application does not exist.
+    func load(entries: [WindowEntry], searchable: [WindowEntry]? = nil, selectedIndex: Int?) {
+        allEntries = searchable ?? entries
+        restingEntries = entries
         tabEntries = []
         hasLoadedTabs = false
         searchQuery = ""
@@ -847,9 +863,10 @@ final class OverlayState: ObservableObject {
 
         var remaining = entries
         remaining.remove(at: index)
-        // Also drop it from the unfiltered list, or clearing the search would bring the
-        // closed window back.
+        // Also drop it from both unfiltered lists, or clearing the search would bring the closed
+        // window back — from whichever of the two the empty query happens to read.
         allEntries.removeAll { $0.windowID == windowID }
+        restingEntries.removeAll { $0.windowID == windowID }
 
         let nextSelection: Int?
         if remaining.isEmpty {
