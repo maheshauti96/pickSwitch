@@ -23,8 +23,6 @@ import Foundation
 ///   and then places the window. The items stay offered: hiding them would block moving a
 ///   shared-screen window onto another display. Exit Full Screen remains for leaving without
 ///   placing.
-/// - Muting appears only for a window actually making noise. It is not a toggle and not a preference;
-///   it acts on what is playing right now, and there is nothing to act on otherwise.
 enum CardMenuItem: Equatable {
 
     /// Scope the overlay's own search to this browser window's tabs. `count` is `nil` until the tab
@@ -32,8 +30,6 @@ enum CardMenuItem: Equatable {
     /// before the number is known, and choosing it is what fetches them.
     case searchWindowTabs(count: Int?)
 
-    /// Mute whatever is currently audible in this window.
-    case muteAudible
     /// Toggle play / pause for whatever this window is playing. Offered when the window
     /// is making noise. The hardware play key is a toggle, so this is too.
     case pausePlayback
@@ -63,9 +59,6 @@ enum CardMenu {
         var hasSearchableTabs: Bool = false
         /// Tabs known to belong to this window, or `nil` if they have not been fetched.
         var knownTabCount: Int?
-        /// Whether this window is making noise right now. Mute is offered on this, because
-        /// mute acts on whatever is coming out of the speakers.
-        var isAudible: Bool = false
         /// Whether this window is currently playing, as opposed to only using the microphone.
         /// Previous / pause / next are a media session, and a call on the mic is not one.
         var isPlayingAudio: Bool = false
@@ -106,9 +99,6 @@ enum CardMenu {
         /// preview, after the title and facts the picture is of.
         var contents: [CardMenuItem] = []
 
-        /// Remaining content actions that still need a captioned glyph, currently mute.
-        var actions: [CardMenuItem] = []
-
         /// Previous / pause / next, drawn under the facts the way Chrome's own media
         /// controls sit under the playing tab. Offered only while this window is playing.
         var media: [CardMenuItem] = []
@@ -119,7 +109,6 @@ enum CardMenu {
                 && fillArrange.isEmpty
                 && placement.isEmpty
                 && contents.isEmpty
-                && actions.isEmpty
                 && media.isEmpty
         }
     }
@@ -154,13 +143,10 @@ enum CardMenu {
         if context.hasSearchableTabs {
             rows.contents.append(.searchWindowTabs(count: context.knownTabCount))
         }
-        // Pause / next only while something is actually playing. A microphone session is
-        // audible in the mute sense but has no track to skip.
+        // Pause / next only while something is actually playing. A microphone session
+        // has no track to skip.
         if context.isPlayingAudio {
             rows.media = [.previousTrack, .pausePlayback, .nextTrack]
-        }
-        if context.isAudible {
-            rows.actions.append(.muteAudible)
         }
 
         return rows
@@ -187,8 +173,6 @@ extension CardMenuItem {
                 symbolName: "magnifyingglass",
                 label: count.map { $0 == 1 ? "1 tab" : "\($0) tabs" } ?? "Tabs"
             )
-        case .muteAudible:
-            return Icon(symbolName: "speaker.slash", label: "Mute")
         case .pausePlayback:
             return Icon(symbolName: "pause.fill", label: "Pause")
         case .nextTrack:
@@ -220,7 +204,7 @@ extension CardMenuItem {
     var isDestructive: Bool {
         switch self {
         case .closeWindow: return true
-        case .searchWindowTabs, .muteAudible, .pausePlayback, .nextTrack, .previousTrack,
+        case .searchWindowTabs, .pausePlayback, .nextTrack, .previousTrack,
              .minimizeWindow, .tileWindow, .enterFullScreen, .exitFullScreen, .moveToDisplay:
             return false
         }
@@ -234,8 +218,6 @@ extension CardMenuItem {
         case .searchWindowTabs(let count):
             guard let count else { return "Search through Tabs" }
             return count == 1 ? "Search through 1 Tab" : "Search through \(count) Tabs"
-        case .muteAudible:
-            return "Mute what's playing"
         case .pausePlayback:
             return "Play/Pause"
         case .nextTrack:
@@ -262,7 +244,7 @@ extension CardMenuItem {
     var keepsMenuOpen: Bool {
         switch self {
         case .pausePlayback, .nextTrack, .previousTrack: return true
-        case .searchWindowTabs, .muteAudible, .closeWindow, .minimizeWindow,
+        case .searchWindowTabs, .closeWindow, .minimizeWindow,
              .tileWindow, .enterFullScreen, .exitFullScreen, .moveToDisplay:
             return false
         }
