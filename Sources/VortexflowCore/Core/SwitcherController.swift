@@ -173,6 +173,8 @@ public final class SwitcherController {
     private enum ConfirmationIntent: Equatable {
         case selection
         case returnKey
+        /// Shift-Return: skip the results page and open the first web hit.
+        case firstWebResult
     }
 
     private struct PendingSearchConfirmation {
@@ -1368,6 +1370,10 @@ public final class SwitcherController {
         guard !state.isResolvingSearch else { return }
 
         pendingSearchConfirmation = nil
+        if pending.intent == .firstWebResult {
+            openFirstWebResult()
+            return
+        }
         commitSelection(intent: pending.intent)
     }
 
@@ -3045,12 +3051,53 @@ extension SwitcherController: TriggerMonitorDelegate {
         commitSelection(intent: .returnKey)
     }
 
+    /// Shift-Return: the first web hit for whatever was typed, not the selected wedge.
+    ///
+    /// Return already means "the thing under the pointer". This is the other habit: I know
+    /// this is on the web, skip the results page. Queued while tabs are still resolving
+    /// so a fast Shift-Return is not dropped as a miss.
+    func firstWebResultPressed() {
+        guard state.isVisible else { return }
+        let query = state.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+
+        if state.isResolvingSearch {
+            pendingSearchConfirmation = PendingSearchConfirmation(
+                presentationID: state.presentationID,
+                query: state.searchQuery,
+                intent: .firstWebResult
+            )
+            Log.overlay.debug("queued first-web-result until local search sources settle")
+            return
+        }
+        openFirstWebResult()
+    }
+
+    private func openFirstWebResult() {
+        let query = state.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let planned = WebSearch.firstResultDestination(for: query) else { return }
+        openInDefaultBrowser(planned)
+    }
+
     /// Hand a destination to whichever browser the user has set as their default.
     private func openInDefaultBrowser(_ destination: WebSearch.Destination) {
         // Deliberately not phrased as "no window matched" any more. This is reached both from the
         // empty state and from a web-search result the user picked while local matches were on
         // screen, and a log line that asserted the first would be wrong half the time.
         switch destination {
+        case .firstResult:
+            // Follow Lucky in-process so Chrome never sees google.com/url's redirect notice.
+            let query = state.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            dismiss(activating: nil)
+            Task {
+                let resolved = await WebSearch.resolvedFirstResult(for: query)
+                await MainActor.run {
+                    guard let resolved else { return }
+                    Log.overlay.info("opening the first web result for the query")
+                    NSWorkspace.shared.open(resolved.url)
+                }
+            }
+            return
         case .address:
             Log.overlay.info("opening the query as an address")
         case .search:

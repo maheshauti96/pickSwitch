@@ -64,6 +64,8 @@ enum KeyResponse: Equatable, Sendable {
     /// hotkey cannot drift apart.
     case triggerShortcut
     case confirm
+    /// Shift-Return: skip the results page and open the first web hit for the query.
+    case openFirstWebResult
     case deleteSearchCharacter
     /// Wipe the whole query in one go: Command with either delete key.
     ///
@@ -135,6 +137,13 @@ enum KeyResponse: Equatable, Sendable {
         case escapeKeyCode:
             return .dismiss
         case returnKeyCode, keypadEnterKeyCode:
+            // Shift-Return is "open the first web result", not confirm. Command/Control
+            // stay out of it so those chords keep reaching the application underneath.
+            if activeModifiers.contains(.maskShift),
+               !activeModifiers.contains(.maskCommand),
+               !activeModifiers.contains(.maskControl) {
+                return .openFirstWebResult
+            }
             return .confirm
         case deleteKeyCode, forwardDeleteKeyCode:
             // Command with delete means "all of it" wherever else macOS accepts text, and this is

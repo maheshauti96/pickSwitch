@@ -258,6 +258,34 @@ struct KeyResponseTests {
         )
     }
 
+    /// Shift-Return is the first web hit, not confirm. Bare Return has to keep meaning
+    /// the selected result, including "Search the web".
+    @Test("shift-return opens the first web result", arguments: [
+        KeyResponse.returnKeyCode, KeyResponse.keypadEnterKeyCode,
+    ])
+    func shiftReturnOpensTheFirstWebResult(keyCode: Int64) {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: keyCode,
+                activeModifiers: .maskShift,
+                characters: "\r",
+                shortcutKeyCode: nil
+            ) == .openFirstWebResult
+        )
+    }
+
+    @Test("command-shift-return is not the first-web-result chord")
+    func commandShiftReturnIsNotLucky() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: KeyResponse.returnKeyCode,
+                activeModifiers: [.maskShift, .maskCommand],
+                characters: "\r",
+                shortcutKeyCode: nil
+            ) == .confirm
+        )
+    }
+
     @Test("both delete keys shorten the query", arguments: [
         KeyResponse.deleteKeyCode, KeyResponse.forwardDeleteKeyCode,
     ])

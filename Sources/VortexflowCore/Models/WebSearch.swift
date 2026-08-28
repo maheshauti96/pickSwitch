@@ -83,12 +83,15 @@ enum WebSearch {
         case address(URL)
         /// The query was a search; ask a search engine.
         case search(URL)
+        /// Skip the results page and open the first hit. Shift-Return is the same action.
+        case firstResult(URL)
         /// The query is a prompt for an assistant.
         case prompt(PromptProvider, URL)
 
         var url: URL {
             switch self {
-            case .address(let url), .search(let url), .prompt(_, let url): return url
+            case .address(let url), .search(let url), .firstResult(let url), .prompt(_, let url):
+                return url
             }
         }
     }
@@ -100,6 +103,13 @@ enum WebSearch {
     /// the URL is handed to the system to open — so this only decides which engine answers, and
     /// only for text that was never going to resolve on its own.
     static let searchTemplate = "https://www.google.com/search?q="
+
+    /// Google's I'm Feeling Lucky: the same search, skipping the results page.
+    ///
+    /// `btnI=1` is the Lucky form button. A phrase the switcher could not match locally
+    /// is often something the user already knows is on the web, and landing on the first
+    /// hit is what Shift-Return is for.
+    static let firstResultSearchTemplate = "https://www.google.com/search?btnI=1&q="
 
     /// Everywhere the query could reasonably take the user, best guess first.
     ///
@@ -115,11 +125,18 @@ enum WebSearch {
         guard !trimmed.isEmpty else { return [] }
 
         var destinations: [Destination] = []
-        if let address = addressURL(for: trimmed) {
+        let address = addressURL(for: trimmed)
+        if let address {
             destinations.append(.address(address))
         }
         if let search = searchDestination(for: trimmed) {
             destinations.append(search)
+            // Immediately after Search the web, so Down-then-Return reaches it and a
+            // click can find it. Shift-Return is the same action, not a hidden extra.
+            // Withheld for a typed address: "Go to grok.com" is already that first hit.
+            if address == nil, let first = firstResultLuckyDestination(for: trimmed) {
+                destinations.append(first)
+            }
         }
         // After the search, never before it. Ordering here is what Return means, and Return has
         // meant "look this up" since before the assistants were offered — quietly promoting one of
@@ -143,6 +160,97 @@ enum WebSearch {
     /// The single best destination, which is the first of `destinations(for:)`.
     static func destination(for query: String) -> Destination? {
         destinations(for: query).first
+    }
+
+    /// Where Shift-Return should go: the query as an address, or the first search hit.
+    ///
+    /// An address is already the first result. A phrase uses I'm Feeling Lucky rather
+    /// than the results page Return opens.
+    static func firstResultDestination(for query: String) -> Destination? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let address = addressURL(for: trimmed) {
+            return .address(address)
+        }
+        return firstResultLuckyDestination(for: trimmed)
+    }
+
+    /// Follow Google's Lucky redirect in-process and return the real page.
+    ///
+    /// Opening `google.com/url?q=…` in the browser is what draws the "Redirect Notice"
+    /// interstitial. Taking the `q` ourselves and handing the destination to the browser
+    /// is what skips it. If Lucky never leaves Google, fall back to the ordinary results
+    /// page so Shift-Return still does something.
+    static func resolvedFirstResult(for query: String) async -> Destination? {
+        guard let planned = firstResultDestination(for: query) else { return nil }
+        if case .address = planned { return planned }
+        guard case .firstResult(let luckyURL) = planned else { return planned }
+        if let page = await followLuckySearch(luckyURL) {
+            return .address(page)
+        }
+        return searchDestination(for: query)
+    }
+
+    /// The page Google's `/url?q=` wrapper is sending the user to, or `nil` when the
+    /// URL is still a Google results/consent page.
+    ///
+    /// The reported case: `https://www.google.com/url?q=https://ca.indeed.com/…`
+    /// opened as a "Redirect Notice" instead of Indeed. The destination is already
+    /// in `q` (or `url`); opening that directly is what avoids the notice.
+    static func pageURL(skippingGoogleRedirect url: URL) -> URL? {
+        let host = url.host?.lowercased() ?? ""
+        let isGoogle = host == "google.com" || host.hasSuffix(".google.com")
+        if isGoogle {
+            guard url.path == "/url" || url.path.hasPrefix("/url") else { return nil }
+            return encodedDestination(in: url)
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https"
+        else { return nil }
+        return url
+    }
+
+    private static let luckySession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 5
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.urlCache = nil
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
+    private static func followLuckySearch(_ luckyURL: URL) async -> URL? {
+        var request = URLRequest(url: luckyURL)
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                + "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            forHTTPHeaderField: "User-Agent"
+        )
+        do {
+            let (_, response) = try await luckySession.data(for: request)
+            guard let final = response.url else { return nil }
+            return pageURL(skippingGoogleRedirect: final)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func encodedDestination(in url: URL) -> URL? {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let value = items.first(where: { $0.name == "q" || $0.name == "url" })?.value
+        guard let value, let destination = URL(string: value) else { return nil }
+        guard let scheme = destination.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return nil }
+        return destination
+    }
+
+    private static func firstResultLuckyDestination(for query: String) -> Destination? {
+        guard let encoded = encodedParameter(query),
+              let url = URL(string: firstResultSearchTemplate + encoded)
+        else { return nil }
+        return .firstResult(url)
     }
 
     private static func searchDestination(for query: String) -> Destination? {

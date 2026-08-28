@@ -75,6 +75,47 @@ struct WebSearchTests {
         #expect(destination("\n\t") == nil)
     }
 
+    /// Shift-Return skips the results page. `btnI=1` is Google's Lucky button; the
+    /// query still has to be encoded the same way as an ordinary search.
+    @Test("A phrase's first result uses I'm Feeling Lucky")
+    func phrasesOpenTheFirstSearchHit() {
+        guard case .firstResult(let url)? = WebSearch.firstResultDestination(for: "how to use this") else {
+            Issue.record("expected a first-result search")
+            return
+        }
+        #expect(url.absoluteString.hasPrefix(WebSearch.firstResultSearchTemplate))
+        #expect(url.absoluteString.contains("how%20to%20use%20this"))
+        #expect(!url.absoluteString.hasPrefix(WebSearch.searchTemplate))
+    }
+
+    /// An address is already the first result, so Lucky must not wrap it in a search.
+    @Test("An address's first result is the address")
+    func anAddressFirstResultIsTheAddress() {
+        guard case .address = WebSearch.firstResultDestination(for: "grok.com") else {
+            Issue.record("expected the address itself")
+            return
+        }
+        #expect(WebSearch.firstResultDestination(for: "   ") == nil)
+    }
+
+    /// The reported interstitial: Google wraps the Lucky hit in `/url?q=`. Opening that
+    /// in the browser is the "Redirect Notice". The destination is already in `q`.
+    @Test("A Google redirect wrapper yields the destination page")
+    func aGoogleRedirectWrapperYieldsThePage() throws {
+        let wrapped = try #require(URL(
+            string: "https://www.google.com/url?q=https://ca.indeed.com/career-advice/how-to-respond"
+        ))
+        let page = try #require(WebSearch.pageURL(skippingGoogleRedirect: wrapped))
+        #expect(page.host == "ca.indeed.com")
+        #expect(page.scheme == "https")
+
+        let search = try #require(URL(string: "https://www.google.com/search?q=how+to+use+this"))
+        #expect(WebSearch.pageURL(skippingGoogleRedirect: search) == nil)
+
+        let direct = try #require(URL(string: "https://ca.indeed.com/career-advice"))
+        #expect(WebSearch.pageURL(skippingGoogleRedirect: direct) == direct)
+    }
+
     /// Query-string metacharacters have to be encoded, or they truncate or corrupt the parameter.
     @Test("Characters that would break the query are encoded")
     func metacharactersAreEncoded() {
@@ -126,10 +167,14 @@ struct WebSearchTests {
     @Test("a phrase is offered to every assistant, after the search")
     func promptsFollowTheSearch() {
         let offers = WebSearch.destinations(for: "how do I revert a merge commit")
-        #expect(offers.count == 1 + WebSearch.PromptProvider.allCases.count)
+        #expect(offers.count == 2 + WebSearch.PromptProvider.allCases.count)
 
         guard case .search = offers.first else {
             Issue.record("the search should still come first")
+            return
+        }
+        guard case .firstResult = offers.dropFirst().first else {
+            Issue.record("the first-result offer should sit under Search the web")
             return
         }
 
@@ -216,7 +261,7 @@ struct WebSearchTests {
         for offer in WebSearch.destinations(for: "grok.com") {
             switch offer {
             case .prompt: continue
-            case .address, .search:
+            case .address, .search, .firstResult:
                 #expect(WebSearchTarget(query: "grok.com", destination: offer)
                     .logoSourceURL == nil)
             }

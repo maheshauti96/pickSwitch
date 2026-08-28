@@ -233,6 +233,7 @@ struct WebSearchTarget: Equatable {
         switch destination {
         case .address: return "address"
         case .search: return "search"
+        case .firstResult: return "firstResult"
         case .prompt(let provider, _): return "prompt:\(provider.rawValue)"
         }
     }
@@ -246,6 +247,7 @@ struct WebSearchTarget: Equatable {
         switch destination {
         case .address(let url): return url.host.map { "Go to \($0)" } ?? "Go to site"
         case .search: return "Search the web"
+        case .firstResult: return "Open first result"
         case .prompt(let provider, _): return "Prompt on \(provider.displayName)"
         }
     }
@@ -266,6 +268,7 @@ struct WebSearchTarget: Equatable {
         switch destination {
         case .address: name = "arrow.up.forward.square"
         case .search: name = "magnifyingglass"
+        case .firstResult: name = "arrow.up.forward.app"
         // Stands in until the real logo arrives. A symbol cannot be a brand mark, so this is
         // deliberately generic rather than an approximation of any one of them — `logoSourceURL`
         // is what eventually replaces it with the provider's own.

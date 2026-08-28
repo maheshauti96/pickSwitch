@@ -45,10 +45,11 @@ struct WebSearchResultTests {
         // assistant — so this asserts the shape instead of a count that grows whenever another
         // provider is added.
         let offers = subject.entries.filter(\.isWebSearch)
-        #expect(offers.count == 1 + WebSearch.PromptProvider.allCases.count)
+        #expect(offers.count == 2 + WebSearch.PromptProvider.allCases.count)
         #expect(subject.entries.count == subject.localEntries.count + offers.count)
         #expect(subject.entries.suffix(offers.count).allSatisfy { $0.isWebSearch })
         #expect(offers.first?.sourceLabel == "Search the web")
+        #expect(offers.dropFirst().first?.sourceLabel == "Open first result")
     }
 
     /// Switching is the point of the switcher, so the local match keeps the default selection and
@@ -162,9 +163,10 @@ struct WebSearchResultTests {
         subject.appendToSearch("quarterly report")
 
         let offers = subject.entries.filter { $0.isWebSearch }
-        // No address to go to, so: the search, then the assistants.
-        #expect(offers.count == 1 + WebSearch.PromptProvider.allCases.count)
+        // No address to go to, so: the search, the first hit, then the assistants.
+        #expect(offers.count == 2 + WebSearch.PromptProvider.allCases.count)
         #expect(offers.first?.sourceLabel == "Search the web")
+        #expect(offers.dropFirst().first?.sourceLabel == "Open first result")
         #expect(offers.allSatisfy { $0.sourceLabel != "Go to site" })
     }
 

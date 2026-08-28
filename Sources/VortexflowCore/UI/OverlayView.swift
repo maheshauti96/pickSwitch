@@ -824,6 +824,7 @@ struct OverlayView: View {
         switch destination {
         case .address: return "to open \(shown)"
         case .search: return "to search the web for \(shown)"
+        case .firstResult: return "to open the first result for \(shown)"
         case .prompt(let provider, _): return "to ask \(provider.displayName) about \(shown)"
         }
     }

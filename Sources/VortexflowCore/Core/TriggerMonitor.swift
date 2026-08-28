@@ -25,6 +25,8 @@ protocol TriggerMonitorDelegate: AnyObject {
     /// `escapePressed()`, which backs out of a search first.
     func keyboardShortcutPressed()
     func confirmPressed()
+    /// Shift-Return: open the first web result for the current query.
+    func firstWebResultPressed()
     /// An arrow key pressed while the overlay is up, for moving the selection without the mouse.
     func arrowPressed(_ direction: ArrowDirection)
     /// Printable characters typed while the overlay is up, for the search field.
@@ -563,6 +565,9 @@ final class TriggerMonitor {
                 return nil
             case .confirm:
                 monitor.dispatch { $0.confirmPressed() }
+                return nil
+            case .openFirstWebResult:
+                monitor.dispatch { $0.firstWebResultPressed() }
                 return nil
             case .deleteSearchCharacter:
                 monitor.dispatch { $0.searchBackspacePressed() }
