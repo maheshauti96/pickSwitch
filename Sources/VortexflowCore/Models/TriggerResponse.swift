@@ -44,23 +44,25 @@ enum TriggerResponse: Equatable, Sendable {
     ) -> TriggerResponse {
         guard overlayVisible else { return .open }
 
-        switch mode {
-        case .hold:
-            // Still held. Releasing decides what happens; a press arriving in between is noise.
-            return .ignore
-
-        case .toggle:
-            switch source {
-            case .keyboardShortcut:
-                // Requirement 6.2. This was specified from the start and was unreachable: the
-                // shortcut was routed into the button's path, where a second press commits, so
-                // pressing the shortcut again switched windows instead of closing the overlay.
-                return .dismissWithoutSwitching
-            case .button:
-                // Unchanged, and deliberately different: `ActivationMode.toggle` promises "press
-                // again, or click a window, to switch", and it is what makes the switcher fully
-                // mouse-driven — tap to open, scroll to choose, tap to switch, with no need to
-                // click precisely on a card.
+        switch source {
+        case .keyboardShortcut:
+            // Requirement 6.2: the combination that opened the overlay closes it, and
+            // does not switch. This used to be `.ignore` while presentation mode was
+            // `.hold`, on the theory that Carbon auto-repeats. It does not — and a
+            // mouse-mapped shortcut often never sends a hotkey *release*, so the
+            // overlay stayed in hold forever and every later press was swallowed.
+            return .dismissWithoutSwitching
+        case .button:
+            switch mode {
+            case .hold:
+                // Still held. Releasing decides what happens; a press arriving in
+                // between is noise.
+                return .ignore
+            case .toggle:
+                // `ActivationMode.toggle` promises "press again, or click a window, to
+                // switch", and it is what makes the switcher fully mouse-driven — tap
+                // to open, scroll to choose, tap to switch, with no need to click
+                // precisely on a card.
                 return .commitSelection
             }
         }

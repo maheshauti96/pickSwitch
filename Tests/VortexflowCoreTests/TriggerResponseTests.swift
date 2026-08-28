@@ -73,14 +73,25 @@ struct TriggerResponseTests {
 
     // MARK: - While held
 
-    /// In hold mode the trigger is still physically down, so anything arriving before the release
-    /// is noise rather than a second gesture — including a hotkey that auto-repeats.
-    @Test("A press while the trigger is held is ignored", arguments: [
-        TriggerSource.button, TriggerSource.keyboardShortcut,
-    ])
-    func pressWhileHeldIsIgnored(source: TriggerSource) {
+    /// In hold mode the mouse button is still physically down, so anything arriving
+    /// before the release is noise rather than a second gesture.
+    @Test("A button press while the trigger is held is ignored")
+    func buttonPressWhileHeldIsIgnored() {
         #expect(
-            TriggerResponse.forPress(from: source, overlayVisible: true, mode: .hold) == .ignore
+            TriggerResponse.forPress(from: .button, overlayVisible: true, mode: .hold) == .ignore
+        )
+    }
+
+    /// A remapped mouse button often never sends a hotkey release, so the overlay
+    /// stays in hold. The shortcut pressed again still has to close it.
+    @Test("The shortcut closes even if the first press is still in hold")
+    func shortcutClosesWhileHoldIsStuck() {
+        #expect(
+            TriggerResponse.forPress(
+                from: .keyboardShortcut,
+                overlayVisible: true,
+                mode: .hold
+            ) == .dismissWithoutSwitching
         )
     }
 

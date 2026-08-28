@@ -121,9 +121,16 @@ enum KeyResponse: Equatable, Sendable {
     ///   - shortcutKeyCode: the key code of the registered global shortcut, when there is one.
     ///   - shortcutModifiers: the modifiers that shortcut requires. Empty for a shortcut that needs
     ///     none, such as F13.
-    ///   - isSearching: whether a query is currently active. Consulted only for Command-A, which
-    ///     must keep meaning select-all *in the application underneath* when the overlay is up
-    ///     with nothing typed — the overlay has no claim on it until there is a query to select.
+    ///   - isSearching: whether a query is currently active. Command-A must keep meaning
+    ///     select-all *in the application underneath* when nothing is typed. The same flag
+    ///     is what lets a remapped mouse button close the overlay: Logitech injects the
+    ///     shortcut as a bare Space with no Option flag, which is indistinguishable from
+    ///     typing — except that with an empty query there is nothing to type into, so the
+    ///     Space is the shortcut. Once a query exists, a bare Space is a space.
+    ///   - shortcutModifiersRecentlyHeld: whether a modifier the shortcut requires was seen as
+    ///     its own key-down a moment ago. Mouse software that injects ⌥Space as Option-down
+    ///     then Space-down often leaves Space with no Option flag, and a live flags query
+    ///     misses it too if Option was already released. The recent key-down is the chord.
     static func forKeyDown(
         keyCode: Int64,
         activeModifiers: CGEventFlags,
@@ -131,7 +138,8 @@ enum KeyResponse: Equatable, Sendable {
         isAutorepeat: Bool = false,
         shortcutKeyCode: Int64?,
         shortcutModifiers: CGEventFlags = [],
-        isSearching: Bool = false
+        isSearching: Bool = false,
+        shortcutModifiersRecentlyHeld: Bool = false
     ) -> KeyResponse {
         switch keyCode {
         case escapeKeyCode:
@@ -176,7 +184,15 @@ enum KeyResponse: Equatable, Sendable {
             // looks exactly like a deliberate space bar.
             if isAutorepeat { return .ignore }
 
-            if activeModifiers.isSuperset(of: shortcutModifiers) {
+            if activeModifiers.isSuperset(of: shortcutModifiers)
+                || (!shortcutModifiers.isEmpty && shortcutModifiersRecentlyHeld)
+                || !isSearching {
+                // Empty query: the shortcut's own key closes, even without its
+                // modifiers. Mouse software often injects ⌥Space as a naked Space
+                // — no Option on the event, none in the live flags, and no Option
+                // key-down to arm from. Treating that Space as typing is what
+                // filled the search field. A leading space is not a useful search,
+                // so the close wins until the user has actually typed something.
                 return .triggerShortcut
             }
         }

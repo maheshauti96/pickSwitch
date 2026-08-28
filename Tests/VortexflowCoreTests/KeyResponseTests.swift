@@ -49,7 +49,8 @@ struct KeyResponseTests {
     }
 
     /// The defect introduced by the first fix. Under ⌥Space, a bare space is the user typing, and
-    /// refusing it made the space bar dead in the search field.
+    /// refusing it made the space bar dead in the search field. Only once a query exists,
+    /// though: with nothing typed, that same Space is the Logitech-injected shortcut.
     @Test("the shortcut's key without its modifiers is ordinary typing")
     func bareShortcutKeyTypes() {
         let response = KeyResponse.forKeyDown(
@@ -57,9 +58,27 @@ struct KeyResponseTests {
             activeModifiers: Self.noModifiers,
             characters: " ",
             shortcutKeyCode: Self.space,
-            shortcutModifiers: Self.option
+            shortcutModifiers: Self.option,
+            isSearching: true
         )
         #expect(response == .typeIntoSearch(" "))
+    }
+
+    /// Logitech Options injects the remapped button as a naked Space — no Option on
+    /// the event, none in the live flags. With the overlay just opened there is no
+    /// query yet, so that Space is the shortcut, not the start of a search.
+    @Test("a bare shortcut key with an empty query still toggles")
+    func emptyQueryBareShortcutKeyToggles() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: Self.space,
+                activeModifiers: Self.noModifiers,
+                characters: " ",
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option,
+                isSearching: false
+            ) == .triggerShortcut
+        )
     }
 
     /// Auto-repeat with Option let go part-way through. Under the old flag-based check this was the
@@ -73,7 +92,8 @@ struct KeyResponseTests {
                 activeModifiers: Self.noModifiers,
                 characters: " ",
                 shortcutKeyCode: Self.space,
-                shortcutModifiers: Self.option
+                shortcutModifiers: Self.option,
+                isSearching: true
             ) == .typeIntoSearch(" ")
         )
     }
@@ -117,6 +137,22 @@ struct KeyResponseTests {
         )
     }
 
+    /// Mouse software injects ⌥Space as Option-down then Space-down. The Space often
+    /// arrives with no Option flag; the recent Option key-down is the chord.
+    @Test("a space after a recent shortcut modifier still toggles")
+    func recentModifierMakesTheShortcut() {
+        #expect(
+            KeyResponse.forKeyDown(
+                keyCode: Self.space,
+                activeModifiers: Self.noModifiers,
+                characters: " ",
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option,
+                shortcutModifiersRecentlyHeld: true
+            ) == .triggerShortcut
+        )
+    }
+
     /// A fresh press of the same key is still a space. Suppressing repeats must not suppress the key.
     @Test("a fresh press of the shortcut's key still types")
     func freshPressStillTypes() {
@@ -127,7 +163,8 @@ struct KeyResponseTests {
                 characters: " ",
                 isAutorepeat: false,
                 shortcutKeyCode: Self.space,
-                shortcutModifiers: Self.option
+                shortcutModifiers: Self.option,
+                isSearching: true
             ) == .typeIntoSearch(" ")
         )
     }
@@ -157,7 +194,8 @@ struct KeyResponseTests {
                 activeModifiers: Self.control,
                 characters: " ",
                 shortcutKeyCode: Self.space,
-                shortcutModifiers: [.maskControl, .maskAlternate]
+                shortcutModifiers: [.maskControl, .maskAlternate],
+                isSearching: true
             ) == .passThrough
         )
     }

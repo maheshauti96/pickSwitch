@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
@@ -60,11 +61,13 @@ protocol TriggerMonitorDelegate: AnyObject {
 ///
 /// - `buttonTap` (`otherMouseDown | otherMouseUp`) stays enabled for the process
 ///   lifetime.
-/// - `overlayTap` (`scrollWheel | keyDown`) is created disabled and toggled with
-///   `CGEvent.tapEnable`. A disabled tap is skipped by the window server entirely,
-///   so while the overlay is hidden, scroll and key events genuinely do bypass it —
-///   which is what 5.2 is protecting. Toggling is a single call with no allocation,
-///   so it adds nothing measurable to presentation time.
+/// - `overlayTap` (`scrollWheel | keyDown | flagsChanged`) is created disabled and
+///   toggled with `CGEvent.tapEnable`. A disabled tap is skipped by the window server
+///   entirely, so while the overlay is hidden, scroll and key events genuinely do
+///   bypass it — which is what 5.2 is protecting. Toggling is a single call with no
+///   allocation, so it adds nothing measurable to presentation time.
+///   `flagsChanged` is observed only so a remapped mouse button's Option-down can
+///   arm the shortcut chord; the event itself is always passed through.
 ///
 /// ## Pass-through discipline
 ///
@@ -168,9 +171,21 @@ final class TriggerMonitor {
     /// is send one Command-A to the wrong place.
     ///
     /// Needed because Command-A's meaning depends on it — with a query up it selects the query,
-    /// and with nothing typed it has to keep reaching the application underneath. `KeyResponse`
-    /// is a pure function and has no view of the overlay's state, so the state comes to it.
+    /// and with nothing typed it has to keep reaching the application underneath — and because
+    /// a remapped mouse button often arrives as a bare Space: empty query, that Space is the
+    /// shortcut; with a query, it is typing. `KeyResponse` is a pure function and has no view
+    /// of the overlay's state, so the state comes to it.
     var isSearchActive = false
+
+    /// Until when a shortcut modifier key-down still counts as part of the chord.
+    ///
+    /// Logitech Options (and similar) injects ⌥Space as Option down, then Space down.
+    /// The Space event often has no Option flag, and by then `flagsState` may already
+    /// have dropped it. Remembering the Option-down — which on a real keyboard is
+    /// `flagsChanged`, not `keyDown` — is what lets the second press close the overlay
+    /// instead of typing a space.
+    private var shortcutModifierArmedUntilNanoseconds: UInt64 = 0
+    private static let shortcutModifierArmNanoseconds: UInt64 = 250_000_000
 
     private(set) var isInstalled = false
     /// Which pipeline position the button tap ended up at. Surfaced in diagnostics
@@ -215,7 +230,8 @@ final class TriggerMonitor {
             (1 << CGEventType.leftMouseDown.rawValue) |
             (1 << CGEventType.rightMouseDown.rawValue) |
             (1 << CGEventType.scrollWheel.rawValue) |
-            (1 << CGEventType.keyDown.rawValue)
+            (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.flagsChanged.rawValue)
 
         if let overlayTap = makeTap(mask: overlayMask, kind: .overlay) {
             self.overlayTap = overlayTap
@@ -532,12 +548,30 @@ final class TriggerMonitor {
             }
             return nil
 
+        case .flagsChanged:
+            // Modifier keys do not generate `keyDown`. A physical Option, and many
+            // mouse-injected ones, arrive only as `flagsChanged`. Arm here, then let
+            // the event through — swallowing Option would hide it from the rest of
+            // the session, including the Carbon hotkey that opened the overlay.
+            monitor.armShortcutModifierIfNeeded(
+                keyCode: event.getIntegerValueField(.keyboardEventKeycode),
+                flags: event.flags,
+                requiresFlagSet: true
+            )
+            return Unmanaged.passUnretained(event)
+
         case .keyDown:
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            monitor.armShortcutModifierIfNeeded(
+                keyCode: keyCode,
+                flags: event.flags,
+                requiresFlagSet: false
+            )
             // Decided by `KeyResponse` rather than here: a C callback is the worst place in the app
             // to keep branching logic, and the branch that was here shipped a defect no test could
             // have reached.
             switch KeyResponse.forKeyDown(
-                keyCode: event.getIntegerValueField(.keyboardEventKeycode),
+                keyCode: keyCode,
                 // The union of the live keyboard state and the event's own flags. Neither is
                 // complete on its own: at `.cghidEventTap` the event may arrive without the
                 // modifiers the window server later attaches, and a live query is a snapshot taken
@@ -551,7 +585,9 @@ final class TriggerMonitor {
                 isAutorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                 shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) },
                 shortcutModifiers: monitor.keyboardShortcut?.eventFlags ?? [],
-                isSearching: monitor.isSearchActive
+                isSearching: monitor.isSearchActive,
+                shortcutModifiersRecentlyHeld: DispatchTime.now().uptimeNanoseconds
+                    < monitor.shortcutModifierArmedUntilNanoseconds
             ) {
             case .dismiss:
                 monitor.dispatch { $0.escapePressed() }
@@ -617,6 +653,35 @@ final class TriggerMonitor {
         )
         guard length > 0 else { return nil }
         return String(utf16CodeUnits: buffer, count: length)
+    }
+
+    /// The modifier flag a virtual key represents, if it is one.
+    private static func modifierFlag(for keyCode: Int64) -> CGEventFlags? {
+        switch keyCode {
+        case Int64(kVK_Shift), Int64(kVK_RightShift): return .maskShift
+        case Int64(kVK_Control), Int64(kVK_RightControl): return .maskControl
+        case Int64(kVK_Option), Int64(kVK_RightOption): return .maskAlternate
+        case Int64(kVK_Command), Int64(kVK_RightCommand): return .maskCommand
+        default: return nil
+        }
+    }
+
+    /// Remember that a shortcut modifier just went down, so a Space that follows
+    /// without the flag still counts as the chord.
+    ///
+    /// - Parameter requiresFlagSet: `true` for `flagsChanged`, which fires on both
+    ///   press and release. Arming on release would keep the chord alive after
+    ///   Option was let go, and a later Space would close instead of type.
+    private func armShortcutModifierIfNeeded(
+        keyCode: Int64,
+        flags: CGEventFlags,
+        requiresFlagSet: Bool
+    ) {
+        guard let flag = Self.modifierFlag(for: keyCode),
+              keyboardShortcut?.eventFlags.contains(flag) == true else { return }
+        if requiresFlagSet, !flags.contains(flag) { return }
+        shortcutModifierArmedUntilNanoseconds =
+            DispatchTime.now().uptimeNanoseconds + Self.shortcutModifierArmNanoseconds
     }
 
     /// Prefer the pixel-precision delta, which is what a trackpad and a free-spinning
