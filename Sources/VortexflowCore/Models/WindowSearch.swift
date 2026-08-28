@@ -28,10 +28,14 @@ enum WindowSearch {
 
         // A tab's address is often the most memorable thing about it — "grok" is the site,
         // not the page title — so the host is matched as strongly as an application name.
+        var path = ""
         if let tab = entry.tab {
             let host = normalize(tab.host)
             if host.hasPrefix(needle) { return 4 }
             if host.contains(needle) { return 2 }
+            // The path, not the whole URL. Query strings and `https` would match almost
+            // every tab; `/workday-task-board/` is what someone actually types.
+            path = normalize(Self.path(ofURL: tab.url))
         }
 
         if application.hasPrefix(needle) { return 4 }
@@ -53,7 +57,22 @@ enum WindowSearch {
             .contains(where: { $0.hasPrefix(needle) }) {
             return 1
         }
+        if !path.isEmpty {
+            if path.contains(needle) { return 1 }
+            if path.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .contains(where: { $0.hasPrefix(needle) }) {
+                return 1
+            }
+        }
         return nil
+    }
+
+    /// The path of a page address, with no scheme, query or fragment.
+    private static func path(ofURL url: String) -> String {
+        guard let parsed = URL(string: url) else { return "" }
+        let path = parsed.path
+        guard path.count > 1 else { return "" }
+        return path
     }
 
     /// Windows matching `query`, best first.

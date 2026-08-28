@@ -110,6 +110,34 @@ struct BrowserTabTests {
         #expect(WindowSearch.filter(chromeTabs, query: "youtube").count == 1)
     }
 
+    /// The reported miss: the title is "FlowTrackr" and the host is github.io, but
+    /// the path is `/workday-task-board/`. Matching only the domain would offer the web
+    /// instead of the tab that is already open.
+    @Test("A word in the URL path finds the tab")
+    func aPathWordFindsTheTab() {
+        let tabs = [
+            entry(tab(
+                index: 1,
+                title: "FlowTrackr",
+                url: "https://mahesha-quattr.github.io/workday-task-board/"
+            )),
+            entry(tab(index: 2, title: "Grok", url: "https://grok.com/c/1")),
+        ]
+        let results = WindowSearch.filter(tabs, query: "workday")
+        #expect(results.count == 1)
+        #expect(results.first?.displayTitle == "FlowTrackr")
+    }
+
+    /// Query strings and the scheme are not memorable and would match almost everything.
+    @Test("A query string or scheme is not searchable")
+    func queryStringAndSchemeAreNotSearchable() {
+        let tabs = [
+            entry(tab(index: 1, title: "Grok", url: "https://grok.com/c/1?rid=workday-token")),
+        ]
+        #expect(WindowSearch.filter(tabs, query: "workday").isEmpty)
+        #expect(WindowSearch.filter(tabs, query: "https").isEmpty)
+    }
+
     @Test("A query matching no tab returns none")
     func nonMatchingQueryReturnsNoTabs() {
         #expect(WindowSearch.filter(chromeTabs, query: "zzzz").isEmpty)
