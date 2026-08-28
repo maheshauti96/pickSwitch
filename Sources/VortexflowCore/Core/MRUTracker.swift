@@ -206,7 +206,8 @@ final class MRUTracker {
         return Ordering(all: sorted, resting: result)
     }
 
-    /// Cut the resting list down to `historyDepth` without ever hiding an application.
+    /// Cut the resting list down to `historyDepth` without ever hiding an application,
+    /// and without hiding the other windows of an application already on the ring.
     ///
     /// The old rule was a flat `prefix(historyDepth)`, and what it cut was the worst possible choice.
     /// Every window on the current desktop is stamped as seen during enumeration, so it ranks above
@@ -217,15 +218,24 @@ final class MRUTracker {
     /// was even considered, and an application the user was looking for — Slack, in the report that
     /// prompted this — simply was not there.
     ///
-    /// So the depth now limits *extra windows of applications already listed*, and an application's
-    /// last remaining window is never cut. Every running application stays reachable, which is the
-    /// contract users already have from Command-Tab, and the depth still does its real job of keeping
-    /// twenty browser windows from burying everything else.
+    /// So the depth never cuts an application's last remaining window. Every running application
+    /// stays reachable, which is the contract users already have from Command-Tab.
     ///
-    /// The consequence, stated plainly: with more applications than the depth allows, the resting list
-    /// is longer than the depth. That is deliberate. A crowded switcher is a smaller problem than one
-    /// that denies a running application exists, and the radial layouts already page a list too long
-    /// to seat rather than dropping the remainder silently.
+    /// That first pass is not enough on its own. Filling only up to `historyDepth` *after* one
+    /// window per application means that as soon as there are as many applications as the depth,
+    /// every extra window is dropped. Three Chrome windows and fourteen other apps at a depth of
+    /// ten drew one Chrome wedge while the hub said "1 of 3". The other two were still
+    /// searchable, which is not the same as being on the ring.
+    ///
+    /// Once an application has a seat, its other windows come with it, up to `historyDepth` of
+    /// that application. Twenty Chrome windows still cannot bury everything else; three cannot
+    /// disappear because Slack and Warp also exist.
+    ///
+    /// The consequence, stated plainly: with more applications than the depth allows, the resting
+    /// list is longer than the depth. That is deliberate. A crowded switcher is a smaller problem
+    /// than one that denies a running application — or a second Chrome window — exists, and the
+    /// radial layouts already page a list too long to seat rather than dropping the remainder
+    /// silently.
     static func resting(_ sorted: [WindowEntry], historyDepth: Int) -> [WindowEntry] {
         guard sorted.count > historyDepth else { return sorted }
 
@@ -233,7 +243,7 @@ final class MRUTracker {
         var represented = Set<String>()
         // First window of each application, in rank order, so the one kept is the best-ranked.
         for (index, entry) in sorted.enumerated() {
-            let application = entry.bundleIdentifier ?? entry.applicationName
+            let application = Self.applicationKey(entry)
             if represented.insert(application).inserted {
                 keep.insert(index)
             }
@@ -244,9 +254,27 @@ final class MRUTracker {
             keep.insert(index)
         }
 
+        // Sibling windows of applications already seated. Capped per application at the
+        // depth, so one browser with twenty windows still cannot occupy the whole ring.
+        var perApplication = [String: Int]()
+        for index in keep {
+            perApplication[Self.applicationKey(sorted[index]), default: 0] += 1
+        }
+        for (index, entry) in sorted.enumerated() where !keep.contains(index) {
+            let application = Self.applicationKey(entry)
+            guard represented.contains(application) else { continue }
+            guard perApplication[application, default: 0] < historyDepth else { continue }
+            keep.insert(index)
+            perApplication[application, default: 0] += 1
+        }
+
         // Rebuilt by walking the sorted list rather than by collecting as we went, so the result keeps
         // the ranking and does not come out grouped by application.
         return sorted.enumerated().filter { keep.contains($0.offset) }.map(\.element)
+    }
+
+    private static func applicationKey(_ entry: WindowEntry) -> String {
+        entry.bundleIdentifier ?? entry.applicationName
     }
 
     // MARK: - Live observation

@@ -69,6 +69,26 @@ struct TabActivationScriptTests {
         #expect(script.contains("window id 4242"))
     }
 
+    /// Accessibility tabs keep a CGWindowID for listing. Activation has to use Chrome's
+    /// own window id, or `window id N` is a no-op and the click never leaves this desktop.
+    @Test func aPairedAccessibilityTabActivatesThroughTheScriptedWindowId() throws {
+        let listed = BrowserTab(
+            browser: .chrome,
+            windowIdentifier: 5_575,
+            tabIndex: 3,
+            title: "ChatGPT",
+            url: "https://chatgpt.com/",
+            usesNativeWindowIdentifier: true,
+            scriptedWindowIdentifier: 1_263_775_930,
+            scriptedTabIndex: 6
+        )
+        let target = try #require(listed.scriptedActivation)
+        let script = BrowserTabService.activationScript(for: target)
+        #expect(script.contains("window id 1263775930"))
+        #expect(script.contains("set active tab index of targetWindow to 6"))
+        #expect(!script.contains("window id 5575"))
+    }
+
     /// Safari names the selected tab by object rather than by index, and that difference has to
     /// survive the reordering.
     @Test func safariKeepsItsOwnSelectionForm() throws {

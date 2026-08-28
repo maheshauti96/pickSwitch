@@ -98,13 +98,29 @@ struct WindowEntry: Identifiable {
     /// them read as fifteen results all called "Google Chrome" with nothing to tell them apart.
     /// "x.com" identifies a result; the browser it happens to live in does not.
     ///
+    /// When the address is not known yet — Accessibility names tabs, Chrome's scripting dictionary
+    /// supplies URLs later, and a window on another Space often has only the first — the tab's own
+    /// title is still better than the browser name. The host replaces it as soon as the URL lands.
+    ///
     /// Deliberately separate from `applicationName`, which still names the browser. That value is
     /// what groups windows per application, what search matches against, and what the tint is keyed
     /// on, and none of those should start treating one browser as many applications.
     var sourceLabel: String {
         if let webSearch { return webSearch.sourceLabel }
-        if let tab, !tab.host.isEmpty { return tab.host }
+        if let tab {
+            if !tab.host.isEmpty { return tab.host }
+            let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty { return title }
+        }
         return applicationName
+    }
+
+    /// Keep process, icon and identity; swap the tab payload. Used when an address
+    /// arrives after the tab was already listed.
+    func withTab(_ tab: BrowserTab) -> WindowEntry {
+        var copy = self
+        copy.tab = tab
+        return copy
     }
 
     /// What the card shows on its title line. Some windows genuinely have no
@@ -120,7 +136,15 @@ struct WindowEntry: Identifiable {
     }
 
     /// A tab entry for `tab`, borrowing its browser's name and icon.
-    static func tabEntry(_ tab: BrowserTab, application: NSRunningApplication?) -> WindowEntry {
+    ///
+    /// - Parameter windowElement: the parent browser window, when known. Needed to
+    ///   raise a window on another Space: Accessibility's current window list does
+    ///   not include it, and the tab itself has no window id of its own.
+    static func tabEntry(
+        _ tab: BrowserTab,
+        application: NSRunningApplication?,
+        windowElement: AXUIElement? = nil
+    ) -> WindowEntry {
         WindowEntry(
             windowID: 0,
             processID: application?.processIdentifier ?? 0,
@@ -131,7 +155,7 @@ struct WindowEntry: Identifiable {
             frame: .zero,
             isMinimized: false,
             zOrder: Int.max,
-            axElement: nil,
+            axElement: windowElement,
             tab: tab,
             launchableApplication: nil
         )

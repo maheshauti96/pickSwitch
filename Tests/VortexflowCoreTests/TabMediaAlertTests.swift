@@ -28,6 +28,15 @@ struct TabMediaAlertParsingTests {
         #expect(TabMediaAlert.parse(accessibilityDescription: Self.recording) == .recording)
     }
 
+    @Test func thePageTitleIsTakenFromTheDescription() {
+        #expect(TabMediaAlert.title(fromAccessibilityDescription: Self.quiet) == "FlowTrackr")
+        #expect(TabMediaAlert.title(fromAccessibilityDescription: Self.recording) == "Grok")
+        #expect(
+            TabMediaAlert.title(fromAccessibilityDescription: "YouTube Music \u{2013} Audio playing")
+                == "YouTube Music"
+        )
+    }
+
     @Test func aQuietTabReportsNothing() {
         #expect(TabMediaAlert.parse(accessibilityDescription: Self.quiet) == nil)
         // The memory note is not an alert, and it arrives on the same kind of separator as one.

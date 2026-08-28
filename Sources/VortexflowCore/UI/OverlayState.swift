@@ -59,7 +59,9 @@ final class OverlayState: ObservableObject {
     /// The search pill, and the chrome it needs, while a query is typed *or* while results are
     /// restricted to one window's tabs. A scope with no visible sign looks like the switcher lost
     /// most of its results.
-    var showsSearch: Bool { isSearching || tabScope != nil }
+    var showsSearch: Bool {
+        isSearching || tabScope != nil || isAwaitingTabScope || tabScopeFailure != nil
+    }
 
     /// Whether the whole query is selected, so the next edit replaces it.
     ///
@@ -371,9 +373,15 @@ final class OverlayState: ObservableObject {
         // The scope goes with the query. Clearing the text while still restricted to one window's
         // tabs would leave the user looking at a filtered list with nothing on screen explaining why,
         // and no obvious way back to their windows.
-        guard !searchQuery.isEmpty || tabScope != nil else { return false }
+        guard !searchQuery.isEmpty || tabScope != nil || isAwaitingTabScope || tabScopeFailure != nil
+        else { return false }
         tabScope = nil
-        return applySearch("")
+        isAwaitingTabScope = false
+        tabScopeFailure = nil
+        // The list may already be the resting windows — awaiting a pairing never replaced it —
+        // so `applySearch` can report no change. Clearing the chrome still happened.
+        _ = applySearch("")
+        return true
     }
 
     /// Select the whole query, so the next edit replaces it.
@@ -395,10 +403,37 @@ final class OverlayState: ObservableObject {
     func setTabs(_ tabs: [WindowEntry]) -> Bool {
         tabEntries = tabs
         hasLoadedTabs = true
+        // Still waiting to learn *which* window, or already explaining that this
+        // window has none. Applying now would search every tab in every browser.
+        if isHoldingEmptyTabSearch { return false }
         // A scope with no query typed is the case `isSearching` alone would miss: choosing "search
         // this window's tabs" fetches the tabs, and this is the arrival that has to fill the list.
         guard isSearching || tabScope != nil else { return false }
+        tabScopeFailure = nil
         return applySearch(searchQuery)
+    }
+
+    /// Copy addresses onto already-listed tabs without replacing them.
+    ///
+    /// Accessibility tabs are scoped by `CGWindowID`. Replacing them with the scripting
+    /// list would empty the overlay, because those ids live in a different space. The
+    /// visible list stays; URLs (and therefore hosts and favicons) fill in.
+    @discardableResult
+    func enrichTabAddresses(_ scripted: [BrowserTab], matching window: WindowEntry? = nil) -> Bool {
+        let current = tabEntries.compactMap(\.tab)
+        guard !current.isEmpty else { return false }
+        let enriched = TabAddressMatcher.enrich(current, with: scripted, window: window)
+        var changed = false
+        tabEntries = zip(tabEntries, enriched).map { entry, tab in
+            guard entry.tab != tab else { return entry }
+            changed = true
+            return entry.withTab(tab)
+        }
+        guard changed else { return false }
+        guard isSearching || tabScope != nil else { return false }
+        // Identity does not include the URL, so a normal apply would see the same
+        // ids and skip the reload — leaving every wedge labelled "Google Chrome".
+        return applySearch(searchQuery, forceReload: true)
     }
 
     /// Supply the process-wide installed-application catalog.
@@ -429,6 +464,14 @@ final class OverlayState: ObservableObject {
     /// look like the switcher had lost most of its results.
     @Published private(set) var tabScope: Int?
 
+    /// "Search through Tabs" was chosen before this card had a scripting id. The search
+    /// chrome is shown immediately; the scope is applied when the pairing lands.
+    @Published private(set) var isAwaitingTabScope = false
+
+    /// Why a tab-scoped list is empty, once we know. Nil while still looking.
+    /// Esc clears this; it must not dump the user back onto the window ring by itself.
+    @Published private(set) var tabScopeFailure: String?
+
     /// How many fetched tabs belong to one browser window. `0` before the tabs have been fetched,
     /// which callers distinguish with `hasLoadedTabs`.
     func tabCount(forWindowIdentifier identifier: Int) -> Int {
@@ -451,13 +494,57 @@ final class OverlayState: ObservableObject {
     /// Restrict results to one browser window's tabs, or clear the restriction with `nil`.
     @discardableResult
     func setTabScope(_ identifier: Int?) -> Bool {
+        isAwaitingTabScope = false
+        tabScopeFailure = nil
         guard tabScope != identifier else { return false }
         tabScope = identifier
         return applySearch(searchQuery)
     }
 
+    /// Show the tab-search chrome before the card has been paired to a scripting id.
+    ///
+    /// The window list comes down immediately. Leaving it up is what made typing search
+    /// every window instead of the tabs of the card that was clicked.
+    func beginAwaitingTabScope() {
+        isAwaitingTabScope = true
+        if !entries.isEmpty {
+            reload(entries: [], selectedIndex: nil)
+        }
+    }
+
+    /// The window has no tabs we can list. Stay in the tab-scope empty state so the
+    /// user sees why, rather than being dumped back onto the window ring.
+    func finishTabScopeWithoutTabs(
+        reason: String = "No tabs in this window",
+        windowIdentifier: Int? = nil
+    ) {
+        isAwaitingTabScope = false
+        if let windowIdentifier {
+            tabScope = windowIdentifier
+        }
+        tabScopeFailure = reason
+        if !entries.isEmpty {
+            reload(entries: [], selectedIndex: nil)
+        }
+    }
+
+    /// Pairing has not named the window, or we already know it has nothing to list.
+    /// Either way the resting windows must not become the search corpus.
+    private var isHoldingEmptyTabSearch: Bool {
+        tabScope == nil && (isAwaitingTabScope || tabScopeFailure != nil)
+    }
+
+    /// The scripting window id for this card, inferred from loaded tabs.
+    func windowIdentifierForTabScope(matching entry: WindowEntry) -> Int? {
+        TabWindowMatcher.scriptingIdentifier(
+            for: entry,
+            siteHost: siteHost(for: entry),
+            in: tabEntries.compactMap(\.tab)
+        )
+    }
+
     @discardableResult
-    private func applySearch(_ query: String) -> Bool {
+    private func applySearch(_ query: String, forceReload: Bool = false) -> Bool {
         searchQuery = query
         // Every edit consumes the selection, including the ones that arrive from elsewhere —
         // tabs landing, the application catalogue settling, a result being removed. A selection
@@ -466,12 +553,22 @@ final class OverlayState: ObservableObject {
         isQuerySelected = false
 
         let matches: [WindowEntry]
+        if isHoldingEmptyTabSearch {
+            // Pairing has not named the window yet, or this window has no tabs. Remember
+            // the query and keep the list empty so typing cannot search the resting windows.
+            if entries.isEmpty { return false }
+            reload(entries: [], selectedIndex: nil)
+            return true
+        }
         if let tabScope {
-            // Choosing "Search through Tabs" fetches the tabs, so they are not here yet. Applying
-            // an empty scoped list in that interval is what showed "No switchable windows are
-            // open" for a window that does have tabs. Keep the current cards until `setTabs`
-            // arrives; that call re-enters here with `hasLoadedTabs` true.
-            guard hasLoadedTabs else { return false }
+            // Choosing "Search through Tabs" fetches the tabs. The empty state now says
+            // "Looking for tabs…", so the window list must not remain the search corpus
+            // in the meantime — that is what leaked every window into the scoped search.
+            guard hasLoadedTabs else {
+                if entries.isEmpty { return false }
+                reload(entries: [], selectedIndex: nil)
+                return true
+            }
             // Scoped to one window's tabs: an empty query lists them all, which is what makes this
             // both "see all tabs" and "search them" without being two separate features. Windows,
             // installed applications and the web offers are all withheld — the user asked about the
@@ -481,8 +578,16 @@ final class OverlayState: ObservableObject {
             matches = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? scoped
                 : WindowSearch.filter(scoped, query: query)
-            guard matches.map(\.id) != entries.map(\.id) else { return false }
-            reload(entries: matches, selectedIndex: matches.isEmpty ? nil : 0)
+            guard forceReload || matches.map(\.id) != entries.map(\.id) else { return false }
+            let selection: Int?
+            if matches.isEmpty {
+                selection = nil
+            } else if forceReload, let current = selectedIndex, matches.indices.contains(current) {
+                selection = current
+            } else {
+                selection = 0
+            }
+            reload(entries: matches, selectedIndex: selection)
             return true
         }
         if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -553,6 +658,8 @@ final class OverlayState: ObservableObject {
         // A scope belongs to the presentation that asked for it. Carried across, the next trigger
         // would open showing one window's tabs and none of the user's windows.
         tabScope = nil
+        isAwaitingTabScope = false
+        tabScopeFailure = nil
         isQuerySelected = false
         // A native window id can be reused, and its active tab can change between invocations.
         // Never carry a per-window favicon, or the tint taken from it, across presentations
@@ -863,8 +970,8 @@ final class OverlayState: ObservableObject {
     ///
     /// Both lists, because clearing a search would otherwise bring back the pre-tiling frame from
     /// `allEntries`. The display mapping is re-derived for that one window rather than for all of
-    /// them: tiling cannot move a window to another screen, but the same call is what would keep the
-    /// mapping right if a future action did.
+    /// them: tiling onto the screen the user is looking at can move a window from one monitor to
+    /// another, and the badge has to follow.
     func setFrame(_ frame: CGRect, forWindowID windowID: CGWindowID) {
         for index in entries.indices where entries[index].windowID == windowID {
             entries[index].frame = frame

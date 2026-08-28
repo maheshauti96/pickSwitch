@@ -148,6 +148,30 @@ struct DisplayLayoutTests {
         #expect(Self.laptopLeftOfExternal.display(number: 3) == nil)
     }
 
+    @Test("A display is found by its Quartz bounds")
+    func matchingQuartzBounds() {
+        let layout = Self.laptopLeftOfExternal
+        let laptop = CGRect(x: -1512, y: 36, width: 1512, height: 982)
+        let external = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        #expect(layout.display(matchingQuartzBounds: laptop)?.number == 1)
+        #expect(layout.display(matchingQuartzBounds: external)?.number == 2)
+        #expect(layout.display(matchingQuartzBounds: CGRect(x: 9_000, y: 9_000, width: 10, height: 10)) == nil)
+    }
+
+    /// The reported failure: Chrome lives on the other monitor, "Left half" tiled it
+    /// *there*, and the screen the user was looking at stayed empty.
+    @Test("Placement uses the display the user is looking at, not the window's")
+    func placementFollowsTheUsersDisplay() {
+        let layout = Self.laptopLeftOfExternal
+        let laptop = layout.display(number: 1)
+        let windowOnExternal = CGRect(x: 200, y: 150, width: 900, height: 700)
+        #expect(layout.placementDisplay(lookingAt: laptop, windowFrame: windowOnExternal)?.number == 1)
+        #expect(
+            layout.placementDisplay(lookingAt: nil, windowFrame: windowOnExternal)?.number == 2,
+            "without a looking-at display, keep tiling on the window's own screen"
+        )
+    }
+
     // MARK: - State integration
 
     /// The lookup is precomputed once per presentation, so it has to survive a reload

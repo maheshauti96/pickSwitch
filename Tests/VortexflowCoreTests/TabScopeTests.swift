@@ -106,6 +106,63 @@ struct TabScopeTests {
         #expect(state.tabScope == nil)
     }
 
+    /// Search through Tabs is offered before the card is paired, so the chrome has to
+    /// appear immediately. Esc still has to get the user back to their windows.
+    @Test func awaitingAPairingIsAScopeThatEscapeClears() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        state.load(entries: [Fixture.entry(id: 1, app: "Google Chrome")], selectedIndex: 0)
+
+        state.beginAwaitingTabScope()
+        #expect(state.showsSearch)
+        #expect(state.isAwaitingTabScope)
+        #expect(state.entries.isEmpty, "the window list must not remain the search corpus")
+        #expect(state.clearSearch())
+        #expect(!state.isAwaitingTabScope)
+        #expect(!state.showsSearch)
+
+        state.beginAwaitingTabScope()
+        state.load(entries: [Fixture.entry(id: 2, app: "Warp")], selectedIndex: 0)
+        #expect(!state.isAwaitingTabScope)
+    }
+
+    @Test func aWindowTitlePicksThatWindowsTabsOutOfTheLoadedList() {
+        var window = Fixture.entry(id: 1121, app: "Google Chrome", title: "taxonomy engine - Grok - Google Chrome")
+        window.bundleIdentifier = "com.google.Chrome"
+        #expect(
+            TabWindowMatcher.scriptingIdentifier(
+                for: window,
+                in: [
+                    BrowserTab(browser: .chrome, windowIdentifier: 10, tabIndex: 1, title: "YouTube Music", url: "https://music.youtube.com/"),
+                    BrowserTab(browser: .chrome, windowIdentifier: 20, tabIndex: 1, title: "taxonomy engine", url: "https://example.com/"),
+                    BrowserTab(browser: .chrome, windowIdentifier: 20, tabIndex: 2, title: "Grok", url: "https://grok.com/"),
+                ]
+            ) == 20
+        )
+    }
+
+    @Test func aLoneBrowserWindowIsScopedWithoutATitle() {
+        var window = Fixture.entry(id: 1, app: "Google Chrome", title: "")
+        window.bundleIdentifier = "com.google.Chrome"
+        #expect(
+            TabWindowMatcher.scriptingIdentifier(
+                for: window,
+                in: [
+                    BrowserTab(browser: .chrome, windowIdentifier: 99, tabIndex: 1, title: "ChatGPT", url: "https://chatgpt.com/"),
+                ]
+            ) == 99
+        )
+    }
+
+    @Test func pairingAScopeClearsTheAwaitingFlag() {
+        let state = loaded()
+        state.beginAwaitingTabScope()
+        state.setTabScope(Self.chromeWindowB)
+        #expect(!state.isAwaitingTabScope)
+        #expect(state.tabScope == Self.chromeWindowB)
+    }
+
     /// A scope belongs to the presentation that asked for it. Carried across, the next trigger would
     /// open showing one window's tabs and none of the user's windows.
     @Test func aNewPresentationDropsTheScope() {
@@ -114,12 +171,13 @@ struct TabScopeTests {
         state.load(entries: [Fixture.entry(id: 1, app: "Warp")], selectedIndex: 0)
 
         #expect(state.tabScope == nil)
+        #expect(!state.isAwaitingTabScope)
         #expect(state.entries.count == 1)
     }
 
-    /// Choosing the menu item is what fetches the tabs, so they arrive *after* the scope is set and
-    /// with no query typed. The list has to keep showing the current windows until that fetch lands
-    /// — applying an empty scoped list in between is what read as "No switchable windows are open".
+    /// Choosing the menu item is what fetches the tabs. The window list must not remain
+    /// searchable in the meantime — that leaked every window into "Search through Tabs".
+    /// The empty state says "Looking for tabs…" until the scoped list arrives.
     @Test func tabsArrivingAfterTheScopeFillTheList() {
         let state = OverlayState()
         state.availableContentWidth = 1200
@@ -128,7 +186,7 @@ struct TabScopeTests {
         state.load(entries: [window], selectedIndex: 0)
         state.setTabScope(Self.chromeWindowB)
 
-        #expect(state.entries.map(\.id) == [window.id], "windows stay until the tabs arrive")
+        #expect(state.entries.isEmpty, "windows must not stay as the search corpus")
         #expect(state.showsSearch, "the pill has to show that a scope is active")
         #expect(!state.hasLoadedTabs)
 
@@ -139,26 +197,156 @@ struct TabScopeTests {
 
         #expect(changed)
         #expect(state.entries.map(\.displayTitle) == ["ChatGPT"])
+        #expect(!state.entries.contains { $0.displayTitle == "Google Docs" })
     }
 
-    /// Typing before the fetch lands must not empty the list either. The query is remembered and
-    /// applied when the tabs arrive.
-    @Test func typingBeforeTabsArriveDoesNotEmptyTheList() {
+    /// The query is remembered and applied when the tabs arrive. Typing must not
+    /// search the resting windows, and must not pull in the other window's tabs.
+    @Test func typingBeforeTabsArriveRemembersTheQueryAndStaysScoped() {
         let state = OverlayState()
         state.availableContentWidth = 1200
         state.availableContentHeight = 800
         let window = Fixture.entry(id: 1121, app: "Google Chrome", title: "Window B")
         state.load(entries: [window], selectedIndex: 0)
         state.setTabScope(Self.chromeWindowB)
-        #expect(!state.appendToSearch("chat"))
+        // List already empty from the scope; the query is still stored.
+        _ = state.appendToSearch("chat")
         #expect(state.searchQuery == "chat")
-        #expect(state.entries.map(\.id) == [window.id])
+        #expect(state.entries.isEmpty)
 
         #expect(state.setTabs([
             tab("ChatGPT", window: Self.chromeWindowB, index: 1),
             tab("Grok", window: Self.chromeWindowB, index: 2),
+            tab("Google Docs", window: Self.chromeWindowA, index: 1),
         ]))
         #expect(state.entries.map(\.displayTitle) == ["ChatGPT"])
+    }
+
+    /// Tabs that arrive while we still do not know which window was clicked must not
+    /// become an unscoped search of every browser.
+    @Test func tabsArrivingWhileAwaitingAPairingStayHiddenUntilScoped() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        let window = Fixture.entry(id: 1121, app: "Google Chrome", title: "Window B")
+        state.load(entries: [window], selectedIndex: 0)
+        state.beginAwaitingTabScope()
+        #expect(state.entries.isEmpty)
+
+        #expect(!state.setTabs([
+            tab("ChatGPT", window: Self.chromeWindowB, index: 1),
+            tab("Google Docs", window: Self.chromeWindowA, index: 1),
+        ]))
+        #expect(state.entries.isEmpty)
+        #expect(state.hasLoadedTabs)
+
+        #expect(state.setTabScope(Self.chromeWindowB))
+        #expect(state.entries.map(\.displayTitle) == ["ChatGPT"])
+    }
+
+    @Test func anEmptyWindowStaysOnTheTabMessageInsteadOfGoingBack() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        let window = Fixture.entry(id: 1, app: "Google Chrome", title: "A window")
+        state.load(entries: [window], selectedIndex: 0)
+        state.beginAwaitingTabScope()
+        #expect(state.entries.isEmpty)
+        state.finishTabScopeWithoutTabs(
+            reason: "No tabs in this window",
+            windowIdentifier: Int(window.windowID)
+        )
+        #expect(!state.isAwaitingTabScope)
+        #expect(state.tabScope == Int(window.windowID))
+        #expect(state.tabScopeFailure == "No tabs in this window")
+        #expect(state.entries.isEmpty)
+        #expect(state.showsSearch)
+        #expect(!state.hasLoadedTabs)
+        #expect(state.clearSearch())
+        #expect(state.tabScopeFailure == nil)
+        #expect(state.tabScope == nil)
+        #expect(state.entries.map(\.id) == [window.id])
+    }
+
+    /// Typing after a 0-tab window must not quietly become a search of every window.
+    @Test func typingAfterAnEmptyWindowErrorDoesNotSearchWindows() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        let window = Fixture.entry(id: 1, app: "Google Chrome", title: "A window")
+        state.load(entries: [window], selectedIndex: 0)
+        state.finishTabScopeWithoutTabs(
+            reason: "No tabs in this window",
+            windowIdentifier: Int(window.windowID)
+        )
+
+        _ = state.appendToSearch("chrome")
+        #expect(state.searchQuery == "chrome")
+        #expect(state.entries.isEmpty)
+        #expect(state.tabScopeFailure == "No tabs in this window")
+        #expect(state.showsSearch)
+    }
+
+    /// Pairing can miss without a scripting id. That is still a tab-search miss, not a
+    /// reason to restore the window ring — and typing must not search those windows.
+    @Test func aPairingMissStaysOnTheErrorUntilEscape() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        let window = Fixture.entry(id: 1, app: "Google Chrome", title: "A window")
+        state.load(entries: [window], selectedIndex: 0)
+        state.beginAwaitingTabScope()
+        state.finishTabScopeWithoutTabs(reason: "Couldn't find tabs in this window")
+
+        #expect(state.tabScope == nil)
+        #expect(state.tabScopeFailure == "Couldn't find tabs in this window")
+        #expect(state.entries.isEmpty)
+
+        _ = state.appendToSearch("window")
+        #expect(state.entries.isEmpty)
+        #expect(state.tabScopeFailure == "Couldn't find tabs in this window")
+
+        #expect(state.clearSearch())
+        #expect(state.entries.map(\.id) == [window.id])
+    }
+
+    @Test func accessibilityTabsPickUpScriptedAddressesWithoutLosingTheScope() {
+        let state = OverlayState()
+        state.availableContentWidth = 1200
+        state.availableContentHeight = 800
+        var window = Fixture.entry(id: 1121, app: "Google Chrome", title: "taxonomy engine - Grok")
+        window.bundleIdentifier = "com.google.Chrome"
+        state.load(entries: [window], selectedIndex: 0)
+
+        let listed = BrowserTab(
+            browser: .chrome,
+            windowIdentifier: Int(window.windowID),
+            tabIndex: 1,
+            title: "taxonomy engine - Grok",
+            url: "",
+            usesNativeWindowIdentifier: true
+        )
+        state.setTabs([WindowEntry.tabEntry(listed, application: nil)])
+        state.setTabScope(Int(window.windowID))
+        #expect(state.entries.first?.sourceLabel == "taxonomy engine - Grok")
+
+        let scripted = BrowserTab(
+            browser: .chrome,
+            windowIdentifier: 99,
+            tabIndex: 1,
+            title: "taxonomy engine - Grok",
+            url: "https://grok.com/c/1",
+            allowsFaviconRequest: true
+        )
+        #expect(state.enrichTabAddresses([scripted], matching: window))
+        #expect(state.tabScope == Int(window.windowID))
+        #expect(state.entries.count == 1)
+        #expect(state.entries[0].tab?.url == "https://grok.com/c/1")
+        #expect(state.entries[0].tab?.allowsFaviconRequest == true)
+        #expect(state.entries[0].sourceLabel == "grok.com")
+        #expect(state.entries[0].tab?.usesNativeWindowIdentifier == true)
+        #expect(state.entries[0].tab?.scriptedWindowIdentifier == 99)
+        #expect(state.entries[0].tab?.scriptedActivation?.windowIdentifier == 99)
     }
 
     @Test func theTabCountIsPerWindow() {

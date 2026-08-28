@@ -242,3 +242,131 @@ enum IncognitoMatcher {
         }
     }
 }
+
+/// Which scripting window a card's tabs belong to, from the tab list itself.
+///
+/// "Search through Tabs" cannot wait on `IncognitoMatcher`: that pairing is asynchronous
+/// and often unfinished at the right-click, which left the overlay on "Looking for tabs…"
+/// forever. The tab list already groups tabs by the browser's window id, so a unique
+/// title (or a single window of that browser) is enough to name the scope.
+enum TabWindowMatcher {
+
+    static func scriptingIdentifier(
+        for entry: WindowEntry,
+        siteHost: String? = nil,
+        in tabs: [BrowserTab]
+    ) -> Int? {
+        guard let bundle = entry.bundleIdentifier else { return nil }
+        let relevant = tabs.filter { $0.browser.bundleIdentifier == bundle }
+        guard !relevant.isEmpty else { return nil }
+
+        let grouped = Dictionary(grouping: relevant, by: \.windowIdentifier)
+        if grouped.count == 1 { return grouped.keys.first }
+
+        let haystack = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var titleHits: [Int] = []
+        var hostHits: [Int] = []
+        for (identifier, group) in grouped {
+            if group.contains(where: { titlesAlign(windowTitle: haystack, tabTitle: $0.title) }) {
+                titleHits.append(identifier)
+            }
+            if let siteHost, !siteHost.isEmpty,
+               group.contains(where: { $0.host.caseInsensitiveCompare(siteHost) == .orderedSame }) {
+                hostHits.append(identifier)
+            }
+        }
+        if titleHits.count == 1 { return titleHits[0] }
+        if hostHits.count == 1 { return hostHits[0] }
+        return nil
+    }
+
+    static func titlesAlign(windowTitle: String, tabTitle: String) -> Bool {
+        let window = windowTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tab = tabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !window.isEmpty, !tab.isEmpty else { return false }
+        if window == tab { return true }
+        if tab.count >= IncognitoMatcher.minimumContainedTitleLength, window.contains(tab) {
+            return true
+        }
+        if window.count >= IncognitoMatcher.minimumContainedTitleLength, tab.contains(window) {
+            return true
+        }
+        return false
+    }
+}
+
+/// Copy scripting URLs onto Accessibility-listed tabs, without changing their
+/// native window ids.
+///
+/// Search through Tabs reads Chrome's tab strip because the scripting `windows`
+/// collection is sometimes empty — and even when it is not, a window on another
+/// Space is often missing from Accessibility's current list. The strip has titles
+/// and no addresses, so every wedge would otherwise keep the browser icon and
+/// the browser name. Scripting still knows every tab's URL across Spaces; matching
+/// those onto the listed tabs is what lets favicons and hosts appear.
+enum TabAddressMatcher {
+
+    static func enrich(
+        _ listed: [BrowserTab],
+        with scripted: [BrowserTab],
+        window: WindowEntry? = nil
+    ) -> [BrowserTab] {
+        guard !listed.isEmpty, !scripted.isEmpty else { return listed }
+        let browser = listed[0].browser
+        let relevant = scripted.filter { $0.browser == browser && !$0.url.isEmpty }
+        guard !relevant.isEmpty else { return listed }
+
+        let pool: [BrowserTab]
+        if let window, let identifier = TabWindowMatcher.scriptingIdentifier(for: window, in: relevant) {
+            let scoped = relevant.filter { $0.windowIdentifier == identifier }
+            pool = scoped.isEmpty ? relevant : scoped
+        } else {
+            pool = relevant
+        }
+
+        var unused = pool
+        var assigned: [Int: BrowserTab] = [:]
+
+        func take(_ hit: BrowserTab, for index: Int) {
+            assigned[index] = hit
+            unused.removeAll {
+                $0.browser == hit.browser
+                    && $0.windowIdentifier == hit.windowIdentifier
+                    && $0.tabIndex == hit.tabIndex
+            }
+        }
+
+        for (index, tab) in listed.enumerated() where tab.url.isEmpty {
+            let exact = unused.filter { $0.title.caseInsensitiveCompare(tab.title) == .orderedSame }
+            if exact.count == 1 { take(exact[0], for: index) }
+        }
+
+        for (index, tab) in listed.enumerated() where tab.url.isEmpty && assigned[index] == nil {
+            let aligned = unused.filter { TabWindowMatcher.titlesAlign(windowTitle: $0.title, tabTitle: tab.title) }
+            if aligned.count == 1 { take(aligned[0], for: index) }
+        }
+
+        if assigned.count < listed.count, pool.count == listed.count {
+            let ordered = pool.sorted { $0.tabIndex < $1.tabIndex }
+            for index in listed.indices where listed[index].url.isEmpty && assigned[index] == nil {
+                let candidate = ordered[index]
+                let stillFree = unused.contains {
+                    $0.browser == candidate.browser
+                        && $0.windowIdentifier == candidate.windowIdentifier
+                        && $0.tabIndex == candidate.tabIndex
+                }
+                if stillFree { take(candidate, for: index) }
+            }
+        }
+
+        return listed.enumerated().map { index, tab in
+            guard tab.url.isEmpty, let hit = assigned[index] else { return tab }
+            return tab.withAddress(
+                url: hit.url,
+                allowsFaviconRequest: hit.allowsFaviconRequest,
+                scriptedWindowIdentifier: hit.windowIdentifier,
+                scriptedTabIndex: hit.tabIndex
+            )
+        }
+    }
+}

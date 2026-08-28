@@ -518,6 +518,17 @@ final class WindowRegistry: @unchecked Sendable {
         _ = enumerate()
     }
 
+    /// The live Accessibility element for a window this session has already seen.
+    ///
+    /// Other-Space windows are absent from the application's current window list.
+    /// The remembered element is what lets a tab click raise that exact window
+    /// and pull its desktop forward.
+    func axElement(for windowID: CGWindowID) -> AXUIElement? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return rememberedWindows[windowID]?.axElement
+    }
+
     /// True when the target window still exists (Requirement 7.7, 7.8).
     func windowStillExists(_ entry: WindowEntry) -> Bool {
         guard let axElement = entry.axElement else { return false }

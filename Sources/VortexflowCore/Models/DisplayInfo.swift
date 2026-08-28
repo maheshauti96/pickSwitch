@@ -121,6 +121,26 @@ struct DisplayLayout: Equatable, Sendable {
         let centre = CGPoint(x: windowFrame.midX, y: windowFrame.midY)
         return displays.first { $0.bounds.contains(centre) }
     }
+
+    /// The display whose Quartz bounds are `bounds`, as reported by `CGDisplayBounds`.
+    ///
+    /// Used to map the `NSScreen` the pointer is on onto this layout without converting
+    /// the pointer itself: both values are the same rectangle in the same space.
+    func display(matchingQuartzBounds bounds: CGRect) -> DisplayInfo? {
+        displays.first { $0.bounds == bounds } ?? display(for: bounds)
+    }
+
+    /// The display a Move & Resize / Fill placement should use.
+    ///
+    /// The window's own display is the wrong answer on a desk with two monitors. The
+    /// user opened the switcher on the screen they are looking at; tiling a window that
+    /// lives on the other one to "left half" of *that* other one leaves them staring at
+    /// an empty half of the screen they meant to fill. Fall back to the window's display
+    /// only when the looking-at display cannot be named, so a single-screen desk and a
+    /// test with no pointer still have somewhere to put the window.
+    func placementDisplay(lookingAt: DisplayInfo?, windowFrame: CGRect) -> DisplayInfo? {
+        lookingAt ?? display(for: windowFrame) ?? displays.first
+    }
 }
 
 extension DisplayLayout {

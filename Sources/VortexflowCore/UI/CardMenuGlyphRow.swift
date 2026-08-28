@@ -15,9 +15,18 @@ import SwiftUI
 final class CardMenuHoverModel: ObservableObject {
 
     @Published private var hoveredKey: String?
+    /// Local to this open menu. The hardware play key is a toggle, so the glyph has
+    /// to flip here rather than waiting for CoreAudio to notice the stream stopped —
+    /// that reading is per process and lags, and the menu would keep showing Pause
+    /// after the music had already stopped.
+    @Published var isPlaybackPaused = false
 
     func isHovered(_ action: CardMenuItem) -> Bool {
         hoveredKey == Self.key(action)
+    }
+
+    func togglePlaybackPaused() {
+        isPlaybackPaused.toggle()
     }
 
     func setHovered(_ action: CardMenuItem, _ inside: Bool) {

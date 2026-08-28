@@ -60,4 +60,20 @@ struct WedgeLabelTests {
         )
         #expect(WindowWedgeView.primaryText(for: tab, badgeCount: nil) == "github.com")
     }
+
+    /// Accessibility lists tabs before scripting fills in the URL. The wedge must not
+    /// fall back to "Google Chrome" for every seat while that address is missing.
+    @Test func aTabWithoutAURLIsNamedByItsTitle() {
+        let tab = WindowEntry.tabEntry(
+            BrowserTab(
+                browser: .chrome,
+                windowIdentifier: 1,
+                tabIndex: 1,
+                title: "taxonomy engine - Grok",
+                url: ""
+            ),
+            application: nil
+        )
+        #expect(WindowWedgeView.primaryText(for: tab, badgeCount: nil) == "taxonomy engine - Grok")
+    }
 }

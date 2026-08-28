@@ -55,6 +55,13 @@ enum TabMediaAlert: Equatable, Sendable {
     private static let alertSeparator = " \u{2013} "
     private static let annotationSeparator = " - "
 
+    /// The page title Chrome put in front of any alert / memory suffix.
+    static func title(fromAccessibilityDescription description: String) -> String {
+        let beforeAlert = description.components(separatedBy: alertSeparator)[0]
+        let beforeMemory = beforeAlert.components(separatedBy: annotationSeparator)[0]
+        return beforeMemory.trimmingCharacters(in: .whitespaces)
+    }
+
     /// The alert Chrome has appended to a tab's accessibility description, if any.
     ///
     /// Only segments *after* the first en dash are considered, so a page whose title merely contains

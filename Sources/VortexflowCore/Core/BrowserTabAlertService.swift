@@ -82,31 +82,140 @@ enum BrowserTabAlertService {
 
         for window in windows {
             let windowID = AXBridge.windowID(for: window)
-            var frontier = [window]
-            var depth = 0
-            var strip: AXUIElement?
-
-            while !frontier.isEmpty, depth < maximumStripDepth, strip == nil {
-                var next: [AXUIElement] = []
-                for element in frontier {
-                    let role = AXBridge.string(element, kAXRoleAttribute as String) ?? ""
-                    if role == "AXTabGroup" {
-                        strip = element
-                        break
-                    }
-                    guard role == "AXWindow" || role == "AXGroup" || role == "AXToolbar"
-                    else { continue }
-                    next.append(
-                        contentsOf: AXBridge.elements(element, kAXChildrenAttribute as String) ?? []
-                    )
-                }
-                frontier = next
-                depth += 1
+            if let strip = tabStrip(in: window) {
+                found.append((windowID, strip))
             }
-
-            if let strip { found.append((windowID, strip)) }
         }
         return found
+    }
+
+    private static func tabStrip(in window: AXUIElement) -> AXUIElement? {
+        var candidates: [AXUIElement] = []
+        var frontier = [window]
+        var depth = 0
+        while !frontier.isEmpty, depth < maximumStripDepth {
+            var next: [AXUIElement] = []
+            for element in frontier {
+                let role = AXBridge.string(element, kAXRoleAttribute as String) ?? ""
+                if role == "AXTabGroup" {
+                    // Chrome puts empty AXTabGroups in the tab-search chrome, then
+                    // the real strip further down. Returning the first one listed
+                    // every window as having no tabs.
+                    candidates.append(element)
+                    continue
+                }
+                guard role == "AXWindow" || role == "AXGroup" || role == "AXToolbar"
+                else { continue }
+                next.append(
+                    contentsOf: AXBridge.elements(element, kAXChildrenAttribute as String) ?? []
+                )
+            }
+            frontier = next
+            depth += 1
+        }
+        guard let index = preferredTabStripIndex(tabCounts: candidates.map { tabButtons(of: $0).count })
+        else { return nil }
+        return candidates[index]
+    }
+
+    /// The strip that actually holds tabs. Empty neighbours (tab-search chrome,
+    /// collapsed Chrome tab groups) stay in the list but must not win.
+    static func preferredTabStripIndex(tabCounts: [Int]) -> Int? {
+        guard !tabCounts.isEmpty else { return nil }
+        return tabCounts.indices.max(by: { tabCounts[$0] < tabCounts[$1] })
+    }
+
+    /// Every tab in this browser process, keyed by the window server's id.
+    ///
+    /// Chrome's AppleScript `windows` collection is empty on current macOS even while
+    /// two windows are on screen — System Events and Accessibility still see them.
+    /// Search through Tabs uses this listing so it is not stuck on "Looking for tabs…"
+    /// waiting for a dictionary that names nothing.
+    static func tabs(inProcess pid: pid_t, browser: BrowserTab.Browser) -> [BrowserTab] {
+        guard pid > 0, AXIsProcessTrusted() else { return [] }
+        let application = AXUIElementCreateApplication(pid)
+        AXBridge.applyMessagingTimeout(application)
+        var listed: [BrowserTab] = []
+        for (windowID, strip) in tabStrips(under: application) {
+            guard let windowID else { continue }
+            listed.append(contentsOf: tabs(inStrip: strip, windowID: windowID, browser: browser))
+        }
+        return listed
+    }
+
+    /// Tabs of one window, from a live Accessibility element. Works for windows
+    /// Accessibility remembered on another Space, which the application's current
+    /// window list does not include.
+    static func tabs(
+        inWindow element: AXUIElement,
+        windowID: CGWindowID,
+        browser: BrowserTab.Browser
+    ) -> [BrowserTab] {
+        AXBridge.applyMessagingTimeout(element)
+        guard let strip = tabStrip(in: element) else { return [] }
+        return tabs(inStrip: strip, windowID: windowID, browser: browser)
+    }
+
+    private static func tabs(
+        inStrip strip: AXUIElement,
+        windowID: CGWindowID,
+        browser: BrowserTab.Browser
+    ) -> [BrowserTab] {
+        tabButtons(of: strip).enumerated().compactMap { offset, button in
+            let title = resolvedTabTitle(
+                axTitle: AXBridge.string(button, kAXTitleAttribute as String),
+                accessibilityDescription: AXBridge.string(button, kAXDescriptionAttribute as String)
+            )
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return BrowserTab(
+                browser: browser,
+                windowIdentifier: Int(windowID),
+                tabIndex: offset + 1,
+                title: trimmed,
+                url: "",
+                usesNativeWindowIdentifier: true
+            )
+        }
+    }
+
+    /// Select a tab that was listed from the accessibility strip, then raise its window.
+    ///
+    /// The application is activated *before* the raise. Raising an off-Space window
+    /// while its app is in the background does not switch desktops — the same bug the
+    /// AppleScript path already documents. The parent `windowElement` has to be the
+    /// remembered window: Accessibility's current list does not include other Spaces.
+    @discardableResult
+    static func selectTab(
+        processID: pid_t,
+        windowID: CGWindowID,
+        tabIndex: Int,
+        windowElement: AXUIElement? = nil
+    ) -> Bool {
+        guard processID > 0, AXIsProcessTrusted() else { return false }
+        let window = windowElement ?? {
+            let application = AXUIElementCreateApplication(processID)
+            AXBridge.applyMessagingTimeout(application)
+            return (AXBridge.elements(application, kAXWindowsAttribute as String) ?? [])
+                .first { AXBridge.windowID(for: $0) == windowID }
+        }()
+        guard let window, let strip = tabStrip(in: window) else { return false }
+        let buttons = tabButtons(of: strip)
+        guard buttons.indices.contains(tabIndex - 1) else { return false }
+        NSRunningApplication(processIdentifier: processID)?.activate()
+        let pressed = AXBridge.perform(buttons[tabIndex - 1], kAXPressAction as String)
+        AXBridge.perform(window, kAXRaiseAction as String)
+        AXBridge.setBool(window, kAXMainAttribute as String, true)
+        AXBridge.setBool(window, kAXFocusedAttribute as String, true)
+        return pressed
+    }
+
+    /// Chrome leaves `AXTitle` empty and puts the page name in the description.
+    /// `??` does not treat `""` as missing, so that empty title used to drop every tab.
+    static func resolvedTabTitle(axTitle: String?, accessibilityDescription: String?) -> String {
+        let titled = (axTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !titled.isEmpty { return titled }
+        return TabMediaAlert.title(fromAccessibilityDescription: accessibilityDescription ?? "")
     }
 
     /// The tabs of a strip, which are its radio buttons.

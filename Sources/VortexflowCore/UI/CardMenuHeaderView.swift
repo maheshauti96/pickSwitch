@@ -38,6 +38,9 @@ struct CardMenuHeaderView: View {
     let icon: NSImage?
     /// Minimize and close, drawn into the top-right of the identity bar.
     var windowControls: [CardMenuItem] = []
+    /// Previous / pause / next, drawn under the facts when this window is playing,
+    /// matching Chrome's own media controls on a playing tab.
+    var media: [CardMenuItem] = []
     /// Tab search, drawn as a labelled row immediately under the preview.
     var contents: [CardMenuItem] = []
     /// The four halves, matching macOS Move & Resize.
@@ -53,6 +56,12 @@ struct CardMenuHeaderView: View {
         VStack(alignment: .leading, spacing: 8) {
             identityBar
             preview
+            // Title, site, Desktop/Audio/Window — the same facts the hub names this
+            // card with — sit directly under the picture, before tiling. That is the
+            // Chrome media-card shape: artwork, what is playing, then controls.
+            if showsCaption { caption }
+            if hasFacts { facts }
+            if !media.isEmpty { mediaRow }
             if !contents.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(contents.enumerated()), id: \.offset) { _, action in
@@ -63,10 +72,6 @@ struct CardMenuHeaderView: View {
             if hasArrangement {
                 Divider().opacity(0.6)
                 arrangement
-            }
-            if hasFacts {
-                Divider().opacity(0.6)
-                facts
             }
         }
         .padding(.horizontal, Self.horizontalPadding)
@@ -123,11 +128,93 @@ struct CardMenuHeaderView: View {
         )
     }
 
+    private var showsCaption: Bool {
+        showsTitle || showsIdentifyingSource
+    }
+
+    /// The window title is worth a line when it is not just the application name again — "YouTube
+    /// Music" under Google Chrome, not a second "Slack".
+    private var showsTitle: Bool {
+        let title = details.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !title.isEmpty && title != details.applicationName
+    }
+
+    private var showsIdentifyingSource: Bool {
+        if let source = details.identifyingSource, !source.isEmpty { return true }
+        return false
+    }
+
+    /// Window title and site, under the preview, matching what the hub says about this card.
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if showsTitle {
+                Text(details.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(.primary)
+            }
+            if let source = details.identifyingSource, !source.isEmpty {
+                Text(source)
+                    .font(.system(size: 10.5))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Chrome's Global Media Controls: previous, pause, next as a single player
+    /// cluster, not a captioned glyph row. Captions would make this look like Mute
+    /// and the tiling grid; the skip/pause glyphs are already the words.
+    private var mediaRow: some View {
+        HStack {
+            Spacer(minLength: 0)
+            HStack(spacing: 2) {
+                ForEach(Array(media.enumerated()), id: \.offset) { _, action in
+                    transportButton(action)
+                }
+            }
+            .padding(2)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.45))
+            )
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func transportButton(_ action: CardMenuItem) -> some View {
+        let isHovered = hover.isHovered(action)
+        let isPause = action == .pausePlayback
+        let symbol: String = {
+            guard isPause else { return action.icon.symbolName }
+            return hover.isPlaybackPaused ? "play.fill" : "pause.fill"
+        }()
+        let name = isPause
+            ? (hover.isPlaybackPaused ? "Play" : "Pause")
+            : action.title
+        return Button {
+            onAction(action)
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: isPause ? 16 : 13, weight: .semibold))
+                .frame(width: 52, height: 36)
+                .foregroundStyle(isHovered ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isHovered ? Color.accentColor : Color(nsColor: .quaternaryLabelColor).opacity(0.25))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.setHovered(action, $0) }
+        .accessibilityLabel(name)
+        .help(name)
+    }
+
     /// Application icon and name on the left, minimize and close on the right.
-    ///
-    /// One bar above the preview rather than a caption below it. The picture *is* the window, so
-    /// repeating its title underneath cost a row that distinguished nothing, and the display chip
-    /// that used to share that row is gone for the same reason.
     private var identityBar: some View {
         HStack(alignment: .center, spacing: 7) {
             if let icon {

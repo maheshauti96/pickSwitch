@@ -73,6 +73,39 @@ final class ActivationService {
         // user picked may not be the one the browser is currently showing, so selecting it
         // has to happen before — and as part of — bringing the browser forward.
         if let tab = entry.tab {
+            if tab.usesNativeWindowIdentifier {
+                let windowElement = entry.axElement
+                    ?? registry.axElement(for: CGWindowID(tab.windowIdentifier))
+                // Scripting is what actually switches Spaces. The strip's CGWindowID
+                // is not a Chrome window id, and raising via Accessibility while the
+                // browser is in the background leaves the current desktop in front.
+                if let scripted = tab.scriptedActivation {
+                    let processID = entry.processID
+                    let windowID = CGWindowID(tab.windowIdentifier)
+                    let tabIndex = tab.tabIndex
+                    let tabs = self.tabs
+                    Task {
+                        let raised = await tabs.activate(scripted)
+                        if !raised {
+                            await MainActor.run {
+                                _ = BrowserTabAlertService.selectTab(
+                                    processID: processID,
+                                    windowID: windowID,
+                                    tabIndex: tabIndex,
+                                    windowElement: windowElement
+                                )
+                            }
+                        }
+                    }
+                    return true
+                }
+                return BrowserTabAlertService.selectTab(
+                    processID: entry.processID,
+                    windowID: CGWindowID(tab.windowIdentifier),
+                    tabIndex: tab.tabIndex,
+                    windowElement: windowElement
+                )
+            }
             let tabs = self.tabs
             Task { await tabs.activate(tab) }
             return true
@@ -108,23 +141,45 @@ final class ActivationService {
             AXBridge.setBool(axWindow, kAXMinimizedAttribute as String, false)
         }
 
-        // Requirement 7.2. `AXRaise` is the documented per-window raise; setting
-        // kAXMainAttribute/kAXFocusedAttribute additionally nudges apps that treat
-        // "main window" and "front window" separately.
+        return raiseAndActivate(entry, app: app, axWindow: axWindow)
+    }
+
+    /// Put this window in front of everything else, without treating it as a switch.
+    ///
+    /// Tiling and Move to Display change the window's frame. Without a raise that
+    /// happens behind whatever the user is looking at, so the only visible result is
+    /// a hole opening in some other application's layout.
+    @discardableResult
+    func bringForward(_ entry: WindowEntry, canUseAccessibility: Bool) -> Bool {
+        guard let app = NSRunningApplication(processIdentifier: entry.processID), !app.isTerminated
+        else {
+            return false
+        }
+        if app.isHidden {
+            app.unhide()
+        }
+        guard canUseAccessibility, let axWindow = entry.axElement else {
+            app.activate()
+            return false
+        }
+        return raiseAndActivate(entry, app: app, axWindow: axWindow)
+    }
+
+    /// Raise the window within its application, then activate the application.
+    ///
+    /// Raise first: activating first produces a flicker of whichever window the app
+    /// already had in front. A rejected `AXRaise` is not a failed switch — plenty of
+    /// applications decline it on a window that is already frontmost, or manage their
+    /// own ordering, and still come forward from `app.activate()`.
+    private func raiseAndActivate(
+        _ entry: WindowEntry,
+        app: NSRunningApplication,
+        axWindow: AXUIElement
+    ) -> Bool {
         let raised = AXBridge.perform(axWindow, kAXRaiseAction as String)
         AXBridge.setBool(axWindow, kAXMainAttribute as String, true)
         AXBridge.setBool(axWindow, kAXFocusedAttribute as String, true)
-
-        // Requirement 7.3.
         app.activate()
-
-        // A rejected AXRaise is not a failed switch. Plenty of applications decline the
-        // raise action on a window that is already frontmost within the app, or manage
-        // their own window ordering, and still come forward correctly from
-        // `app.activate()`. Throwing here previously reported a working switch as an
-        // error and, worse, skipped the MRU timestamp for the window the user had just
-        // chosen — so the next invocation ordered the strip as if the switch never
-        // happened.
         if !raised {
             Log.activation.debug("""
                 AXRaise declined by \(entry.applicationName, privacy: .public); \

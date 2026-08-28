@@ -492,6 +492,16 @@ actor BrowserTabService {
     }
 
     private static func run(_ source: String) -> Outcome {
+        // NSAppleScript is documented as main-thread only. Running it on the actor's
+        // executor hangs indefinitely on some Chrome windows — which is what left
+        // Search through Tabs on "Looking for tabs…" forever.
+        if Thread.isMainThread {
+            return execute(source)
+        }
+        return DispatchQueue.main.sync { execute(source) }
+    }
+
+    private static func execute(_ source: String) -> Outcome {
         guard let script = NSAppleScript(source: source) else {
             return .failed("script could not be compiled")
         }

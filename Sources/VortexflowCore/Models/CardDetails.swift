@@ -22,8 +22,8 @@ struct CardDetails: Equatable {
         let value: String
     }
 
-    /// The window's own title, kept for VoiceOver. The preview already shows it, so it is not drawn
-    /// as a heading of its own.
+    /// The window's own title, drawn under the preview. The identity bar names the application;
+    /// this names the document, the tab, the track — the thing the picture is of.
     let title: String
 
     /// What the window belongs to: the application, or the site for a browser window.
@@ -32,6 +32,10 @@ struct CardDetails: Equatable {
     /// The application name drawn above the preview. Always the application, never the site: the
     /// picture is the window, and the line above it is whose window.
     let applicationName: String
+
+    /// The site host when it adds something the application name does not. Drawn under the title
+    /// the way the hub names a Chrome window by `github.com`.
+    let identifyingSource: String?
 
     let rows: [Row]
 
@@ -110,10 +114,16 @@ struct CardDetails: Equatable {
             return entry.applicationName
         }()
 
+        let identifyingSource: String? = {
+            guard let siteHost, !siteHost.isEmpty, siteHost != entry.applicationName else { return nil }
+            return siteHost
+        }()
+
         return CardDetails(
             title: entry.displayTitle,
             source: source,
             applicationName: entry.applicationName,
+            identifyingSource: identifyingSource,
             rows: rows
         )
     }

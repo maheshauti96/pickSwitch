@@ -41,6 +41,7 @@ struct CardMenuTests {
     @Test func theActionsSplitIntoThreeGroups() {
         var context = browserContext
         context.isAudible = true
+        context.isPlayingAudio = true
         let result = rows(window(), context)
 
         #expect(result.windowControls == [.minimizeWindow, .closeWindow])
@@ -48,6 +49,7 @@ struct CardMenuTests {
         #expect(result.fillArrange == WindowTile.fillArrange.map(CardMenuItem.tileWindow))
         #expect(result.placement == [.enterFullScreen])
         #expect(result.contents == [.searchWindowTabs(count: 23)])
+        #expect(result.media == [.previousTrack, .pausePlayback, .nextTrack])
         #expect(result.actions == [.muteAudible])
     }
 
@@ -78,6 +80,7 @@ struct CardMenuTests {
     @Test func theMenuNeverOffersToQuitAnApplication() {
         var context = browserContext
         context.isAudible = true
+        context.isPlayingAudio = true
         let titles = everyAction(in: rows(window(), context)).map(\.title)
         #expect(!titles.contains { $0.localizedCaseInsensitiveContains("quit") })
     }
@@ -87,6 +90,7 @@ struct CardMenuTests {
     @Test func theMenuNoLongerOffersPinning() {
         var context = browserContext
         context.isAudible = true
+        context.isPlayingAudio = true
         let titles = everyAction(in: rows(window(), context)).map(\.title)
         #expect(!titles.contains { $0.localizedCaseInsensitiveContains("pin") })
     }
@@ -116,6 +120,26 @@ struct CardMenuTests {
         #expect(CardMenuItem.moveToDisplay(other).title == "Move to DELL U2720Q")
     }
 
+    /// Full Screen is a Space, not a resizable frame. macOS greys out tiling and Move to Display
+    /// there because they cannot act; we omit them and offer Exit Full Screen instead.
+    @Test func aFullScreenWindowOffersExitInsteadOfTiling() {
+        var context = browserContext
+        context.isFullScreen = true
+        let other = DisplayInfo(
+            number: 2,
+            bounds: CGRect(x: 1920, y: 0, width: 1920, height: 1080),
+            isBuiltIn: false,
+            name: "Built-in Retina Display"
+        )
+        context.otherDisplays = [other]
+        let result = rows(window(), context)
+        #expect(result.placement == [.exitFullScreen])
+        #expect(result.moveResize.isEmpty)
+        #expect(result.fillArrange.isEmpty)
+        #expect(result.windowControls.contains(.closeWindow))
+        #expect(CardMenuItem.exitFullScreen.title == "Exit Full Screen")
+    }
+
     // MARK: - What is withheld, and why
 
     /// A tab result has no window of its own and an installed application has no window yet, so
@@ -143,7 +167,7 @@ struct CardMenuTests {
         #expect(result.moveResize.isEmpty)
         #expect(result.fillArrange.isEmpty)
         #expect(result.placement.isEmpty)
-        // Tab search survives: it never needed Accessibility, only the browser's scripting id.
+        // Tab search survives: it never needed Accessibility, only that this is a scriptable browser.
         #expect(result.contents == [.searchWindowTabs(count: 23)])
         #expect(result.actions.isEmpty)
     }
@@ -168,10 +192,29 @@ struct CardMenuTests {
         var quiet = browserContext
         quiet.isAudible = false
         #expect(!rows(window(), quiet).actions.contains(.muteAudible))
+        #expect(rows(window(), quiet).media.isEmpty)
 
         var audible = browserContext
         audible.isAudible = true
+        audible.isPlayingAudio = true
         #expect(rows(window(), audible).actions.contains(.muteAudible))
+        #expect(rows(window(), audible).media == [.previousTrack, .pausePlayback, .nextTrack])
+    }
+
+    /// Previous / pause / next are a media session. A window that is only on the microphone
+    /// is audible enough to mute, but it has no track to skip.
+    @Test func transportAppearsOnlyWhilePlaying() {
+        var microphoneOnly = browserContext
+        microphoneOnly.isAudible = true
+        microphoneOnly.isPlayingAudio = false
+        let silentPlay = rows(window(), microphoneOnly)
+        #expect(silentPlay.actions.contains(.muteAudible))
+        #expect(silentPlay.media.isEmpty)
+
+        var playing = browserContext
+        playing.isAudible = true
+        playing.isPlayingAudio = true
+        #expect(rows(window(), playing).media == [.previousTrack, .pausePlayback, .nextTrack])
     }
 
     @Test func aNonBrowserWindowIsNotOfferedTabSearch() {
@@ -193,6 +236,7 @@ struct CardMenuTests {
         #expect(result.fillArrange.isEmpty)
         #expect(result.placement.isEmpty)
         #expect(result.contents.isEmpty)
+        #expect(result.media.isEmpty)
         #expect(result.actions.isEmpty)
         #expect(result.isEmpty)
     }
@@ -214,10 +258,22 @@ struct CardMenuTests {
 
     // MARK: - Glyphs
 
+    /// Pause / next stay in the open menu so they can be used as a player. Tiling
+    /// and close still dismiss, because those actions tear the overlay down.
+    @Test func mediaControlsKeepTheMenuOpen() {
+        #expect(CardMenuItem.pausePlayback.keepsMenuOpen)
+        #expect(CardMenuItem.nextTrack.keepsMenuOpen)
+        #expect(CardMenuItem.previousTrack.keepsMenuOpen)
+        #expect(!CardMenuItem.tileWindow(.leftHalf).keepsMenuOpen)
+        #expect(!CardMenuItem.closeWindow.keepsMenuOpen)
+        #expect(CardMenuItem.pausePlayback.title == "Play/Pause")
+    }
+
     /// A glyph alone makes the user guess, so each carries a word and a symbol.
     @Test func everyActionHasAGlyphAndAName() {
         var context = browserContext
         context.isAudible = true
+        context.isPlayingAudio = true
         for item in everyAction(in: rows(window(), context)) {
             #expect(!item.icon.symbolName.isEmpty, "\(item) has no symbol")
             #expect(!item.icon.label.isEmpty, "\(item) has no caption")
@@ -230,9 +286,11 @@ struct CardMenuTests {
     @Test func everySymbolResolvesOnThisSystem() {
         var context = browserContext
         context.isAudible = true
+        context.isPlayingAudio = true
         let extra: [CardMenuItem] = [
             .searchWindowTabs(count: nil),
             .enterFullScreen,
+            .exitFullScreen,
             .moveToDisplay(DisplayInfo(
                 number: 1, bounds: .zero, isBuiltIn: true, name: "Built-in Retina Display"
             )),
@@ -251,6 +309,7 @@ struct CardMenuTests {
     @Test func onlyClosingIsMarkedDestructive() {
         var context = browserContext
         context.isAudible = true
+        context.isPlayingAudio = true
         let destructive = everyAction(in: rows(window(), context)).filter(\.isDestructive)
         #expect(destructive == [.closeWindow])
     }
@@ -274,6 +333,7 @@ struct CardMenuTests {
     private func everyAction(in rows: CardMenu.Rows) -> [CardMenuItem] {
         rows.windowControls
             + rows.contents
+            + rows.media
             + rows.moveResize
             + rows.fillArrange
             + rows.placement

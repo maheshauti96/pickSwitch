@@ -18,10 +18,12 @@ struct CardMenuHeaderViewTests {
     private func header(
         applicationName: String = "Google Chrome",
         title: String = "A window",
+        identifyingSource: String? = nil,
         rows: [CardDetails.Row] = [],
         thumbnail: CGImage? = nil,
         icon: NSImage? = nil,
         windowControls: [CardMenuItem] = [],
+        media: [CardMenuItem] = [],
         contents: [CardMenuItem] = [],
         moveResize: [CardMenuItem] = [],
         fillArrange: [CardMenuItem] = [],
@@ -31,13 +33,15 @@ struct CardMenuHeaderViewTests {
         let view = CardMenuHeaderView(
             details: CardDetails(
                 title: title,
-                source: applicationName,
+                source: identifyingSource.map { "\($0) · \(applicationName)" } ?? applicationName,
                 applicationName: applicationName,
+                identifyingSource: identifyingSource,
                 rows: rows
             ),
             thumbnail: thumbnail,
             icon: icon,
             windowControls: windowControls,
+            media: media,
             contents: contents,
             moveResize: moveResize,
             fillArrange: fillArrange,
@@ -56,8 +60,15 @@ struct CardMenuHeaderViewTests {
         -> NSHostingView<CardMenuHeaderView> {
         header(
             applicationName: "Google Chrome",
-            rows: [CardDetails.Row(label: "Window", value: "1 of 2")],
+            title: "YouTube Music",
+            identifyingSource: "music.youtube.com",
+            rows: [
+                CardDetails.Row(label: "Desktop", value: "Another · just now"),
+                CardDetails.Row(label: "Audio", value: "Playing"),
+                CardDetails.Row(label: "Window", value: "1 of 3"),
+            ],
             windowControls: [.minimizeWindow, .closeWindow],
+            media: [.previousTrack, .pausePlayback, .nextTrack],
             contents: [.searchWindowTabs(count: 23)],
             moveResize: WindowTile.moveResize.map(CardMenuItem.tileWindow),
             fillArrange: WindowTile.fillArrange.map(CardMenuItem.tileWindow),
@@ -85,6 +96,48 @@ struct CardMenuHeaderViewTests {
         )
         #expect(long.fittingSize.height == short.fittingSize.height)
         #expect(long.fittingSize.width == CardMenuHeaderView.width)
+    }
+
+    /// The window title sits under the preview, the way the hub names this card. A title that is
+    /// just the application name again is omitted, so Slack does not say "Slack" twice.
+    @Test func theWindowTitleSitsUnderThePreview() {
+        let named = header(applicationName: "Google Chrome", title: "YouTube Music")
+        let sameAsApp = header(applicationName: "Slack", title: "Slack")
+        #expect(named.fittingSize.height > sameAsApp.fittingSize.height)
+        #expect(named.fittingSize.width == CardMenuHeaderView.width)
+    }
+
+    @Test func aLongWindowTitleCostsAtMostOneExtraLine() {
+        let short = header(applicationName: "Chrome", title: "Mail")
+        let long = header(
+            applicationName: "Chrome",
+            title: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5)
+        )
+        let growth = long.fittingSize.height - short.fittingSize.height
+        #expect(growth > 0)
+        #expect(growth < 24, "growth of \(growth)pt suggests the title is not capped at two lines")
+    }
+
+    @Test func theMediaRowDoesNotWidenTheHeader() {
+        #expect(
+            header(
+                applicationName: "Google Chrome",
+                media: [.previousTrack, .pausePlayback, .nextTrack]
+            ).fittingSize.width == CardMenuHeaderView.width
+        )
+    }
+
+    /// Chrome's transport is a tight cluster, not a captioned glyph row. Captions under
+    /// Previous / Pause / Next would spend a line the Skip glyphs already say.
+    @Test func theTransportClusterStaysCompact() {
+        let without = header(applicationName: "Google Chrome")
+        let with = header(
+            applicationName: "Google Chrome",
+            media: [.previousTrack, .pausePlayback, .nextTrack]
+        )
+        let growth = with.fittingSize.height - without.fittingSize.height
+        #expect(growth > 0)
+        #expect(growth < 56, "growth of \(growth)pt suggests the transport grew captions")
     }
 
     /// Facts have to actually reach the layout; a grid that silently rendered nothing would still
@@ -117,12 +170,14 @@ struct CardMenuHeaderViewTests {
     }
 
     /// A ceiling on the whole header, because the menu still has to fit on screen when it opens
-    /// near the bottom edge. The two placement grids now live inside this block, so the budget is
-    /// the preview, the facts, and those grids together. Every row `CardDetails` can produce is
-    /// present here.
+    /// near the bottom edge. The two placement grids live inside this block, and so do the title
+    /// under the preview, the facts, and the Chrome-style transport. Every row `CardDetails` can
+    /// produce is present here.
     @Test func theFullyPopulatedHeaderStaysWithinItsBudget() {
         let view = header(
-            applicationName: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5),
+            applicationName: "Google Chrome",
+            title: String(repeating: "Quarterly Planning Document — Shared Folder ", count: 5),
+            identifyingSource: "github.com",
             rows: [
                 CardDetails.Row(label: "Desktop", value: "Another · 20m ago"),
                 CardDetails.Row(label: "State", value: "Minimized"),
@@ -132,13 +187,14 @@ struct CardMenuHeaderViewTests {
                 CardDetails.Row(label: "Window", value: "2 of 3"),
             ],
             windowControls: [.minimizeWindow, .closeWindow],
+            media: [.previousTrack, .pausePlayback, .nextTrack],
             contents: [.searchWindowTabs(count: 23)],
             moveResize: WindowTile.moveResize.map(CardMenuItem.tileWindow),
             fillArrange: WindowTile.fillArrange.map(CardMenuItem.tileWindow),
             placement: [.enterFullScreen]
         )
         #expect(
-            view.fittingSize.height < 560,
+            view.fittingSize.height < 600,
             "header is \(view.fittingSize.height)pt tall; the menu still has to fit on screen"
         )
     }
@@ -188,6 +244,15 @@ struct CardMenuHeaderViewTests {
 
     /// Highlighting a glyph must not move anything. The identity bar and the grids sit against the
     /// block's edges, so a hover that changed a button's size would shift the preview beside it.
+    @Test func togglingPauseDoesNotResizeTheHeader() {
+        let hover = CardMenuHoverModel()
+        let view = fullHeader(hover: hover)
+        let resting = view.fittingSize
+        hover.togglePlaybackPaused()
+        view.layoutSubtreeIfNeeded()
+        #expect(view.fittingSize == resting, "flipping play/pause resized the header")
+    }
+
     @Test func hoveringAGlyphDoesNotResizeTheHeader() {
         let hover = CardMenuHoverModel()
         let view = fullHeader(hover: hover)
@@ -196,6 +261,7 @@ struct CardMenuHeaderViewTests {
         for action in [
             CardMenuItem.closeWindow,
             .minimizeWindow,
+            .pausePlayback,
             .searchWindowTabs(count: 23),
             .tileWindow(.leftHalf),
             .tileWindow(.fill),

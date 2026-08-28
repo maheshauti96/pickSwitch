@@ -88,12 +88,14 @@ struct CardDetailsTests {
     @Test func aBrowserWindowNamesBothSiteAndApplication() {
         let result = details(for: window(), siteHost: "github.com")
         #expect(result.source == "github.com · Google Chrome")
+        #expect(result.identifyingSource == "github.com")
     }
 
     /// A site host equal to the application name would print it twice.
     @Test func aRedundantSiteHostIsNotRepeated() {
         let result = details(for: window(app: "zoom.us"), siteHost: "zoom.us")
         #expect(result.source == "zoom.us")
+        #expect(result.identifyingSource == nil)
     }
 
     // MARK: - What earns a row

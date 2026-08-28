@@ -27,6 +27,22 @@ struct BrowserTab: Equatable, Hashable, Sendable {
     /// are one visual tab bar.
     let groupKey: String?
 
+    /// `windowIdentifier` is a `CGWindowID`, not the browser's AppleScript window id.
+    ///
+    /// Set when the tab was read from the accessibility tab strip because Chrome's
+    /// scripting dictionary currently reports zero windows on this system.
+    let usesNativeWindowIdentifier: Bool
+
+    /// The browser's own window id, when this tab was listed from Accessibility and
+    /// later paired with a scripting record. Activation has to use this, not
+    /// `windowIdentifier`: `set index of window id N` is what pulls another desktop
+    /// forward, and N is Chrome's id, not a `CGWindowID`.
+    let scriptedWindowIdentifier: Int?
+
+    /// 1-based index in that scripted window. The accessibility strip's order can
+    /// disagree with Chrome's (tab groups), so pressing AX button N is the wrong tab.
+    let scriptedTabIndex: Int?
+
     /// Whether the icon of this tab's site may be fetched over the network.
     ///
     /// True only when the tab's window reported the browser's exact `normal` mode. It fails
@@ -42,7 +58,10 @@ struct BrowserTab: Equatable, Hashable, Sendable {
         title: String,
         url: String,
         allowsFaviconRequest: Bool = false,
-        groupKey: String? = nil
+        groupKey: String? = nil,
+        usesNativeWindowIdentifier: Bool = false,
+        scriptedWindowIdentifier: Int? = nil,
+        scriptedTabIndex: Int? = nil
     ) {
         self.browser = browser
         self.windowIdentifier = windowIdentifier
@@ -51,6 +70,47 @@ struct BrowserTab: Equatable, Hashable, Sendable {
         self.url = url
         self.allowsFaviconRequest = allowsFaviconRequest
         self.groupKey = groupKey
+        self.usesNativeWindowIdentifier = usesNativeWindowIdentifier
+        self.scriptedWindowIdentifier = scriptedWindowIdentifier
+        self.scriptedTabIndex = scriptedTabIndex
+    }
+
+    /// Accessibility lists tabs by title and has no address. Scripting has the URL,
+    /// the window id that can raise another desktop, and whether a favicon is safe.
+    func withAddress(
+        url: String,
+        allowsFaviconRequest: Bool,
+        scriptedWindowIdentifier: Int? = nil,
+        scriptedTabIndex: Int? = nil
+    ) -> BrowserTab {
+        BrowserTab(
+            browser: browser,
+            windowIdentifier: windowIdentifier,
+            tabIndex: tabIndex,
+            title: title,
+            url: url,
+            allowsFaviconRequest: allowsFaviconRequest,
+            groupKey: groupKey,
+            usesNativeWindowIdentifier: usesNativeWindowIdentifier,
+            scriptedWindowIdentifier: scriptedWindowIdentifier ?? self.scriptedWindowIdentifier,
+            scriptedTabIndex: scriptedTabIndex ?? self.scriptedTabIndex
+        )
+    }
+
+    /// The copy `BrowserTabService.activate` should receive: Chrome's window id, not
+    /// the accessibility `CGWindowID`. `nil` when scripting never paired this tab.
+    var scriptedActivation: BrowserTab? {
+        guard let scriptedWindowIdentifier, let scriptedTabIndex else { return nil }
+        return BrowserTab(
+            browser: browser,
+            windowIdentifier: scriptedWindowIdentifier,
+            tabIndex: scriptedTabIndex,
+            title: title,
+            url: url,
+            allowsFaviconRequest: allowsFaviconRequest,
+            groupKey: groupKey,
+            usesNativeWindowIdentifier: false
+        )
     }
 
     /// Stable within a presentation, which is all the UI needs to key a card by.

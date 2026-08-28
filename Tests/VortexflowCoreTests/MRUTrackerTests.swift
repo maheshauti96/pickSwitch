@@ -167,12 +167,12 @@ struct MRUTrackerTests {
         }
     }
 
-    /// What the depth still does: extra windows of an application already listed are what it cuts, so
-    /// twenty browser windows cannot bury everything else.
+    /// What the depth still does: extra windows of one application are capped at the depth, so
+    /// twenty browser windows cannot bury everything else. Slack and Warp still get a seat.
     @Test("Extra windows of one application are what the depth trims")
     func extraWindowsOfOneApplicationAreTrimmedFirst() {
         let (tracker, _) = makeTracker()
-        var entries = (0..<10).map { index in
+        var entries = (0..<20).map { index in
             Fixture.entry(id: CGWindowID(index + 1), app: "Google Chrome", zOrder: index)
         }
         entries.append(Fixture.entry(id: 50, app: "Slack", zOrder: 20))
@@ -181,9 +181,26 @@ struct MRUTrackerTests {
         let resting = tracker.ordered(entries, historyDepth: 5).resting
         #expect(resting.contains { $0.applicationName == "Slack" })
         #expect(resting.contains { $0.applicationName == "Warp" })
-        // Three of the five slots go to the three applications; the rest to Chrome's extras.
+        #expect(resting.filter { $0.applicationName == "Google Chrome" }.count == 5)
+        #expect(resting.count == 7)
+    }
+
+    /// The reported failure: three Chrome windows and more applications than the history
+    /// depth. One-per-application spent the whole allowance, so the other two Chrome
+    /// windows were cut while the hub still said "1 of 3".
+    @Test("Sibling windows stay visible when applications overflow the depth")
+    func siblingWindowsStayVisibleWhenApplicationsOverflowTheDepth() {
+        let (tracker, _) = makeTracker()
+        var entries = (0..<12).map { index in
+            Fixture.entry(id: CGWindowID(index + 1), app: "App\(index)", zOrder: index)
+        }
+        entries.append(Fixture.entry(id: 100, app: "Google Chrome", zOrder: 20))
+        entries.append(Fixture.entry(id: 101, app: "Google Chrome", zOrder: 21))
+        entries.append(Fixture.entry(id: 102, app: "Google Chrome", zOrder: 22))
+
+        let resting = tracker.ordered(entries, historyDepth: 10).resting
         #expect(resting.filter { $0.applicationName == "Google Chrome" }.count == 3)
-        #expect(resting.count == 5)
+        #expect(Set(resting.map(\.applicationName)).count == 13)
     }
 
     /// The deliberate consequence: more applications than the depth allows makes the resting list
@@ -622,8 +639,9 @@ extension MRUTrackerTests {
         entries.append(pinned)
 
         let order = ids(tracker.ordered(entries, historyDepth: 3, pinnedApplications: ["com.slack"]).resting)
-        #expect(order.count == 3)
+        // Slack plus up to `historyDepth` windows of the other application.
         #expect(order.contains(99))
+        #expect(order.filter { $0 != 99 }.count == 3)
     }
 
     @Test("Pinned ordering is stable across repeated calls")

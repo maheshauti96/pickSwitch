@@ -82,10 +82,10 @@ public final class SwitcherController {
 
     /// How many tab results may have their site icon resolved for one visible list.
     ///
-    /// Generous enough to cover a screenful in any arrangement, low enough that a query matching
-    /// most of a forty-tab browser does not fan out a request per tab for a list that is about to
-    /// change with the next keystroke.
-    private static let maximumVisibleTabIconRequests = 16
+    /// A spiral of one window's tabs is often twenty or more. The favicon service
+    /// deduplicates by origin, so twenty GitHub tabs still cost one request; this
+    /// bound is only admission, not network fan-out.
+    private static let maximumVisibleTabIconRequests = 48
     private let triggerMonitor: TriggerMonitor
     private let hotKeyMonitor: HotKeyMonitor
 
@@ -121,6 +121,10 @@ public final class SwitcherController {
     /// are numbered by the browser's private window id. `IncognitoMatcher` already pairs them for the
     /// private-browsing badge; this keeps the pairing rather than discarding it.
     private var scriptedWindowIdentifiers: [CGWindowID: Int] = [:]
+
+    /// A "Search through Tabs" click that arrived before this card was paired. Applied as
+    /// soon as the scripting id lands, so the item does not have to wait on pairing to exist.
+    private var pendingTabSearchWindowID: CGWindowID?
 
     /// True while a card's context menu is tracking.
     ///
@@ -893,18 +897,26 @@ public final class SwitcherController {
     private func inspectBrowserWindows(
         _ entries: [WindowEntry],
         allowPermissionPrompt: Bool,
-        presentationID: Int?
+        presentationID: Int?,
+        userRequested: Bool = false
     ) {
         let candidates = browserWindowCandidates(in: entries)
         guard !candidates.isEmpty else { return }
 
-        browserInspectionGeneration &+= 1
+        // A "Search through Tabs" click must not cancel the presentation inspect that
+        // is already pairing these windows — that is what left the overlay waiting.
+        if !userRequested {
+            browserInspectionGeneration &+= 1
+        }
         let generation = browserInspectionGeneration
-        let delay = allowPermissionPrompt ? Self.browserAuthorizationDelayNanoseconds : 0
+        let delay = (!userRequested && allowPermissionPrompt)
+            ? Self.browserAuthorizationDelayNanoseconds
+            : 0
         // Visible refreshes are allowed two short retries. They repair transient AppleScript,
         // title/frame matching and active-URL misses without carrying an unverified favicon from
-        // an earlier presentation. The prompt-capable dismissal path remains single-shot.
-        let retryDelays: [UInt64] = allowPermissionPrompt
+        // an earlier presentation. The prompt-capable dismissal path remains single-shot, except
+        // when the user asked for tabs: they are waiting, so inspect while the overlay is up.
+        let retryDelays: [UInt64] = (allowPermissionPrompt && !userRequested)
             ? []
             : [180_000_000, 420_000_000]
 
@@ -917,17 +929,18 @@ public final class SwitcherController {
                 }
             }
 
-            guard let self,
-                  self.browserInspectionGeneration == generation,
-                  !allowPermissionPrompt || !self.state.isVisible
-            else { return }
+            guard let self, self.browserInspectionGeneration == generation else { return }
+            if !userRequested {
+                guard !allowPermissionPrompt || !self.state.isVisible else { return }
+            }
 
             var pending = candidates
 
             for attempt in 0...retryDelays.count {
-                guard self.browserInspectionGeneration == generation,
-                      !allowPermissionPrompt || !self.state.isVisible
-                else { return }
+                guard self.browserInspectionGeneration == generation else { return }
+                if !userRequested {
+                    guard !allowPermissionPrompt || !self.state.isVisible else { return }
+                }
 
                 if allowPermissionPrompt {
                     self.isBrowserAuthorizationInFlight = true
@@ -967,6 +980,7 @@ public final class SwitcherController {
                 for (windowID, window) in matched {
                     self.scriptedWindowIdentifiers[windowID] = window.identifier
                 }
+                self.applyPendingTabSearch()
                 if !matched.isEmpty {
                     let incognito = Set(
                         matched.compactMap { windowID, window in
@@ -1720,7 +1734,7 @@ public final class SwitcherController {
             rootView: CardMenuGlyphRow(
                 actions: actions,
                 hover: hover,
-                onAction: menuAction(for: entry, menu: menu)
+                onAction: menuAction(for: entry, menu: menu, hover: hover)
             )
         )
         host.frame = CGRect(origin: .zero, size: host.fittingSize)
@@ -1732,12 +1746,22 @@ public final class SwitcherController {
     }
 
     /// What every glyph in the menu does when clicked, wherever it is drawn.
-    private func menuAction(for entry: WindowEntry, menu: NSMenu) -> (CardMenuItem) -> Void {
+    private func menuAction(
+        for entry: WindowEntry,
+        menu: NSMenu,
+        hover: CardMenuHoverModel
+    ) -> (CardMenuItem) -> Void {
         { [weak self, weak menu] action in
-            // Ending tracking first, so the overlay teardown some of these actions perform does not
-            // happen underneath an open menu.
-            menu?.cancelTracking()
             Log.overlay.info("menu glyph chosen: \(String(describing: action), privacy: .public)")
+            // Pause / next stay in the open menu so the transport can be used as a player.
+            // Everything else ends tracking first, because those actions tear the overlay
+            // down and must not do it underneath a tracking loop.
+            if action.keepsMenuOpen {
+                if action == .pausePlayback { hover.togglePlaybackPaused() }
+                self?.perform(action, onEntry: entry.id)
+                return
+            }
+            menu?.cancelTracking()
             self?.perform(action, onEntry: entry.id)
         }
     }
@@ -1793,12 +1817,13 @@ public final class SwitcherController {
                 thumbnail: preview,
                 icon: entry.applicationIcon,
                 windowControls: rows.windowControls,
+                media: rows.media,
                 contents: rows.contents,
                 moveResize: rows.moveResize,
                 fillArrange: rows.fillArrange,
                 placement: rows.placement,
                 hover: hover,
-                onAction: menuAction(for: entry, menu: menu)
+                onAction: menuAction(for: entry, menu: menu, hover: hover)
             )
         )
         // A menu item's view is not laid out by the menu, so it has to arrive at its final size.
@@ -1856,15 +1881,28 @@ public final class SwitcherController {
             // An application we can list tabs for *and* have paired to its scripting id. Without
             // the pairing there is no way to say which tabs belong to this window, so the item
             // would scope to nothing.
-            hasSearchableTabs: browser != nil && scriptedID != nil,
+            // Offered for any scriptable browser, even before this card is paired to a
+            // scripting id. Waiting on that pairing is what hid "Search through Tabs" on
+            // Chrome windows the matcher had not settled yet. Choosing the item is what
+            // fetches the tabs, and pairing can finish after the click.
+            hasSearchableTabs: browser != nil,
             knownTabCount: scriptedID.flatMap { identifier in
                 state.hasLoadedTabs ? state.tabCount(forWindowIdentifier: identifier) : nil
             },
             isAudible: state.isPlayingAudio(entry) || state.isUsingMicrophone(entry),
+            isPlayingAudio: state.isPlayingAudio(entry),
             hasAccessibilityElement: entry.axElement != nil,
             isMinimized: entry.isMinimized,
+            isFullScreen: Self.windowIsFullScreen(entry),
             otherDisplays: state.displayLayout.displays.filter { $0.number != currentDisplay?.number }
         )
+    }
+
+    /// Full Screen is a Space, published as `AXFullScreen`. Filling the usable area is a
+    /// different action and still offers this item.
+    private static func windowIsFullScreen(_ entry: WindowEntry) -> Bool {
+        guard let element = entry.axElement else { return false }
+        return AXBridge.bool(element, "AXFullScreen") ?? false
     }
 
     @objc
@@ -1885,12 +1923,7 @@ public final class SwitcherController {
 
         switch item {
         case .searchWindowTabs:
-            guard let identifier = scriptedWindowIdentifiers[entry.windowID] else { return }
-            state.setTabScope(identifier)
-            // Tabs are not fetched until something asks for them, and choosing this item is that
-            // ask. When they land, `setTabs` fills the scoped list.
-            loadBrowserTabsIfNeeded()
-            afterSearchChanged()
+            searchTabs(of: entry)
 
         case .minimizeWindow:
             guard let element = entry.axElement else { return }
@@ -1906,16 +1939,36 @@ public final class SwitcherController {
         case .enterFullScreen:
             enterFullScreen(entry)
 
+        case .exitFullScreen:
+            exitFullScreen(entry)
+
         case .moveToDisplay(let display):
             moveWindow(entry, to: display)
 
         case .muteAudible:
             // Not wired yet; the menu does not offer mute until it is.
             break
+
+        case .pausePlayback:
+            let sent = MediaRemoteBridge.send(.togglePlayPause)
+            Log.overlay.info("play/pause sent: \(sent, privacy: .public)")
+
+        case .nextTrack:
+            let sent = MediaRemoteBridge.send(.next)
+            Log.overlay.info("next track sent: \(sent, privacy: .public)")
+
+        case .previousTrack:
+            let sent = MediaRemoteBridge.send(.previous)
+            Log.overlay.info("previous track sent: \(sent, privacy: .public)")
         }
     }
 
-    /// Send a window to a region of the screen it is on.
+    /// Send a window to a region of the screen the user is looking at.
+    ///
+    /// That is the overlay's display — the one the pointer is on — not the display the
+    /// window currently occupies. Tiling a Chrome window that lives on the other monitor
+    /// to "left half" of *that* other monitor leaves this one empty, which is the opposite
+    /// of putting two windows side by side in front of you.
     ///
     /// Tiled to the screen's *visible* bounds, not its full bounds, or the window slides under the
     /// menu bar and the Dock. `DisplayInfo` carries both, in the same Quartz global space that
@@ -1923,9 +1976,10 @@ public final class SwitcherController {
     /// it was done once where the two spaces are documented together.
     private func tileWindow(_ entry: WindowEntry, to tile: WindowTile) {
         guard let element = entry.axElement else { return }
-        // `display(for:)` withholds the display on a single-screen setup, since naming it there tells
-        // the user nothing — but tiling needs the geometry regardless of whether it is worth naming.
-        guard let display = state.displayLayout.display(for: entry.frame) else {
+        guard let display = state.displayLayout.placementDisplay(
+            lookingAt: lookingAtDisplay(),
+            windowFrame: entry.frame
+        ) else {
             Log.overlay.info("tile dropped: the window is on no active display")
             return
         }
@@ -1948,20 +2002,29 @@ public final class SwitcherController {
             state.setFrame(CGRect(origin: origin, size: size), forWindowID: entry.windowID)
         }
 
-        // The overlay stays open. Tiling is the one action here a user is likely to repeat — try the
-        // left half, then the top — and it changes the window rather than which window is in front,
-        // so there is nothing to switch to.
+        // Frame first, then raise: the user should see the tiled window come forward, not
+        // the old size and then a jump. The overlay stays open so a second tile can be tried.
+        bringForward(entry)
+    }
+
+    private func enterFullScreen(_ entry: WindowEntry) {
+        setFullScreen(entry, true)
+    }
+
+    private func exitFullScreen(_ entry: WindowEntry) {
+        setFullScreen(entry, false)
     }
 
     /// Full Screen is a Space, not a frame, so it is a boolean on the window rather than a resize.
     ///
     /// The overlay will dismiss itself when the Space change lands, which is the right follow-through:
-    /// the window has left the desktop the overlay was drawn on.
-    private func enterFullScreen(_ entry: WindowEntry) {
+    /// the window has left (or returned to) the desktop the overlay was drawn on.
+    private func setFullScreen(_ entry: WindowEntry, _ fullScreen: Bool) {
         guard let element = entry.axElement else { return }
-        let applied = AXBridge.setBool(element, "AXFullScreen", true)
+        let applied = AXBridge.setBool(element, "AXFullScreen", fullScreen)
         Log.overlay.info("""
-            full screen \(entry.applicationName, privacy: .public); \
+            full screen \(fullScreen ? "enter" : "exit") \
+            \(entry.applicationName, privacy: .public); \
             accepted: \(applied, privacy: .public)
             """)
     }
@@ -1983,6 +2046,31 @@ public final class SwitcherController {
            let size = AXBridge.size(element, kAXSizeAttribute as String) {
             state.setFrame(CGRect(origin: origin, size: size), forWindowID: entry.windowID)
         }
+        bringForward(entry)
+    }
+
+    /// The display the user is looking at: the screen the pointer is on, which is
+    /// also where the overlay was opened. Mapped through Quartz bounds so it is the
+    /// same `DisplayInfo` tiling already speaks.
+    private func lookingAtDisplay() -> DisplayInfo? {
+        let point = NSEvent.mouseLocation
+        let screen = Self.screen(containing: point) ?? panel?.screen
+        guard let screen,
+              let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        else {
+            return nil
+        }
+        let bounds = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))
+        return state.displayLayout.display(matchingQuartzBounds: bounds)
+    }
+
+    /// After a placement, put the window in front. Resize without a raise is what
+    /// left Chrome tiled behind Finder.
+    private func bringForward(_ entry: WindowEntry) {
+        if entry.isWindow {
+            mruTracker.recordActivation(windowID: entry.windowID)
+        }
+        activation.bringForward(entry, canUseAccessibility: permissions.accessibilityGranted)
     }
 
     private func cardIndex(atScreenPoint point: CGPoint, panel: OverlayPanel) -> Int? {
@@ -2396,6 +2484,7 @@ extension SwitcherController: TriggerMonitorDelegate {
         // With a search active, Escape backs out of the search first. Closing the whole
         // overlay on a mistyped letter would be a harsh way to learn that.
         if state.clearSearch() {
+            pendingTabSearchWindowID = nil
             pendingSearchConfirmation = nil
             publishSearchActive()
             Log.overlay.debug("search cleared")
@@ -2422,6 +2511,144 @@ extension SwitcherController: TriggerMonitorDelegate {
         loadBrowserTabsIfNeeded()
         guard changed else { return }
         afterSearchChanged()
+    }
+
+    /// Restrict the overlay to this window's tabs.
+    ///
+    /// Pairing to the browser's scripting id can lag the right-click, and hiding the
+    /// item until it arrived is what made "Search through Tabs" disappear from Chrome
+    /// cards. Choosing the item always starts the fetch; if the pairing is not in yet,
+    /// it is applied when inspection lands.
+    private func searchTabs(of entry: WindowEntry) {
+        pendingTabSearchWindowID = entry.windowID
+
+        // Chrome's AppleScript `windows` collection is currently empty on this OS
+        // (osascript reports 0 while System Events sees the real windows). The tab
+        // strip in the accessibility tree still names every tab, keyed by CGWindowID,
+        // which is already on the card.
+        if let browser = BrowserTab.Browser.allCases.first(
+            where: { $0.bundleIdentifier == entry.bundleIdentifier }
+        ), browser != .terminal {
+            var axTabs: [BrowserTab] = []
+            if let element = entry.axElement {
+                axTabs = BrowserTabAlertService.tabs(
+                    inWindow: element,
+                    windowID: entry.windowID,
+                    browser: browser
+                )
+            }
+            if axTabs.isEmpty {
+                axTabs = BrowserTabAlertService.tabs(inProcess: entry.processID, browser: browser)
+                    .filter { $0.windowIdentifier == Int(entry.windowID) }
+            }
+            if !axTabs.isEmpty {
+                let application = NSRunningApplication(processIdentifier: entry.processID)
+                pendingTabSearchWindowID = nil
+                state.setTabs(axTabs.map {
+                    WindowEntry.tabEntry(
+                        $0,
+                        application: application,
+                        windowElement: entry.axElement
+                    )
+                })
+                state.setTabScope(Int(entry.windowID))
+                afterSearchChanged()
+                Log.overlay.info("""
+                    search through tabs via accessibility: \
+                    \(axTabs.count, privacy: .public) tabs, \
+                    window \(entry.windowID, privacy: .public), \
+                    visible \(self.state.entries.count, privacy: .public)
+                    """)
+                // The strip has titles, not URLs. Scripting still knows addresses
+                // across Spaces; filling those in is what makes hosts and favicons
+                // appear on the wedges instead of a ring of identical Chrome icons.
+                enrichTabAddressesFromScripting(window: entry, presentationID: state.presentationID)
+                return
+            }
+            Log.overlay.info("""
+                search through tabs found no accessibility tabs in window \
+                \(entry.windowID, privacy: .public); trying scripting
+                """)
+        }
+
+        if let identifier = scriptedWindowIdentifiers[entry.windowID] {
+            pendingTabSearchWindowID = nil
+            state.setTabScope(identifier)
+        } else if let identifier = state.windowIdentifierForTabScope(matching: entry) {
+            scriptedWindowIdentifiers[entry.windowID] = identifier
+            pendingTabSearchWindowID = nil
+            state.setTabScope(identifier)
+        } else {
+            state.beginAwaitingTabScope()
+        }
+        afterSearchChanged()
+        Log.overlay.info("""
+            search through tabs window \(entry.windowID, privacy: .public) \
+            paired id \(self.scriptedWindowIdentifiers[entry.windowID].map(String.init) ?? "none", privacy: .public) \
+            awaiting \(self.state.isAwaitingTabScope, privacy: .public)
+            """)
+        loadBrowserTabsIfNeeded()
+        resolvePendingTabSearch()
+    }
+
+    /// Fill URLs onto Accessibility-listed tabs once scripting answers.
+    ///
+    /// Chrome's tab strip is what we show, because it still works for a window on
+    /// another Space. Favicons and domain labels need the address, which the strip
+    /// does not have — `AXURL` comes back empty. The scripting dictionary does, and
+    /// it is not Space-bound.
+    private func enrichTabAddressesFromScripting(window entry: WindowEntry, presentationID: Int) {
+        Task { [weak self, browserTabs] in
+            let scripted = await browserTabs.tabs()
+            await MainActor.run {
+                guard let self,
+                      self.state.isVisible,
+                      self.state.presentationID == presentationID
+                else { return }
+                let changed = self.state.enrichTabAddresses(scripted, matching: entry)
+                Log.overlay.info("""
+                    tab addresses merged: \
+                    \(scripted.count, privacy: .public) scripted, \
+                    visible \(self.state.entries.count, privacy: .public), \
+                    with host \(self.state.entries.filter { $0.tab.map { !$0.host.isEmpty } ?? false }.count, privacy: .public)
+                    """)
+                if changed {
+                    self.afterSearchChanged()
+                } else {
+                    self.refreshTabIcons()
+                }
+            }
+        }
+    }
+
+    private func applyPendingTabSearch() {
+        guard let windowID = pendingTabSearchWindowID,
+              let identifier = scriptedWindowIdentifiers[windowID]
+        else { return }
+        pendingTabSearchWindowID = nil
+        state.setTabScope(identifier)
+        loadBrowserTabsIfNeeded()
+        afterSearchChanged()
+    }
+
+    /// Finish a pending "Search through Tabs" from pairing or from the tab list itself.
+    private func resolvePendingTabSearch() {
+        guard let windowID = pendingTabSearchWindowID else { return }
+        if scriptedWindowIdentifiers[windowID] != nil {
+            applyPendingTabSearch()
+            return
+        }
+        let entry = state.allWindowEntries.first { $0.windowID == windowID }
+        if let entry, let identifier = state.windowIdentifierForTabScope(matching: entry) {
+            scriptedWindowIdentifiers[windowID] = identifier
+            applyPendingTabSearch()
+            return
+        }
+        guard state.hasLoadedTabs else { return }
+        pendingTabSearchWindowID = nil
+        state.finishTabScopeWithoutTabs(reason: "Couldn't find tabs in this window")
+        afterSearchChanged()
+        Log.registry.info("tab search could not pair window \(windowID, privacy: .public)")
     }
 
     /// Fetch browser tabs once per presentation, the first time the user types.
@@ -2508,33 +2735,40 @@ extension SwitcherController: TriggerMonitorDelegate {
 
         Log.registry.info("found \(entries.count) browser tabs to search")
         settleBrowserTabs(entries)
+        Log.overlay.info("""
+            tab search settled: \(entries.count, privacy: .public) tabs, \
+            scope \(self.state.tabScope.map(String.init) ?? "none", privacy: .public), \
+            visible \(self.state.entries.count, privacy: .public)
+            """)
     }
 
     private func timeOutBrowserTabLoad(requestID: UInt64, presentationID: Int) {
         guard requestID == browserTabRequestID else { return }
-        isLoadingBrowserTabs = false
 
         guard state.isVisible,
               state.presentationID == presentationID,
               !state.hasLoadedTabs else {
+            isLoadingBrowserTabs = false
             if state.isVisible, state.isSearching, state.presentationID != presentationID {
                 loadBrowserTabsIfNeeded()
             }
             return
         }
 
-        // A tab-scope fetch has to wait for the real list. Settling empty here is what
-        // left "Search through Tabs" showing "No switchable windows are open" while the
-        // browser was still answering — and then dropped the late result as stale.
-        if state.tabScope != nil { return }
+        // A tab-scope fetch has to wait for the real list. Clearing `isLoadingBrowserTabs`
+        // here was the hang: the next pairing callback started a *second* fetch, the first
+        // reply was dropped as stale, and the overlay stayed on "Looking for tabs…".
+        if state.tabScope != nil || state.isAwaitingTabScope { return }
 
+        isLoadingBrowserTabs = false
         Log.registry.info("browser tab search exceeded 750 ms; continuing with applications")
         settleBrowserTabs([])
     }
 
     private func settleBrowserTabs(_ entries: [WindowEntry]) {
         let changed = state.setTabs(entries)
-        if changed {
+        resolvePendingTabSearch()
+        if changed || state.tabScope != nil {
             afterSearchChanged()
         }
         refreshTabMediaAlerts(for: entries)

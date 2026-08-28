@@ -699,7 +699,7 @@ struct OverlayView: View {
     /// true reads as a bug.
     private var emptyState: some View {
         VStack(spacing: 6) {
-            if state.tabScope != nil {
+            if state.tabScope != nil || state.isAwaitingTabScope || state.tabScopeFailure != nil {
                 tabScopeEmptyView
             } else if state.isSearching {
                 searchMissView
@@ -725,9 +725,19 @@ struct OverlayView: View {
         Image(systemName: "magnifyingglass")
             .font(.system(size: 26, weight: .light))
             .foregroundStyle(palette.secondaryText)
-        if !state.hasLoadedTabs {
+        if let failure = state.tabScopeFailure {
+            Text(failure)
+                .font(.system(size: 12, weight: .medium))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(palette.text)
+        } else if !state.hasLoadedTabs || state.isAwaitingTabScope {
             Text("Looking for tabs…")
                 .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.text)
+        } else if state.isSearching {
+            Text("No tabs in this window match that search")
+                .font(.system(size: 12, weight: .medium))
+                .multilineTextAlignment(.center)
                 .foregroundStyle(palette.text)
         } else {
             Text("No tabs in this window")
