@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Start a free preview — VortexFlow</title>
-  <meta name="description" content="Limited-time free preview of VortexFlow. No credit card. Create an account, use it, then decide.">
+  <title>Join the waitlist — VortexFlow</title>
+  <meta name="description" content="Join the VortexFlow waitlist. Leave an email. We'll write when the preview is ready. No download today.">
   <link rel="canonical" href="https://vortexflow.io/download/">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
@@ -13,7 +13,7 @@
   <meta property="og:image" content="https://vortexflow.io/img/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png">
-  <link rel="stylesheet" href="/css/site.css?v=12">
+  <link rel="stylesheet" href="/css/site.css?v=15">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -26,28 +26,42 @@
       <a href="/compare/">Compare</a>
       <a href="/privacy/">Privacy</a>
     </nav>
-    <a class="btn btn-download" href="/download/">Start free preview</a>
+    <a class="btn btn-download" href="#waitlist">Join the waitlist</a>
   </header>
   <main id="main" class="page">
     <img class="app-icon" src="/img/app-icon.png" alt="" width="88" height="88" style="margin-left:0">
-    <p class="eyebrow">Limited-time · no credit card</p>
-    <h1>Create an account. Use it. Then decide.</h1>
-    <p class="lead">VortexFlow is for heavy macOS users — the ones with too many windows, not the ones with Mail and Safari. The preview is free and limited-time. You will create an account when you open the app. We do not ask for a credit card to start.</p>
-    <p><a class="btn btn-primary btn-lg" data-dmg href="/download/">Get VortexFlow</a></p>
-    <p class="micro">Universal disk image, Apple Silicon and Intel. After it opens: create your account, then the preview begins.</p>
+    <p class="eyebrow">Waitlist</p>
+    <h1>Join the waitlist</h1>
+    <p class="lead">VortexFlow is for heavy macOS users — the ones with too many windows, not the ones with Mail and Safari. There is no disk image on this page. Leave an email. We will write when the preview is ready.</p>
+<form id="waitlist" class="waitlist" action="https://formsubmit.co/maheshauti00@gmail.com" method="POST">
+  <input type="hidden" name="_next" value="https://vortexflow.io/thanks/">
+  <input type="hidden" name="_subject" value="VortexFlow waitlist">
+  <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <div class="waitlist-fields">
+    <label>
+      <span>Email</span>
+      <input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+    </label>
+    <label>
+      <span>Name <em>(optional)</em></span>
+      <input type="text" name="name" autocomplete="name" placeholder="Your name">
+    </label>
+  </div>
+  <button type="submit" class="btn btn-primary btn-lg">Join the waitlist</button>
+</form>
+    <p class="micro">macOS 15 or later. Windows, titles and screenshots stay on your Mac.</p>
 
-    <h2>What happens next</h2>
-    <ol class="steps">
-      <li>Open the disk image and drag <strong>VortexFlow</strong> to your Applications folder.</li>
-      <li>Open it. macOS will refuse, and say the developer cannot be verified. This is expected — keep going.</li>
-      <li>Open <strong>System Settings → Privacy &amp; Security</strong>, scroll to <strong>Security</strong>, and click <strong>Open Anyway</strong> next to VortexFlow. Authenticate when asked.</li>
-      <li>Grant the permissions it asks for, then <strong>create an account</strong>. No credit card. Your limited-time free preview starts there.</li>
-    </ol>
-    <p>You only fight Gatekeeper once. macOS then remembers VortexFlow as an exception, as described in <a href="https://support.apple.com/en-us/guide/mac-help/mh40616/mac">Apple’s own documentation</a>.</p>
-    <p>On macOS 15 and later, right-clicking the app and choosing Open no longer works as a shortcut for this. Apple removed that bypass.</p>
-
-    <h2>Why it says the developer cannot be verified</h2>
-    <p>VortexFlow is signed, but it is not <em>notarized</em>, because notarizing requires a paid Apple Developer account. macOS blocks unnotarized downloads. We would rather tell you this here than let Gatekeeper be the first voice you hear.</p>
+    <details>
+      <summary>When a build is ready — Gatekeeper</summary>
+      <p>VortexFlow is signed, but it is not notarized, because notarizing requires a paid Apple Developer account. macOS may refuse to open an unnotarized app and say the developer cannot be verified. That is expected.</p>
+      <ol class="steps">
+        <li>Open the disk image and drag <strong>VortexFlow</strong> to your Applications folder.</li>
+        <li>Open it. macOS will refuse. Leave that dialog.</li>
+        <li>Open <strong>System Settings → Privacy &amp; Security</strong>, scroll to <strong>Security</strong>, and click <strong>Open Anyway</strong> next to VortexFlow. Authenticate when asked.</li>
+        <li>Grant the permissions it asks for, then create an account. You only fight Gatekeeper once.</li>
+      </ol>
+      <p>On macOS 15 and later, right-clicking the app and choosing Open no longer works as a shortcut for this. Apple removed that bypass. See <a href="https://support.apple.com/en-us/guide/mac-help/mh40616/mac">Apple’s own documentation</a>.</p>
+    </details>
 
     <p><a href="/permissions/">What the permissions are for</a> · <a href="/terms/">Terms</a></p>
   </main>
@@ -62,6 +76,6 @@
       </nav>
     </div>
   </footer>
-  <script src="/js/site.js?v=12"></script>
+  <script src="/js/site.js?v=15"></script>
 </body>
 </html>

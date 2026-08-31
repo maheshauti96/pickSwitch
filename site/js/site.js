@@ -1,23 +1,9 @@
-const DMG =
-  "https://github.com/maheshauti96/VortexFlow/releases/latest/download/Vortexflow-1.0.0.dmg";
-
 function bindNav() {
   const nav = document.querySelector("#nav, .nav");
   if (!nav) return;
   const sync = () => nav.classList.toggle("is-stuck", window.scrollY > 8);
   sync();
   window.addEventListener("scroll", sync, { passive: true });
-}
-
-function bindDownloads() {
-  document.querySelectorAll("[data-dmg]").forEach((link) => {
-    link.setAttribute("href", DMG);
-    link.addEventListener("click", () => {
-      window.setTimeout(() => {
-        window.location.href = "/thanks/";
-      }, 400);
-    });
-  });
 }
 
 function bindReveals() {
@@ -118,6 +104,5 @@ function bindHeroDemo() {
 }
 
 bindNav();
-bindDownloads();
 bindReveals();
 bindHeroDemo();

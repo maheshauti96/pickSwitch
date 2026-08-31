@@ -19,7 +19,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; scroll-padding-top: 80px; }
-#gesture, #search, #menu, #privacy, #faq, #live-spiral, #top, #spiral { scroll-margin-top: 72px; }
+#gesture, #search, #menu, #privacy, #faq, #live-spiral, #top, #spiral, #waitlist { scroll-margin-top: 72px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
   margin: 0;
@@ -698,4 +698,71 @@ footer { padding: clamp(64px, 8vw, 96px) 0 40px; }
 @media (prefers-reduced-motion: reduce) {
   .roll-track { animation: none; }
   .btn { transition: none; }
+}
+
+
+.waitlist {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  text-align: left;
+  max-width: 420px;
+}
+.foot-cta .waitlist { margin-inline: auto; }
+.waitlist-fields { display: grid; gap: 12px; }
+.waitlist label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.waitlist label em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.waitlist input[type="email"],
+.waitlist input[type="text"]:not(.hp) {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--hair-2);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.waitlist input[type="email"]:focus,
+.waitlist input[type="text"]:not(.hp):focus {
+  outline: 2px solid rgba(0, 120, 155, 0.45);
+  outline-offset: 1px;
+  border-color: var(--brand-fill);
+}
+.waitlist .hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.waitlist .btn { justify-self: start; }
+.page details {
+  margin-top: 36px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hair);
+  color: var(--ink-3);
+  font-size: 14.5px;
+}
+.page details summary {
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.page details summary:hover { color: var(--ink); }
+.page details p, .page details li { font-size: 14.5px; color: var(--ink-3); }
+@media (max-width: 900px) {
+  .waitlist .btn { width: 100%; justify-self: stretch; }
 }
