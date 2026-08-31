@@ -167,7 +167,7 @@ body:has(.page) .nav {
   height: 22px;
   max-width: none;
   flex-shrink: 0;
-  border-radius: 5px;
+  border-radius: 0;
 }
 .brand img[src*="lockup"] { width: auto; height: 26px; border-radius: 0; }
 .nav-links {

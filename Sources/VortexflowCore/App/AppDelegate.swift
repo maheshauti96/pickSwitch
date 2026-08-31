@@ -46,9 +46,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.onViewModeChanged = { [weak self] mode in
             guard let self else { return }
-            self.settings.overlayViewMode = mode
+            let resolved = self.settings.overlayLayoutStyle.resolvedViewMode(mode)
+            self.settings.overlayViewMode = resolved
             self.controller.applySettingsChange()
-            Log.app.info("overlay view mode set to \(mode.shortName, privacy: .public)")
+            Log.app.info("overlay view mode set to \(resolved.shortName, privacy: .public)")
         }
         menuBar.onLayoutStyleChanged = { [weak self] style in
             guard let self else { return }
@@ -127,7 +128,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let hosting = NSHostingController(rootView: content)
         let window = NSWindow(contentViewController: hosting)
         window.title = title
-        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.center()
         window.delegate = self

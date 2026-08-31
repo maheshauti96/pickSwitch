@@ -87,6 +87,9 @@ let package = Package(
         .target(
             name: "VortexflowCore",
             path: "Sources/VortexflowCore",
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: baseSwiftSettings
         ),
         .executableTarget(

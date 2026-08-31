@@ -36,10 +36,9 @@ final class SettingsStoreTests {
         // unusable until you already know what you are aiming at.
         #expect(store.activationMode == .automatic)
         #expect(store.hotKeyShortcut == .default)
-        // The strip stays the default arrangement: it fits any display and is the
-        // cheapest to read at a glance.
-        #expect(store.overlayLayoutStyle == .strip)
-        // Window View stays the default so an upgrade does not change what people see.
+        #expect(store.overlayLayoutStyle == .spiral)
+        // Window View stays the store default for layouts that can show a screenshot.
+        // Spiral ignores it and draws icons.
         #expect(store.overlayViewMode == .window)
         // Screenshottable by default: anything visible that cannot be captured is surprising.
         #expect(store.includeOverlayInScreenshots)

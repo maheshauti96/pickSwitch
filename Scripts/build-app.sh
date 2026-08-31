@@ -17,6 +17,9 @@
 #   Scripts/build-app.sh --debug         # debug configuration
 #   Scripts/build-app.sh --native-arch   # skip the universal build
 #
+# Brand icons are generated from site/img/brand by Scripts/generate-icons.sh
+# and copied into the bundle here. Re-run that script after a brand change.
+#
 # Signing:
 #   Run Scripts/create-signing-certificate.sh once. Without a stable signing
 #   identity, macOS forgets VortexFlow's permissions on every rebuild and can end up
@@ -106,6 +109,19 @@ chmod +x "$CONTENTS/MacOS/$APP_NAME"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
+# Finder, System Settings and the status item all read these from the app
+# bundle. SwiftPM's resource bundle is left behind in .build when only the
+# executable is copied, so the same files also go in Contents/Resources.
+if [[ -f "$PROJECT_ROOT/Resources/AppIcon.icns" ]]; then
+	cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
+else
+	echo "    warning: Resources/AppIcon.icns is missing; run Scripts/generate-icons.sh" >&2
+fi
+CORE_BRAND="$PROJECT_ROOT/Sources/VortexflowCore/Resources"
+if compgen -G "$CORE_BRAND/*.png" >/dev/null; then
+	cp "$CORE_BRAND"/*.png "$CONTENTS/Resources/"
+fi
+
 # Signing identity.
 #
 # macOS records privacy permissions against a code identity. An ad-hoc signature
@@ -165,6 +181,11 @@ echo "    architectures: $ARCHS"
 	sed 's/^/    bundle id: /'
 /usr/libexec/PlistBuddy -c "Print :LSUIElement" "$CONTENTS/Info.plist" |
 	sed 's/^/    LSUIElement: /'
+if [[ -f "$CONTENTS/Resources/AppIcon.icns" ]]; then
+	echo "    app icon: AppIcon.icns"
+else
+	echo "    warning: app icon missing from the bundle" >&2
+fi
 
 echo
 echo "Built: ${APP_BUNDLE#$PROJECT_ROOT/}"

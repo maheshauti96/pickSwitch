@@ -657,6 +657,10 @@ struct OverlayLayoutTests {
         // The one thing that follows from being round: a wedge cannot hold a screenshot.
         #expect(!OverlayLayoutStyle.circular.canShowThumbnails)
         #expect(!OverlayLayoutStyle.spiral.canShowThumbnails)
+        #expect(OverlayLayoutStyle.spiral.availableViewModes == [.icon])
+        #expect(OverlayLayoutStyle.circular.availableViewModes == [.icon])
+        #expect(OverlayLayoutStyle.spiral.resolvedViewMode(.window) == .icon)
+        #expect(OverlayLayoutStyle.strip.resolvedViewMode(.window) == .window)
     }
 
     /// The persisted value that has always meant "the arrangement with wedges" keeps meaning the

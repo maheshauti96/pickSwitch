@@ -133,7 +133,7 @@ final class OverlayState: ObservableObject {
 
     /// Which arrangement the overlay is drawing. Read from settings once per
     /// presentation so changing it in Settings takes effect on the next trigger.
-    @Published var layoutStyle: OverlayLayoutStyle = .strip
+    @Published var layoutStyle: OverlayLayoutStyle = .spiral
 
     /// Whether items are drawn as window previews or as large application icons.
     @Published var viewMode: OverlayViewMode = .window

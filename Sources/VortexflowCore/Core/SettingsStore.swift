@@ -44,11 +44,11 @@ final class SettingsStore {
     /// Tap-to-keep-open is the default: it is the behaviour people expect from a
     /// switcher they are still learning, and holding still works for speed.
     static let defaultActivationMode: ActivationMode = .automatic
-    /// The strip stays the default: it is the cheapest arrangement to read at a
-    /// glance, and it is the one that fits on any display without discussion.
-    static let defaultOverlayLayoutStyle: OverlayLayoutStyle = .strip
-    /// Window View stays the default: it is the shipped behaviour, and changing what existing
-    /// users see on upgrade is not something a new option should do on their behalf.
+    /// The spiral is the default: it is the arrangement built around the pointer,
+    /// which is the mouse-first gesture the product is for.
+    static let defaultOverlayLayoutStyle: OverlayLayoutStyle = .spiral
+    /// Window View stays the store default for layouts that can show a screenshot.
+    /// Spiral (and Circular) ignore it and draw icons; Settings hides the choice there.
     static let defaultOverlayViewMode: OverlayViewMode = .window
     /// Visible to screen capture by default. Anything on screen that cannot be screenshotted is
     /// surprising, and impossible to file a bug about.

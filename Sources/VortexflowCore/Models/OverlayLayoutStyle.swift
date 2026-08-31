@@ -141,6 +141,19 @@ enum OverlayLayoutStyle: Int, CaseIterable, Codable, Sendable {
         radialWinding == nil
     }
 
+    /// View modes this arrangement can actually honour.
+    ///
+    /// Spiral and Circular have no Window View: a wedge cannot hold a screenshot, so
+    /// offering the choice would be a lie. Everything else offers both.
+    var availableViewModes: [OverlayViewMode] {
+        canShowThumbnails ? OverlayViewMode.allCases : [.icon]
+    }
+
+    /// The mode that will actually be drawn for a requested preference.
+    func resolvedViewMode(_ requested: OverlayViewMode) -> OverlayViewMode {
+        availableViewModes.contains(requested) ? requested : .icon
+    }
+
     /// How this style winds its seats, or `nil` if it is not a round arrangement.
     ///
     /// One accessor rather than `self == .circular || self == .spiral` scattered about: every

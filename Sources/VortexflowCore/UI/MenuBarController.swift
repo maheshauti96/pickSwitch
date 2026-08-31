@@ -93,44 +93,20 @@ final class MenuBarController {
         button.toolTip = tooltip
         button.setAccessibilityLabel(hasWarning ? "VortexFlow, needs attention" : "VortexFlow")
 
-        if let image = Self.icon(hasWarning: hasWarning) {
-            image.isTemplate = true
+        if let image = BrandImage.statusItemImage(hasWarning: hasWarning) {
             button.image = image
             button.title = ""
+            // Colour icon: do not mark it as a template or the four cards collapse
+            // to menu-bar ink. The tooltip still carries the warning.
+            button.contentTintColor = nil
         } else {
-            // Last resort: no symbol resolved, so fall back to text. Ugly beats
-            // invisible.
+            // Last resort: no mark and no symbol resolved, so fall back to text.
+            // Ugly beats invisible.
             button.image = nil
             button.imagePosition = .noImage
+            button.contentTintColor = nil
             button.title = hasWarning ? "VortexFlow !" : "VortexFlow"
         }
-    }
-
-    /// SF Symbol availability varies by macOS version, so try candidates in order of
-    /// preference and take the first that actually resolves.
-    private static func icon(hasWarning: Bool) -> NSImage? {
-        let candidates = hasWarning
-            ? [
-                "exclamationmark.triangle.fill",
-                "exclamationmark.triangle",
-                "exclamationmark.circle.fill",
-                "exclamationmark.circle",
-                "exclamationmark",
-            ]
-            : [
-                "rectangle.on.rectangle",
-                "macwindow.on.rectangle",
-                "square.on.square",
-                "macwindow",
-            ]
-        let description = hasWarning ? "VortexFlow needs attention" : "VortexFlow"
-
-        for name in candidates {
-            if let image = NSImage(systemSymbolName: name, accessibilityDescription: description) {
-                return image
-            }
-        }
-        return nil
     }
 
     private static func warningSummary(_ warnings: Set<PermissionsManager.Warning>) -> String {
@@ -179,7 +155,7 @@ final class MenuBarController {
         menu.addItem(trigger)
 
         let activation = NSMenuItem(
-            title: "Activation: \(settings.activationMode.shortName)  ·  \(settings.overlayViewMode.shortName)  ·  \(settings.overlayLayoutStyle.shortName)",
+            title: "Activation: \(settings.activationMode.shortName)  ·  \(settings.overlayLayoutStyle.resolvedViewMode(settings.overlayViewMode).shortName)  ·  \(settings.overlayLayoutStyle.shortName)",
             action: nil,
             keyEquivalent: ""
         )
@@ -189,9 +165,13 @@ final class MenuBarController {
         // A submenu rather than a Settings-only control: trying the four arrangements
         // against real windows is the only way to tell which one suits, and making
         // that a two-click round trip through a settings window discourages it.
-        let viewMode = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
-        viewMode.submenu = buildViewModeMenu()
-        menu.addItem(viewMode)
+        // Spiral and Circular have no Window View, so the submenu would be a
+        // single locked choice. Hide it rather than offer a control that cannot change.
+        if settings.overlayLayoutStyle.canShowThumbnails {
+            let viewMode = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
+            viewMode.submenu = buildViewModeMenu()
+            menu.addItem(viewMode)
+        }
 
         let layout = NSMenuItem(title: "Layout", action: nil, keyEquivalent: "")
         layout.submenu = buildLayoutMenu()
@@ -209,6 +189,11 @@ final class MenuBarController {
 
         let version = NSMenuItem(title: "VortexFlow \(Self.versionString)", action: nil, keyEquivalent: "")
         version.isEnabled = false
+        if let mark = BrandImage.mark() {
+            let icon = mark.copy() as? NSImage ?? mark
+            icon.size = NSSize(width: 16, height: 16)
+            version.image = icon
+        }
         menu.addItem(version)
 
         let quit = NSMenuItem(title: "Quit VortexFlow", action: #selector(quit), keyEquivalent: "q")
@@ -272,6 +257,7 @@ final class MenuBarController {
 
     @objc private func selectViewMode(_ sender: NSMenuItem) {
         guard let mode = OverlayViewMode(rawValue: sender.tag) else { return }
+        guard settings.overlayLayoutStyle.availableViewModes.contains(mode) else { return }
         onViewModeChanged?(mode)
         statusItem.menu = buildMenu()
     }

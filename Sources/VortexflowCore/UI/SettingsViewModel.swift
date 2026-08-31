@@ -110,6 +110,8 @@ final class SettingsViewModel: ObservableObject {
 
     @Published private(set) var applicationChoices: [ApplicationChoice] = []
 
+    @Published var selectedPane: SettingsPane = .trigger
+
     @Published private(set) var captureState: CaptureState = .idle
 
     /// Progress of the "press the shortcut you want" flow.
@@ -295,8 +297,8 @@ final class SettingsViewModel: ObservableObject {
 
     var pinnedSummary: String {
         pinnedApplications.isEmpty
-            ? "No applications pinned. Windows are ordered by how recently you used them."
-            : "\(pinnedApplications.count) pinned. Their windows come first, after the window you are currently in."
+            ? "Windows stay in recency order."
+            : "\(pinnedApplications.count) pinned. Those windows sit at the front."
     }
 
     /// Says what the number actually governs now, which is neither "how many windows exist" nor even
@@ -307,10 +309,7 @@ final class SettingsViewModel: ObservableObject {
     /// An application never disappears, its other windows stay on the ring up to this cap, and
     /// nothing is ever unfindable.
     var historyDepthDescription: String {
-        """
-        Showing up to \(Int(historyDepth.rounded())) windows of each application, and at least one \
-        for every running application so none is hidden. Anything not shown is still found by typing.
-        """
+        "Up to \(Int(historyDepth.rounded())) windows per app. Typing still finds the rest."
     }
 
     /// Shortcuts offered in the picker: the presets, plus the current one when it was
@@ -339,6 +338,15 @@ final class SettingsViewModel: ObservableObject {
     /// shortcut which registered fine may still be swallowed by another app.
     var hotKeyHasFired: Bool { hotKeyFiredProvider() }
 
+    /// Move to another page. In-flight Detect / Record is cancelled so a press
+    /// meant for the new page cannot be swallowed by a capture that is no longer on screen.
+    func show(_ pane: SettingsPane) {
+        guard pane != selectedPane else { return }
+        cancelCapture()
+        cancelShortcutCapture()
+        selectedPane = pane
+    }
+
     // MARK: - Button capture
 
     func beginCapture() {
@@ -352,7 +360,7 @@ final class SettingsViewModel: ObservableObject {
                 self.captureState = .captured(captured)
             } else {
                 self.captureState = .failed(
-                    "That button can't be used — the left and right buttons are off limits. If nothing was detected at all, check the button isn't set to \"Do Nothing\" in your mouse's own software, and see the note below."
+                    "That button can't be used — left and right are off limits. If nothing was detected, assign the button to Forward or Back in your mouse's software and try again."
                 )
             }
         }

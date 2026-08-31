@@ -6,6 +6,8 @@
 	<string>VortexFlow</string>
 	<key>CFBundleExecutable</key>
 	<string>Vortexflow</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.vortexflow.Vortexflow</string>
 	<key>CFBundleInfoDictionaryVersion</key>

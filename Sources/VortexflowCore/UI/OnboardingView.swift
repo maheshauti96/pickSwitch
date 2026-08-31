@@ -39,13 +39,16 @@ struct OnboardingView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Welcome to VortexFlow")
-                .font(.system(size: 19, weight: .semibold))
-            Text("Switch windows with your mouse. VortexFlow needs three macOS permissions to do its job, and nothing else.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 12) {
+            BrandMark(size: 40)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Welcome to VortexFlow")
+                    .font(.system(size: 19, weight: .semibold))
+                Text("Switch windows with your mouse. VortexFlow needs three macOS permissions to do its job, and nothing else.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(18)
     }

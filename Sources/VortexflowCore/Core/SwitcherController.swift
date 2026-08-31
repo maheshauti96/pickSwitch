@@ -529,7 +529,7 @@ public final class SwitcherController {
         // presentation so plugging in or unplugging a monitor is picked up on the next
         // trigger rather than needing a restart.
         let displayLayout = DisplayLayout.current()
-        let viewMode = settings.overlayViewMode
+        let viewMode = layoutStyle.resolvedViewMode(settings.overlayViewMode)
         let pinned = settings.pinnedApplications
         let depth = settings.historyDepth
         // Requirement 15.4: sampled per presentation.
