@@ -1,6 +1,9 @@
 # VortexFlow
 
-A free, open-source window switcher for macOS, built for the mouse.
+A window switcher for macOS. Press a mouse button or a shortcut, see every window
+you have open, pick one. Works with any mouse and any keyboard.
+
+**[vortexflow.io](https://vortexflow.io/)** — download, privacy, blog, and how it compares.
 
 Press a button, see every window you have open, pick one. Works with any mouse and any
 keyboard.
@@ -47,10 +50,9 @@ windows go further and show the icon of the site actually open in them, layered 
 the browser's own icon — so three Chrome windows look like three different things,
 because they are.
 
-**Mouse-first, keyboard optional.** Hold a mouse button and the switcher appears next
-to the cursor; scroll to choose, let go to switch. Your hand never moves. If you would
-rather use the keyboard, a global shortcut does the same job, and VortexFlow treats its
-press and release exactly like a button's.
+**Mouse-first, keyboard optional.** A spiral of every window you have open appears
+around the pointer. Your hand never moves. If you would rather use the keyboard, a
+global shortcut does the same job.
 
 **Any mouse, any button.** Middle click works with no setup. For a side or thumb
 button, press **Detect Button** and then press the button — no need to know its number.
@@ -67,15 +69,41 @@ screenshots or large icons.
 window before committing to it. The selected one keeps refreshing.
 
 **Recency that is per window, not per app.** The window you were just in is one flick
-away, and the second card is preselected — so a quick hold-and-release means "back to
-the last window".
+away, and the second card is preselected — so the last window is already under the
+pointer.
 
-**Type to narrow it down.** Start typing and the list filters by application and title.
-It searches your open browser tabs too, so a tab is one gesture away instead of two.
-Tab results are labelled by site — `x.com` rather than "Google Chrome", which every tab
-would otherwise say — and carry the site's icon layered with the browser's.
-Applications that are not running show up as well, so you can launch one without
-leaving for Spotlight. If nothing matches, Return searches the web.
+**Type to narrow it down.** Start typing and the list filters by application name,
+window title, tab host, and the path of a tab's URL — so `workday` finds a page at
+`/workday-task-board/`, not only a site whose host contains the word. Tab results are
+labelled by site — `x.com` rather than "Google Chrome", which every tab would otherwise
+say — and carry the site's icon layered with the browser's. Applications that are not
+running show up as well, so you can launch one without leaving for Spotlight.
+
+If nothing local matches, the list offers **Search the web**, **Open first result**
+(Google's I'm Feeling Lucky — also Shift-Return), and the same query as a prompt to
+ChatGPT, Claude or Grok. Return on Search the web still opens the results page; picking
+Open first result skips it and goes to the destination.
+
+**Right-click a card for the rest of the window.** A live preview, minimize and close,
+Search through Tabs on that browser window — Chrome, Safari, Edge, Brave, Arc, Comet
+and Chromium, including windows on other desktops —
+play / pause / next if something is playing, and the same Move & Resize, Fill & Arrange,
+Full Screen and Move to Display shapes as macOS. Full-screen windows stay in the menu:
+VortexFlow leaves the Space first, then places the window — which is how you get a
+live-share window off a shared screen.
+
+**Private windows stay private.** Incognito and private-browsing windows are badged, and
+their site icons are never fetched.
+
+**A window making sound says so.** Playing and microphone-in-use show as badges on the
+card. The card menu then carries transport for whatever is playing.
+
+**Pin the applications you always want first.** Settings has a checklist of what is
+running; those windows sit at the front of the ring, still ordered by recency among
+themselves.
+
+**The shortcut that opened it closes it.** Press again to dismiss without switching,
+including when a mouse extra button is remapped to that shortcut.
 
 **Local and private.** No accounts, no telemetry, no analytics, no network calls —
 except one, described plainly: to show the icon of a site open in your browser,
@@ -164,11 +192,15 @@ card, or tap again, to switch.
 | Quick tap | Switcher stays open for browsing |
 | Tap again while open | Switch to the selected window |
 | Click a card | Switch to it |
-| Keyboard shortcut | Open it, and press again to close it |
+| Right-click a card | Window menu: place, close, search that window's tabs, media |
+| Keyboard shortcut | Open it, and press again to close it without switching |
 | Arrow keys | Move the selection — a grid moves by a row, everything else by one window |
-| Return | Switch to the selected window |
-| Start typing | Filter by app, title, browser tab or installed app |
-| Escape, or click outside | Close without switching |
+| Return | Switch to the selected window, or take the selected web / assistant offer |
+| Shift-Return | Open the first web result for the query |
+| Start typing | Filter by app, title, tab host, URL path or installed app |
+| Delete / Command-Delete | Shorten the query, or wipe it |
+| Command-A | Select the query, so the next keystroke replaces it |
+| Escape, or click outside | Back out of search, then close without switching |
 
 Once it is open you can finish the job entirely from the keyboard — arrows to choose,
 Return to switch — or entirely from the mouse. Neither is the "real" way.
@@ -181,15 +213,21 @@ Return to switch — or entirely from the mouse. Neither is the "real" way.
   whatever you press next.
 - **Behaviour** — automatic (tap keeps it open, hold switches on release), or force
   hold or toggle if you would rather it never guessed.
-- **Keyboard shortcut** — pick one, or record your own. Settings tells you whether the
-  shortcut has actually fired, which matters more than it sounds: macOS reports a
-  shortcut as registered even when another app has already claimed it, and then the
-  keystroke simply never arrives. If it says the shortcut has not been seen after you
-  press it, something else owns it — pick another.
-- **Arrangement** — strip, grid, list, circular or spiral.
-- **Each window shows** — a live preview, or a large icon.
+- **Keyboard shortcut** — pick a preset, or **Record Shortcut** and press the
+  combination. Settings tells you whether the shortcut has actually fired, which
+  matters more than it sounds: macOS reports a shortcut as registered even when
+  another app has already claimed it, and then the keystroke simply never arrives.
+  If it says the shortcut has not been seen after you press it, something else owns
+  it — pick another. A mouse extra button mapped to that shortcut in the mouse's own
+  software is treated the same way.
+- **Arrangement** — strip, grid, list, circular or spiral. Also on the menu bar, so
+  you can try them against live windows without opening Settings.
+- **Each window shows** — a live preview, or a large icon. Icon View needs no Screen
+  Recording.
 - **Tint each window by its icon** — on by default. Turns itself off when you have
   macOS's Increase Contrast enabled.
+- **Always show first** — pin running applications so their windows stay at the
+  front of the list.
 - **Windows to show** — 5 to 25.
 - **Include the switcher in screenshots** — worth turning off while presenting, since
   the switcher lists the title of every window you have open.
@@ -221,7 +259,7 @@ Command Line Tools is enough — Xcode is not required.
 Scripts/build-app.sh --debug         # debug configuration
 Scripts/build-app.sh --native-arch   # skip the universal build
 Scripts/make-dmg.sh                  # package a disk image
-swift test                           # 402 tests
+swift test                           # the test suite
 ```
 
 ### Run the signing script first
@@ -276,12 +314,14 @@ weight.
 
 ```
 Sources/VortexflowCore/
-  Models/   WindowEntry, layouts, SelectionMath, IconTint, TriggerButton, KeyResponse
+  Models/   WindowEntry, layouts, SelectionMath, IconTint, TriggerButton, KeyResponse,
+            CardMenu, WindowTile, WindowSearch, WebSearch
   Core/     WindowRegistry, MRUTracker, TriggerMonitor, HotKeyMonitor, ThumbnailService,
-            BrowserTabService, BrowserFaviconService, ApplicationCatalog,
-            ActivationService, PermissionsManager, SettingsStore, SwitcherController
-  UI/       OverlayPanel, OverlayView, the card and wedge views, MenuBarController,
-            OnboardingView, SettingsView
+            BrowserTabService, BrowserTabAlertService, BrowserFaviconService,
+            ApplicationCatalog, ActivationService, PermissionsManager, SettingsStore,
+            SwitcherController
+  UI/       OverlayPanel, OverlayView, the card and wedge views, CardMenuHeaderView,
+            MenuBarController, OnboardingView, SettingsView
 ```
 
 A few decisions worth knowing before changing things.
@@ -316,9 +356,9 @@ the app's previously frontmost window appears and is immediately replaced.
 
 ## Not there yet
 
-- Notarized distribution and Homebrew (right-click to open is the workaround for now)
+- Notarized distribution and Homebrew (the Privacy & Security → Open Anyway path above)
 - Recency history that survives a restart
-- Excluding specific apps, and pinning favourites
+- Excluding specific apps
 - Customising size, opacity and animation speed
 - Full VoiceOver support
 

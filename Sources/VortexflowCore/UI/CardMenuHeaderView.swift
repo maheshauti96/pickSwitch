@@ -166,8 +166,8 @@ struct CardMenuHeaderView: View {
     }
 
     /// Chrome's Global Media Controls: previous, pause, next as a single player
-    /// cluster, not a captioned glyph row. Captions would make this look like Mute
-    /// and the tiling grid; the skip/pause glyphs are already the words.
+    /// cluster, not a captioned glyph row. Captions would make this look like
+    /// the tiling grid; the skip/pause glyphs are already the words.
     private var mediaRow: some View {
         HStack {
             Spacer(minLength: 0)

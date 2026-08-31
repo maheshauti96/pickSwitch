@@ -1691,10 +1691,6 @@ public final class SwitcherController {
             headerItem(for: entry, preview: preview, rows: rows, hover: hover, menu: menu)
         )
 
-        if !rows.actions.isEmpty {
-            menu.addItem(glyphRowItem(rows.actions, entry: entry, hover: hover, menu: menu))
-        }
-
         // Two things have to be held off for the whole tracking loop, and getting only the first of
         // them right is what made the menu open but never register a choice.
         //
@@ -1731,28 +1727,6 @@ public final class SwitcherController {
             """)
         let shown = menu.popUp(positioning: nil, at: point, in: nil)
         Log.overlay.info("context menu popUp returned \(shown, privacy: .public)")
-    }
-
-    /// The captioned row of content actions.
-    private func glyphRowItem(
-        _ actions: [CardMenuItem],
-        entry: WindowEntry,
-        hover: CardMenuHoverModel,
-        menu: NSMenu
-    ) -> NSMenuItem {
-        let host = NSHostingView(
-            rootView: CardMenuGlyphRow(
-                actions: actions,
-                hover: hover,
-                onAction: menuAction(for: entry, menu: menu, hover: hover)
-            )
-        )
-        host.frame = CGRect(origin: .zero, size: host.fittingSize)
-
-        let item = NSMenuItem()
-        item.view = host
-        item.isEnabled = true
-        return item
     }
 
     /// What every glyph in the menu does when clicked, wherever it is drawn.
@@ -1899,7 +1873,6 @@ public final class SwitcherController {
             knownTabCount: scriptedID.flatMap { identifier in
                 state.hasLoadedTabs ? state.tabCount(forWindowIdentifier: identifier) : nil
             },
-            isAudible: state.isPlayingAudio(entry) || state.isUsingMicrophone(entry),
             isPlayingAudio: state.isPlayingAudio(entry),
             hasAccessibilityElement: entry.axElement != nil,
             isMinimized: entry.isMinimized,
@@ -1954,10 +1927,6 @@ public final class SwitcherController {
 
         case .moveToDisplay(let display):
             moveWindow(entry, to: display)
-
-        case .muteAudible:
-            // Not wired yet; the menu does not offer mute until it is.
-            break
 
         case .pausePlayback:
             let sent = MediaRemoteBridge.send(.togglePlayPause)

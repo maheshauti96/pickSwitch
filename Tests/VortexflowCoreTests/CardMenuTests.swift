@@ -23,7 +23,6 @@ struct CardMenuTests {
         CardMenu.Context(
             hasSearchableTabs: true,
             knownTabCount: 23,
-            isAudible: false,
             hasAccessibilityElement: true,
             isMinimized: false
         )
@@ -40,7 +39,6 @@ struct CardMenuTests {
     /// of its own because it needs words.
     @Test func theActionsSplitIntoThreeGroups() {
         var context = browserContext
-        context.isAudible = true
         context.isPlayingAudio = true
         let result = rows(window(), context)
 
@@ -50,7 +48,6 @@ struct CardMenuTests {
         #expect(result.placement == [.enterFullScreen])
         #expect(result.contents == [.searchWindowTabs(count: 23)])
         #expect(result.media == [.previousTrack, .pausePlayback, .nextTrack])
-        #expect(result.actions == [.muteAudible])
     }
 
     /// Close is last, so it lands furthest into the corner. The pointer is least accurate at the end of
@@ -63,7 +60,7 @@ struct CardMenuTests {
     /// overlay already has. So it leads its row.
     @Test func aBrowserWindowOffersTabSearchUnderThePreview() {
         #expect(rows(window(), browserContext).contents == [.searchWindowTabs(count: 23)])
-        #expect(!rows(window(), browserContext).actions.contains(.searchWindowTabs(count: 23)))
+        #expect(!rows(window(), browserContext).media.contains(.searchWindowTabs(count: 23)))
     }
 
     @Test func theTabCountIsShownWhenKnownAndOmittedWhenNot() {
@@ -79,7 +76,6 @@ struct CardMenuTests {
     /// may quietly reintroduce an action that terminates every window an application has.
     @Test func theMenuNeverOffersToQuitAnApplication() {
         var context = browserContext
-        context.isAudible = true
         context.isPlayingAudio = true
         let titles = everyAction(in: rows(window(), context)).map(\.title)
         #expect(!titles.contains { $0.localizedCaseInsensitiveContains("quit") })
@@ -89,7 +85,6 @@ struct CardMenuTests {
     /// so this is a menu decision rather than a lost capability.
     @Test func theMenuNoLongerOffersPinning() {
         var context = browserContext
-        context.isAudible = true
         context.isPlayingAudio = true
         let titles = everyAction(in: rows(window(), context)).map(\.title)
         #expect(!titles.contains { $0.localizedCaseInsensitiveContains("pin") })
@@ -171,7 +166,7 @@ struct CardMenuTests {
         #expect(result.placement.isEmpty)
         // Tab search survives: it never needed Accessibility, only that this is a scriptable browser.
         #expect(result.contents == [.searchWindowTabs(count: 23)])
-        #expect(result.actions.isEmpty)
+        #expect(result.media.isEmpty)
     }
 
     /// A minimized window's frame is not where it is or how big it looks, so sending it to half a
@@ -188,35 +183,18 @@ struct CardMenuTests {
         #expect(result.windowControls.contains(.closeWindow))
     }
 
-    /// Muting acts on what is playing now. With nothing playing there is nothing to act on, so the
-    /// item is absent rather than present and inert.
-    @Test func muteAppearsOnlyForAWindowMakingNoise() {
-        var quiet = browserContext
-        quiet.isAudible = false
-        #expect(!rows(window(), quiet).actions.contains(.muteAudible))
-        #expect(rows(window(), quiet).media.isEmpty)
-
-        var audible = browserContext
-        audible.isAudible = true
-        audible.isPlayingAudio = true
-        #expect(rows(window(), audible).actions.contains(.muteAudible))
-        #expect(rows(window(), audible).media == [.previousTrack, .pausePlayback, .nextTrack])
-    }
-
-    /// Previous / pause / next are a media session. A window that is only on the microphone
-    /// is audible enough to mute, but it has no track to skip.
+    /// Previous / pause / next are a media session. A window that is only on the
+    /// microphone has no track to skip.
     @Test func transportAppearsOnlyWhilePlaying() {
         var microphoneOnly = browserContext
-        microphoneOnly.isAudible = true
         microphoneOnly.isPlayingAudio = false
-        let silentPlay = rows(window(), microphoneOnly)
-        #expect(silentPlay.actions.contains(.muteAudible))
-        #expect(silentPlay.media.isEmpty)
+        #expect(rows(window(), microphoneOnly).media.isEmpty)
 
         var playing = browserContext
-        playing.isAudible = true
         playing.isPlayingAudio = true
-        #expect(rows(window(), playing).media == [.previousTrack, .pausePlayback, .nextTrack])
+        #expect(
+            rows(window(), playing).media == [.previousTrack, .pausePlayback, .nextTrack]
+        )
     }
 
     @Test func aNonBrowserWindowIsNotOfferedTabSearch() {
@@ -224,8 +202,8 @@ struct CardMenuTests {
         context.hasSearchableTabs = false
         let result = rows(window(app: "Warp"), context)
         #expect(result.contents.isEmpty)
-        #expect(!result.actions.contains(.searchWindowTabs(count: 23)))
-        #expect(!result.actions.contains(.searchWindowTabs(count: nil)))
+        #expect(!result.media.contains(.searchWindowTabs(count: 23)))
+        #expect(!result.media.contains(.searchWindowTabs(count: nil)))
     }
 
     /// A consequence of dropping pinning worth stating out loud: with no application-level action left,
@@ -239,7 +217,6 @@ struct CardMenuTests {
         #expect(result.placement.isEmpty)
         #expect(result.contents.isEmpty)
         #expect(result.media.isEmpty)
-        #expect(result.actions.isEmpty)
         #expect(result.isEmpty)
     }
 
@@ -254,7 +231,7 @@ struct CardMenuTests {
         #expect(result.fillArrange.count == 4)
         #expect(result.placement == [.enterFullScreen])
         #expect(result.contents.isEmpty)
-        #expect(result.actions.isEmpty)
+        #expect(result.media.isEmpty)
         #expect(!result.isEmpty)
     }
 
@@ -274,7 +251,6 @@ struct CardMenuTests {
     /// A glyph alone makes the user guess, so each carries a word and a symbol.
     @Test func everyActionHasAGlyphAndAName() {
         var context = browserContext
-        context.isAudible = true
         context.isPlayingAudio = true
         for item in everyAction(in: rows(window(), context)) {
             #expect(!item.icon.symbolName.isEmpty, "\(item) has no symbol")
@@ -287,7 +263,6 @@ struct CardMenuTests {
     /// invisible in a passing test suite. Resolving each one is the only way to catch it.
     @Test func everySymbolResolvesOnThisSystem() {
         var context = browserContext
-        context.isAudible = true
         context.isPlayingAudio = true
         let extra: [CardMenuItem] = [
             .searchWindowTabs(count: nil),
@@ -304,13 +279,18 @@ struct CardMenuTests {
                 "\(name) is not a symbol on this system"
             )
         }
+        for name in ["play.fill"] {
+            #expect(
+                NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
+                "\(name) is not a symbol on this system"
+            )
+        }
     }
 
     /// Closing is the only irreversible action here, and the only one coloured to say so. Minimizing
     /// is undone from the Dock and tiling by dragging, but a closed window with unsaved work is gone.
     @Test func onlyClosingIsMarkedDestructive() {
         var context = browserContext
-        context.isAudible = true
         context.isPlayingAudio = true
         let destructive = everyAction(in: rows(window(), context)).filter(\.isDestructive)
         #expect(destructive == [.closeWindow])
@@ -339,7 +319,6 @@ struct CardMenuTests {
             + rows.moveResize
             + rows.fillArrange
             + rows.placement
-            + rows.actions
     }
 
     private static func tile(_ item: CardMenuItem) -> WindowTile? {

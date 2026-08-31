@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Permissions — VortexFlow</title>
+  <meta name="description" content="What Input Monitoring, Accessibility, Screen Recording, and Automation each buy in VortexFlow, and what still works without them.">
+  <link rel="canonical" href="https://vortexflow.io/permissions/">
+  <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/img/apple-touch.png">
+  <meta name="theme-color" content="#f6f4f1">
+  <meta property="og:image" content="https://vortexflow.io/img/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png">
+  <link rel="stylesheet" href="/css/site.css?v=12">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/" aria-label="VortexFlow home">
+      <img src="/img/lockup.svg" alt="VortexFlow">
+    </a>
+    <nav class="nav-links"><a href="/privacy/">Privacy</a><a href="/download/">Install</a></nav>
+    <a class="btn btn-download" href="/download/">Start free preview</a>
+  </header>
+  <main class="page wide">
+    <p class="eyebrow">macOS permissions</p>
+    <h1>Grant only what you want. The rest still runs.</h1>
+    <p class="lead">VortexFlow asks for three permissions on first launch and explains each one. Automation is asked later, the first time tab search or site icons need it. Reopen the setup window any time from the menu bar icon.</p>
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead>
+          <tr><th>Permission</th><th>What it buys you</th><th>Without it</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Input Monitoring</td>
+            <td>Noticing your mouse button, including extra buttons most utilities never see</td>
+            <td>Keyboard shortcut only</td>
+          </tr>
+          <tr>
+            <td>Accessibility</td>
+            <td>Listing individual windows, and raising the exact one you pick</td>
+            <td>Whole apps come forward instead of specific windows</td>
+          </tr>
+          <tr>
+            <td>Screen Recording</td>
+            <td>Live window thumbnails from ScreenCaptureKit</td>
+            <td>Cards show large app icons instead (Icon View)</td>
+          </tr>
+          <tr>
+            <td>Automation</td>
+            <td>Tab search and site icons, for browsers you actually use</td>
+            <td>Windows still switch; tabs are not searchable and site icons are not fetched</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>The purple indicator</h2>
+    <p>While Screen Recording is granted and thumbnails refresh, macOS may show that VortexFlow is accessing the screen. That is the system privacy indicator, not an upload. Thumbnails are not saved. If you would rather not see it, use Icon View — it needs no Screen Recording.</p>
+
+    <h2>Grant from the app, not the plus button</h2>
+    <p>macOS records privacy permissions against an app’s code identity. Adding VortexFlow with the <code>+</code> button in System Settings is less reliable than letting the setup window ask the system directly. If a row never appears, leftover records from an old build are usually why; the README covers <code>tccutil reset</code>.</p>
+
+    <p><a href="/privacy/">Privacy policy →</a></p>
+  </main>
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>© 2026 VortexFlow</div>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="/js/site.js?v=12"></script>
+</body>
+</html>

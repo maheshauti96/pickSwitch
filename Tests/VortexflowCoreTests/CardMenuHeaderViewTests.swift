@@ -128,7 +128,7 @@ struct CardMenuHeaderViewTests {
     }
 
     /// Chrome's transport is a tight cluster, not a captioned glyph row. Captions under
-    /// Previous / Pause / Next would spend a line the Skip glyphs already say.
+    /// Previous / Pause / Next would spend a line the glyphs already say.
     @Test func theTransportClusterStaysCompact() {
         let without = header(applicationName: "Google Chrome")
         let with = header(
@@ -202,7 +202,7 @@ struct CardMenuHeaderViewTests {
     /// The content row is the other thing in the menu that could widen it, so it is pinned to the
     /// header's width. A row that sized itself to its captions would have undone the fix.
     @Test func theContentRowMatchesTheHeaderWidth() {
-        let actions: [CardMenuItem] = [.searchWindowTabs(count: 23), .muteAudible]
+        let actions: [CardMenuItem] = [.searchWindowTabs(count: 23)]
         for count in 1...actions.count {
             let width = rowWidth(Array(actions.prefix(count)))
             #expect(

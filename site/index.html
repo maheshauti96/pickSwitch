@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VortexFlow — every window and tab, at your cursor or key</title>
+  <meta name="description" content="A spiral of every window and tab you have open appears around the pointer — or from any keyboard shortcut. For heavy macOS users. Limited-time free preview. No credit card.">
+  <link rel="canonical" href="https://vortexflow.io/">
+  <meta property="og:title" content="VortexFlow — Every window and tab, at your cursor or key.">
+  <meta property="og:description" content="A spiral of every window and tab you have open appears around the pointer — or from any keyboard shortcut. Limited-time free preview. No credit card.">
+  <meta property="og:url" content="https://vortexflow.io/">
+  <meta property="og:image" content="https://vortexflow.io/img/og-image.png">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png">
+  <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/img/apple-touch.png">
+  <meta name="theme-color" content="#f6f4f1">
+  <link rel="stylesheet" href="/css/site.css?v=12">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "VortexFlow",
+    "operatingSystem": "macOS 15",
+    "applicationCategory": "UtilitiesApplication",
+    "url": "https://vortexflow.io/"
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <nav id="nav" class="nav" aria-label="Primary">
+    <div class="wrap nav-in">
+      <a class="mark" href="#top">
+        <img src="/img/mark.svg" width="22" height="22" alt="" aria-hidden="true">
+        <span>VortexFlow</span>
+      </a>
+      <div class="nav-links">
+        <a href="#search">Features</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#faq">FAQ</a>
+        <a class="btn btn-ghost btn-sm" href="/download/">How to start</a>
+        <a class="btn btn-primary btn-sm" href="/download/">Start free preview</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <section id="top" class="hero" aria-labelledby="hero-h">
+      <div class="wrap hero-in">
+        <h1 id="hero-h">Every window and tab,<br>at your <span class="roll" aria-hidden="true"><span class="roll-track"><span>cursor</span><span>key</span><span>cursor</span></span></span><span class="sr-only">cursor or key</span></h1>
+        <p class="lede">A spiral of every window and tab you have open appears around the pointer. Same overlay from any keyboard shortcut.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary btn-lg" href="/download/">Start free preview</a>
+          <a class="btn btn-ghost btn-lg" href="#live-spiral">Try the spiral</a>
+        </div>
+        <p class="cta-meta">Limited-time free preview · <strong>No credit card</strong> · Create an account, then decide · macOS 15 or later</p>
+
+        <div class="mac" id="live-spiral">
+          <div class="mac-lid">
+            <div class="screen-wrap demo-screen" style="--w:16;--h:10">
+              <div class="screen-desk" aria-hidden="true"></div>
+              <vortex-spiral demo nohint static></vortex-spiral>
+              <div class="demo-cursor" aria-hidden="true">
+                <span class="demo-ripple"></span>
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <path d="M5 3.2l.4 22.2 6.2-6.1 4.2 10.1 3.8-1.6-4.3-9.8H24z" fill="#fff" stroke="#1a1a1a" stroke-width="1.6" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div class="mac-base" aria-hidden="true"><span class="mac-notch"></span></div>
+        </div>
+
+        <p class="hero-print">No credit card · Create an account · Then decide</p>
+      </div>
+    </section>
+
+    <span id="gesture" hidden></span>
+    <span id="spiral" hidden></span>
+
+    <section id="search" class="sec" aria-labelledby="search-h">
+      <div class="wrap">
+        <header class="sec-head">
+          <h2 id="search-h">Type it. The spiral still has an answer.</h2>
+          <p class="sec-sub">Filter by app, title, tab host, and URL path. If nothing local matches, search the web, open the first result, or send the query to ChatGPT, Claude, or Grok — without leaving the overlay.</p>
+        </header>
+        <div class="pair">
+          <figure class="shot-wrap live">
+            <div class="shot-desk" style="--shot:url('/img/tab-search.jpg')">
+              <vortex-spiral scene="tab-search"></vortex-spiral>
+            </div>
+            <figcaption>It’s open. The tab comes up with the site’s icon on the browser.</figcaption>
+          </figure>
+          <figure class="shot-wrap live">
+            <div class="shot-desk" style="--shot:url('/img/web-search.jpg')">
+              <vortex-spiral scene="web-search"></vortex-spiral>
+            </div>
+            <figcaption>It isn’t. Search the web, skip to the first result, or prompt an assistant.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="menu" class="band" aria-labelledby="menu-h">
+      <div class="wrap split">
+        <figure class="shot-wrap live menu-shot">
+          <div class="shot-desk menu-desk" data-reveal style="--shot:url('/img/card-menu.jpg')">
+            <vortex-spiral scene="card-menu"></vortex-spiral>
+            <div class="card-menu" role="menu" aria-label="Card actions">
+              <div class="cm-id">
+                <img src="/img/logos/chrome.png" width="16" height="16" alt="">
+                <span>Google Chrome</span>
+                <span class="cm-ctrls">
+                  <button type="button" class="cm-ctrl" title="Minimise" aria-label="Minimise">−</button>
+                  <button type="button" class="cm-ctrl cm-close" title="Close" aria-label="Close">×</button>
+                </span>
+              </div>
+              <div class="cm-preview">
+                <div class="cm-chrome">
+                  <span class="cm-tab">
+                    <img src="/img/logos/chrome.png" width="8" height="8" alt="">
+                    Pull Request #2140
+                  </span>
+                </div>
+                <div class="cm-page">
+                  <div class="cm-ghbar">Pull request <b>#2140</b></div>
+                  <div class="cm-ghtitle">feat: session store</div>
+                  <div class="cm-files">
+                    <span>SwitcherController.swift</span>
+                    <span>OverlayState.swift</span>
+                    <span class="add">+128 −41</span>
+                  </div>
+                </div>
+              </div>
+              <div class="cm-cap">
+                <div class="cm-title">feat: session store</div>
+                <div class="cm-src">github.com</div>
+              </div>
+              <dl class="cm-facts">
+                <div><dt>Desktop</dt><dd>Another · just now</dd></div>
+                <div><dt>Window</dt><dd>2 of 4</dd></div>
+              </dl>
+              <button type="button" class="cm-row" role="menuitem">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.2 10.2L14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                Search through Tabs
+              </button>
+              <div class="cm-div"></div>
+              <div class="cm-sec">
+                <div class="cm-lab">Move &amp; Resize</div>
+                <div class="cm-tiles">
+                  <button type="button" title="Left half" aria-label="Left half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="2.6" y="2.6" width="11" height="12.8" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
+                  <button type="button" title="Right half" aria-label="Right half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="14.4" y="2.6" width="11" height="12.8" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
+                  <button type="button" title="Top half" aria-label="Top half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="2.6" y="2.6" width="22.8" height="6.2" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
+                  <button type="button" title="Bottom half" aria-label="Bottom half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="2.6" y="9.2" width="22.8" height="6.2" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
+                </div>
+              </div>
+              <div class="cm-sec">
+                <div class="cm-lab">Fill &amp; Arrange</div>
+                <div class="cm-tiles">
+                  <button type="button" title="Fill" aria-label="Fill"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
+                  <button type="button" title="Left two-thirds" aria-label="Left two-thirds"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M14 2.5v13" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
+                  <button type="button" title="Right two-thirds" aria-label="Right two-thirds"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M14 2.5v13M14 9h12.3" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
+                  <button type="button" title="Top left" aria-label="Top left"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M14 2.5v13M2.5 9h23" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
+                </div>
+              </div>
+              <button type="button" class="cm-row" role="menuitem">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 13V8.5M3 13h4.5M13 3H8.5M13 3v4.5M3 13l10-10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                Full Screen
+              </button>
+              <button type="button" class="cm-row" role="menuitem">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="4" width="9" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="5.5" y="7.5" width="9" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+                Move to Built-in Retina Display
+              </button>
+            </div>
+          </div>
+        </figure>
+        <div>
+          <p class="step-n">Right-click a card</p>
+          <h2 id="menu-h">The rest of the window, without hunting for it.</h2>
+          <p class="sec-sub">A live preview. Search through Tabs on Chrome, Safari, Edge, Brave, Arc, Comet and Chromium — including other desktops. Play / pause / next if something is playing. Move &amp; Resize, Fill &amp; Arrange, Full Screen, Move to Display. Full-screen windows leave the Space first, then place — so a live-share window can come off a shared screen.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy" class="sec" aria-labelledby="privacy-h">
+      <div class="wrap narrow">
+        <header class="sec-head">
+          <h2 id="privacy-h">Your windows stay on your Mac</h2>
+          <p class="sec-sub">You create an account so the preview can start. We keep what that account needs. We do not take window titles, screenshots, or what you type into the overlay.</p>
+        </header>
+        <ul class="facts">
+          <li><span class="fact-k">No credit card</span><span class="fact-v">Limited-time free preview. Create an account in the app, use it, then decide.</span></li>
+          <li><span class="fact-k">Account, not windows</span><span class="fact-v">Email and sign-in so the preview and a later license can work. Not a feed of your desk.</span></li>
+          <li><span class="fact-k">Permissions are optional</span><span class="fact-v">It runs with any subset and tells you what you are missing. <a href="/permissions/">What each one buys.</a></span></li>
+          <li><span class="fact-k">Signed, not notarized</span><span class="fact-v">macOS will say the developer cannot be verified. That is expected. Open Anyway, once. <a href="/download/">How to start.</a></span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="faq" class="band" aria-labelledby="faq-h">
+      <div class="wrap narrow">
+        <header class="sec-head">
+          <h2 id="faq-h">Questions</h2>
+        </header>
+        <div class="faq">
+          <details class="q">
+            <summary><span>Is this for me?</span></summary>
+            <div class="a"><p>If you keep a handful of apps and Cmd-Tab is fine, no. If you live in many windows, many Chromes, Spaces, and a mouse that already has a spare button, yes.</p></div>
+          </details>
+          <details class="q">
+            <summary><span>Do I need a credit card?</span></summary>
+            <div class="a"><p>No. The preview is free and limited-time. You create an account, use it, then decide.</p></div>
+          </details>
+          <details class="q">
+            <summary><span>Do I need an account?</span></summary>
+            <div class="a"><p>Yes. Create one when you open the app. That’s how the preview starts.</p></div>
+          </details>
+          <details class="q">
+            <summary><span>Does this replace Cmd-Tab?</span></summary>
+            <div class="a"><p>No. Cmd-Tab still exists. VortexFlow is a spiral at the cursor. A keyboard shortcut does the same job if both hands are on the keys.</p></div>
+          </details>
+          <details class="q">
+            <summary><span>How is this different from AltTab?</span></summary>
+            <div class="a"><p>AltTab is a keyboard window switcher — Windows Alt-Tab on a Mac. VortexFlow is a spiral of windows at the cursor that also works from a shortcut. <a href="/compare/">Longer comparison.</a></p></div>
+          </details>
+          <details class="q">
+            <summary><span>Does middle-click still open links?</span></summary>
+            <div class="a"><p>Not while VortexFlow owns middle-click — it has to consume the button or the click would land underneath. Move to a side button in Settings, or use the keyboard shortcut and leave middle-click alone.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap foot-in">
+      <div class="foot-cta">
+        <h2>Start at the cursor</h2>
+        <p class="foot-sub">Limited-time free preview · macOS 15 or later</p>
+        <div class="cta-row">
+          <a class="btn btn-primary btn-lg" href="/download/">Start free preview</a>
+          <a class="btn btn-ghost btn-lg" href="/download/">How to start</a>
+        </div>
+        <ul class="includes">
+          <li>No credit card to start</li>
+          <li>Create an account in the app</li>
+          <li>Use it on a real desk, then decide</li>
+          <li>Windows, titles and screenshots stay local</li>
+          <li>Any mouse · any keyboard</li>
+        </ul>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="foot-links">
+        <a href="/download/">Start free preview</a>
+        <a href="/blog/">Blog</a>
+        <a href="/compare/">Compare</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/permissions/">Permissions</a>
+        <a href="/terms/">Terms</a>
+      </div>
+      <p class="copy">© 2026 VortexFlow</p>
+    </div>
+  </footer>
+
+  <script src="/js/site.js?v=12"></script>
+  <script src="/js/vortex-spiral.js?v=12" defer></script>
+</body>
+</html>
