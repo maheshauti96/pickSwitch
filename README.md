@@ -1,6 +1,9 @@
 # VortexFlow
 
-A free, open-source window switcher for macOS, built for the mouse.
+A window switcher for macOS. Press a mouse button or a shortcut, see every window
+you have open, pick one. Works with any mouse and any keyboard.
+
+**[vortexflow.io](https://vortexflow.io/)** — download, privacy, blog, and how it compares.
 
 Press a button, see every window you have open, pick one. Works with any mouse and any
 keyboard.
@@ -47,10 +50,9 @@ windows go further and show the icon of the site actually open in them, layered 
 the browser's own icon — so three Chrome windows look like three different things,
 because they are.
 
-**Mouse-first, keyboard optional.** Hold a mouse button and the switcher appears next
-to the cursor; scroll to choose, let go to switch. Your hand never moves. If you would
-rather use the keyboard, a global shortcut does the same job, and VortexFlow treats its
-press and release exactly like a button's.
+**Mouse-first, keyboard optional.** A spiral of every window you have open appears
+around the pointer. Your hand never moves. If you would rather use the keyboard, a
+global shortcut does the same job.
 
 **Any mouse, any button.** Middle click works with no setup. For a side or thumb
 button, press **Detect Button** and then press the button — no need to know its number.
@@ -67,8 +69,8 @@ screenshots or large icons.
 window before committing to it. The selected one keeps refreshing.
 
 **Recency that is per window, not per app.** The window you were just in is one flick
-away, and the second card is preselected — so a quick hold-and-release means "back to
-the last window".
+away, and the second card is preselected — so the last window is already under the
+pointer.
 
 **Type to narrow it down.** Start typing and the list filters by application name,
 window title, tab host, and the path of a tab's URL — so `workday` finds a page at

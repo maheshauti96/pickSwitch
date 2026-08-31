@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 946 946" role="img">
+  <title>VortexFlow circular rings</title>
+  <defs>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="well" cx="50%" cy="42%" r="70%">
+      <stop offset="0" stop-color="#0c1014"/>
+      <stop offset="1" stop-color="#040506"/>
+    </radialGradient>
+  </defs>
+
+  <path d="M 475.82,360.04 Q 475.60,369.03 484.58,369.65 A 104.00 104.00 0 0 1 537.90,391.73 Q 544.68,397.65 550.88,391.12 L 621.18,317.22 Q 627.38,310.70 620.74,304.63 A 224.00 224.00 0 0 0 487.59,249.48 Q 478.60,249.07 478.37,258.07 Z" fill="#1a1a1a" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="535.8" y="314.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">ChatGPT</text>
+  <text x="535.8" y="331.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">chat</text>
+  <path d="M 554.88,395.12 Q 548.35,401.32 554.27,408.10 A 104.00 104.00 0 0 1 576.35,461.42 Q 576.97,470.40 585.96,470.18 L 687.93,467.63 Q 696.93,467.40 696.52,458.41 A 224.00 224.00 0 0 0 641.37,325.26 Q 635.30,318.62 628.78,324.82 Z" fill="#163028" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="624.5" y="403.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Chrome</text>
+  <text x="624.5" y="420.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">docs</text>
+  <path d="M 585.96,475.82 Q 576.97,475.60 576.35,484.58 A 104.00 104.00 0 0 1 554.27,537.90 Q 548.35,544.68 554.88,550.88 L 628.78,621.18 Q 635.30,627.38 641.37,620.74 A 224.00 224.00 0 0 0 696.52,487.59 Q 696.93,478.60 687.93,478.37 Z" fill="#0a4a5c" stroke="#62c5ee" stroke-width="2.4" filter="url(#soft)"/>
+  <text x="624.5" y="528.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Chrome</text>
+  <text x="624.5" y="545.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">x.com</text>
+  <path d="M 550.88,554.88 Q 544.68,548.35 537.90,554.27 A 104.00 104.00 0 0 1 484.58,576.35 Q 475.60,576.97 475.82,585.96 L 478.37,687.93 Q 478.60,696.93 487.59,696.52 A 224.00 224.00 0 0 0 620.74,641.37 Q 627.38,635.30 621.18,628.78 Z" fill="#3a2416" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="535.8" y="617.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Claude</text>
+  <text x="535.8" y="634.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">claude.ai</text>
+  <path d="M 470.18,585.96 Q 470.40,576.97 461.42,576.35 A 104.00 104.00 0 0 1 408.10,554.27 Q 401.32,548.35 395.12,554.88 L 324.82,628.78 Q 318.62,635.30 325.26,641.37 A 224.00 224.00 0 0 0 458.41,696.52 Q 467.40,696.93 467.63,687.93 Z" fill="#102830" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="410.2" y="617.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Finder</text>
+  <text x="410.2" y="634.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">Desktop</text>
+  <path d="M 391.12,550.88 Q 397.65,544.68 391.73,537.90 A 104.00 104.00 0 0 1 369.65,484.58 Q 369.03,475.60 360.04,475.82 L 258.07,478.37 Q 249.07,478.60 249.48,487.59 A 224.00 224.00 0 0 0 304.63,620.74 Q 310.70,627.38 317.22,621.18 Z" fill="#3a1828" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="321.5" y="528.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Slack</text>
+  <text x="321.5" y="545.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">#design</text>
+  <path d="M 360.04,470.18 Q 369.03,470.40 369.65,461.42 A 104.00 104.00 0 0 1 391.73,408.10 Q 397.65,401.32 391.12,395.12 L 317.22,324.82 Q 310.70,318.62 304.63,325.26 A 224.00 224.00 0 0 0 249.48,458.41 Q 249.07,467.40 258.07,467.63 Z" fill="#161616" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="321.5" y="403.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Cursor</text>
+  <text x="321.5" y="420.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">main.swift</text>
+  <path d="M 395.12,391.12 Q 401.32,397.65 408.10,391.73 A 104.00 104.00 0 0 1 461.42,369.65 Q 470.40,369.03 470.18,360.04 L 467.63,258.07 Q 467.40,249.07 458.41,249.48 A 224.00 224.00 0 0 0 325.26,304.63 Q 318.62,310.70 324.82,317.22 Z" fill="#142030" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="410.2" y="314.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Safari</text>
+  <text x="410.2" y="331.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">apple.com</text>
+  <path d="M 479.22,224.08 Q 479.00,233.07 487.99,233.47 A 240.00 240.00 0 0 1 631.77,293.03 Q 638.41,299.11 644.61,292.58 L 714.91,218.68 Q 721.12,212.16 714.52,206.04 A 360.00 360.00 0 0 0 490.99,113.45 Q 482.00,113.11 481.77,122.11 Z" fill="#121212" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="587.8" y="188.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Terminal</text>
+  <text x="587.8" y="205.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">zsh</text>
+  <path d="M 653.42,301.39 Q 646.89,307.59 652.97,314.23 A 240.00 240.00 0 0 1 712.53,458.01 Q 712.93,467.00 721.92,466.78 L 823.89,464.23 Q 832.89,464.00 832.55,455.01 A 360.00 360.00 0 0 0 739.96,231.48 Q 733.84,224.88 727.32,231.09 Z" fill="#2a2814" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="750.2" y="351.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Notes</text>
+  <text x="750.2" y="368.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">Meeting</text>
+  <path d="M 721.92,479.22 Q 712.93,479.00 712.53,487.99 A 240.00 240.00 0 0 1 652.97,631.77 Q 646.89,638.41 653.42,644.61 L 727.32,714.91 Q 733.84,721.12 739.96,714.52 A 360.00 360.00 0 0 0 832.55,490.99 Q 832.89,482.00 823.89,481.77 Z" fill="#2a1814" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="750.2" y="580.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Brave</text>
+  <text x="750.2" y="597.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">search</text>
+  <path d="M 644.61,653.42 Q 638.41,646.89 631.77,652.97 A 240.00 240.00 0 0 1 487.99,712.53 Q 479.00,712.93 479.22,721.92 L 481.77,823.89 Q 482.00,832.89 490.99,832.55 A 360.00 360.00 0 0 0 714.52,739.96 Q 721.12,733.84 714.91,727.32 Z" fill="#2a1418" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="587.8" y="743.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Music</text>
+  <text x="587.8" y="760.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">Now playing</text>
+  <path d="M 466.78,721.92 Q 467.00,712.93 458.01,712.53 A 240.00 240.00 0 0 1 314.23,652.97 Q 307.59,646.89 301.39,653.42 L 231.09,727.32 Q 224.88,733.84 231.48,739.96 A 360.00 360.00 0 0 0 455.01,832.55 Q 464.00,832.89 464.23,823.89 Z" fill="#1c1830" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="358.2" y="743.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Arc</text>
+  <text x="358.2" y="760.2" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">mail</text>
+  <path d="M 292.58,644.61 Q 299.11,638.41 293.03,631.77 A 240.00 240.00 0 0 1 233.47,487.99 Q 233.07,479.00 224.08,479.22 L 122.11,481.77 Q 113.11,482.00 113.45,490.99 A 360.00 360.00 0 0 0 206.04,714.52 Q 212.16,721.12 218.68,714.91 Z" fill="#14201c" stroke="rgba(255,255,255,0.10)" stroke-width="1.0" filter="url(#soft)"/>
+  <text x="195.8" y="580.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" font-weight="600" fill="#fff">Messages</text>
+  <text x="195.8" y="597.8" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.62">Mahesh</text>
+  <circle cx="473.0" cy="473.0" r="96" fill="url(#well)"/>
+  <circle cx="473.0" cy="473.0" r="99" fill="none" stroke="#d0fef4" stroke-width="3.2" filter="url(#glow)"/>
+  <text x="473.0" y="457.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="11" fill="#fff" fill-opacity="0.85">Google Chrome · 2 of 3</text>
+  <text x="473.0" y="479.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="16" font-weight="600" fill="#fff">x.com / home</text>
+</svg>
