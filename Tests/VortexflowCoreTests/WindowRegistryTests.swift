@@ -136,12 +136,15 @@ struct WindowRegistryTests {
             return
         }
 
-        _ = registry.enumerate()
+        // This test needs a complete AX answer to inspect the remembered-handle
+        // cache. The production path intentionally stops at 50 ms and falls back;
+        // under the fully parallel test runner that can be a valid partial pass.
+        _ = registry.enumerate(accessibilityTimeout: 1)
         let afterFirst = registry.rememberedWindowCount
         #expect(afterFirst > 0)
 
         // Idempotent: enumerating again must not double-count the same windows.
-        _ = registry.enumerate()
+        _ = registry.enumerate(accessibilityTimeout: 1)
         #expect(registry.rememberedWindowCount == afterFirst)
     }
 

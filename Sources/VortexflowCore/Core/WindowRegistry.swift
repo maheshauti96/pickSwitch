@@ -34,11 +34,17 @@ import Foundation
 /// `enumerate()` blocks on AX round trips and must never be called on the main
 /// thread from the event tap path. `SwitcherController` calls it on a utility queue.
 ///
-/// `@unchecked Sendable` is claimed deliberately: the only mutable state is
-/// `applicationElements`, and every read and write of it goes through `cacheLock`.
-/// `ownProcessID` is immutable. The AX and CGWindowList C APIs are themselves
+/// `@unchecked Sendable` is claimed deliberately: cache dictionaries go through
+/// `cacheLock`, and the per-process in-flight set owns its own lock. `ownProcessID`
+/// and both queues are immutable. The AX and CGWindowList C APIs are themselves
 /// thread-safe. The compiler cannot see the lock discipline, hence `unchecked`.
 final class WindowRegistry: @unchecked Sendable {
+
+    /// The complete enumeration path owns 50 ms of the 150 ms presentation budget.
+    /// Responsive applications normally answer in single-digit milliseconds. Anything
+    /// still inside AX at this point is represented from CGWindowList for this opening
+    /// rather than preventing every other application's cards from appearing.
+    private static let accessibilityCollectionTimeout: TimeInterval = 0.05
 
     /// AX subroles that count as a switchable window. Dialogs and system floating
     /// panels are excluded: they are not things a user "switches to".
@@ -75,6 +81,16 @@ final class WindowRegistry: @unchecked Sendable {
 
     private let cacheLock = NSLock()
 
+    /// Per-application AX work cannot run on the controller's serial presentation queue:
+    /// one blocked application would keep every later trigger queued behind it.
+    private let accessibilityQueue = DispatchQueue(
+        label: "io.vortexflow.accessibility-enumeration",
+        qos: .userInteractive,
+        attributes: .concurrent,
+        autoreleaseFrequency: .workItem
+    )
+    private let accessibilityInFlight = SingleFlightGate<pid_t>()
+
     struct ApplicationMetadata {
         let name: String
         let icon: NSImage?
@@ -93,6 +109,17 @@ final class WindowRegistry: @unchecked Sendable {
         /// When this window was last seen on the active Space. Carried into the entry so
         /// ordering can prefer the window you were most recently looking at.
         var lastSeen: TimeInterval
+    }
+
+    private struct AccessibilityEnumeration {
+        let entries: [WindowEntry]
+        let unavailableApplications: [NSRunningApplication]
+    }
+
+    private struct ApplicationAccessibilityEnumeration {
+        let entries: [WindowEntry]
+        /// False when an earlier timed-out query for this process is still inside AX.
+        let startedFreshQuery: Bool
     }
 
     // MARK: - Public
@@ -115,7 +142,13 @@ final class WindowRegistry: @unchecked Sendable {
     /// - Parameter applications: apps to inspect, ideally captured on the main thread
     ///   via `switchableApplicationsSnapshot()`. Passing `nil` gathers them here, which
     ///   is fine for diagnostics but carries the race described above.
-    func enumerate(applications: [NSRunningApplication]? = nil) -> [WindowEntry] {
+    /// - Parameter accessibilityTimeout: shared AX collection deadline. Production uses
+    ///   the 50 ms default; live integration tests can allow a complete pass while the
+    ///   parallel test runner is intentionally saturating the machine.
+    func enumerate(
+        applications: [NSRunningApplication]? = nil,
+        accessibilityTimeout: TimeInterval = WindowRegistry.accessibilityCollectionTimeout
+    ) -> [WindowEntry] {
         let stopwatch = Stopwatch("window enumeration", logger: Log.registry)
         defer { stopwatch.log() }
 
@@ -139,7 +172,12 @@ final class WindowRegistry: @unchecked Sendable {
         }
 
         let seenAt = Date().timeIntervalSinceReferenceDate
-        var live = enumerateViaAccessibility(zIndex: zIndex, apps: apps)
+        let accessibility = enumerateViaAccessibility(
+            zIndex: zIndex,
+            apps: apps,
+            timeout: accessibilityTimeout
+        )
+        var live = accessibility.entries
         if !live.isEmpty {
             remember(live, at: seenAt)
             pruneRememberedWindows(liveWindowIDs: zIndex.liveWindowIDs)
@@ -157,6 +195,15 @@ final class WindowRegistry: @unchecked Sendable {
             var entries = live
             var seen = Set(entries.map(\.windowID))
 
+            // Preserve exact AX-backed entries for every application that answered.
+            // Only applications that missed the shared deadline degrade to the window
+            // server, so one wedged process cannot hide its responsive neighbours.
+            let degraded = enumerateFromWindowListOnly(
+                zIndex: zIndex,
+                apps: accessibility.unavailableApplications
+            ).filter { seen.insert($0.windowID).inserted }
+            entries.append(contentsOf: degraded)
+
             let remembered = rememberedEntries(excluding: seen, zIndex: zIndex, apps: apps)
             entries.append(contentsOf: remembered)
             seen.formUnion(remembered.map(\.windowID))
@@ -169,7 +216,8 @@ final class WindowRegistry: @unchecked Sendable {
             // retained long enough to answer that after the fact.
             Log.registry.info("""
                 enumerated \(entries.count) windows \
-                (\(live.count) on this Space, \(remembered.count) remembered elsewhere, \
+                (\(live.count) AX-backed on this Space, \(degraded.count) deadline fallbacks, \
+                \(remembered.count) remembered elsewhere, \
                 \(discovered.count) newly discovered elsewhere)
                 """)
             return entries
@@ -203,39 +251,65 @@ final class WindowRegistry: @unchecked Sendable {
 
     private func enumerateViaAccessibility(
         zIndex: ZOrderSnapshot,
-        apps: [NSRunningApplication]
-    ) -> [WindowEntry] {
-        guard !apps.isEmpty else { return [] }
-
-        // The geometry fallback needs a shared "already claimed" set across apps, so
-        // it cannot run in parallel. With `_AXUIElementGetWindow` available — the
-        // normal case — each app is fully independent, and going wide keeps a slow or
-        // unresponsive app from serialising everything behind its timeout.
-        guard AXBridge.supportsDirectWindowIDLookup else {
-            var consumed = Set<CGWindowID>()
-            return apps.flatMap { windows(for: $0, zIndex: zIndex, consumed: &consumed) }
+        apps: [NSRunningApplication],
+        timeout: TimeInterval
+    ) -> AccessibilityEnumeration {
+        guard !apps.isEmpty else {
+            return AccessibilityEnumeration(entries: [], unavailableApplications: [])
         }
 
-        var perApp = [[WindowEntry]](repeating: [], count: apps.count)
-        let lock = NSLock()
+        // `concurrentPerform` is deliberately not used here. Despite its name it is a
+        // synchronous barrier: the caller cannot continue until its slowest iteration
+        // returns. Independent asynchronous workers plus one shared deadline let the
+        // overlay use every answer that arrived without waiting for a wedged process.
+        //
+        // Geometry correlation is independent per process because candidates are keyed
+        // by pid, so its consumed-ID set can be local to the worker too.
+        let batch = BoundedConcurrentCollector.collect(
+            count: apps.count,
+            timeout: timeout,
+            queue: accessibilityQueue
+        ) { index, deadline in
+            let pid = apps[index].processIdentifier
+            guard self.accessibilityInFlight.claim(pid) else {
+                return ApplicationAccessibilityEnumeration(entries: [], startedFreshQuery: false)
+            }
+            defer { self.accessibilityInFlight.release(pid) }
 
-        DispatchQueue.concurrentPerform(iterations: apps.count) { index in
             var unused = Set<CGWindowID>()
-            let entries = self.windows(for: apps[index], zIndex: zIndex, consumed: &unused)
-            guard !entries.isEmpty else { return }
-            lock.lock()
-            perApp[index] = entries
-            lock.unlock()
+            return ApplicationAccessibilityEnumeration(
+                entries: self.windows(
+                    for: apps[index],
+                    zIndex: zIndex,
+                    consumed: &unused,
+                    deadline: deadline
+                ),
+                startedFreshQuery: true
+            )
         }
 
-        return perApp.flatMap { $0 }
+        let entries = (0..<apps.count).flatMap { batch.valuesByIndex[$0]?.entries ?? [] }
+        var unavailableIndices = batch.unfinishedIndices
+        for (index, result) in batch.valuesByIndex where !result.startedFreshQuery {
+            unavailableIndices.insert(index)
+        }
+        let unavailable = unavailableIndices.sorted().map { apps[$0] }
+        if !unavailable.isEmpty {
+            let names = unavailable.map { $0.localizedName ?? "pid \($0.processIdentifier)" }
+                .joined(separator: ", ")
+            Log.registry.error("Accessibility unavailable by the deadline for: \(names, privacy: .public)")
+        }
+
+        return AccessibilityEnumeration(entries: entries, unavailableApplications: unavailable)
     }
 
     private func windows(
         for app: NSRunningApplication,
         zIndex: ZOrderSnapshot,
-        consumed: inout Set<CGWindowID>
+        consumed: inout Set<CGWindowID>,
+        deadline: DispatchTime
     ) -> [WindowEntry] {
+        guard !deadline.hasPassed else { return [] }
         let pid = app.processIdentifier
         let appElement = applicationElement(for: pid)
         guard let axWindows = AXBridge.elements(appElement, kAXWindowsAttribute as String) else {
@@ -247,12 +321,18 @@ final class WindowRegistry: @unchecked Sendable {
         entries.reserveCapacity(axWindows.count)
 
         for axWindow in axWindows {
-            guard isSwitchable(axWindow) else { continue }
+            guard !deadline.hasPassed else { return entries }
+            guard isSwitchable(axWindow, deadline: deadline) else { continue }
+            guard !deadline.hasPassed else { return entries }
 
             let title = AXBridge.string(axWindow, kAXTitleAttribute as String) ?? ""
+            guard !deadline.hasPassed else { return entries }
             let isMinimized = AXBridge.bool(axWindow, kAXMinimizedAttribute as String) ?? false
+            guard !deadline.hasPassed else { return entries }
             let origin = AXBridge.point(axWindow, kAXPositionAttribute as String) ?? .zero
+            guard !deadline.hasPassed else { return entries }
             let size = AXBridge.size(axWindow, kAXSizeAttribute as String) ?? .zero
+            guard !deadline.hasPassed else { return entries }
             let frame = CGRect(origin: origin, size: size)
 
             // Zero-sized windows are transient artefacts of apps mid-launch.
@@ -575,7 +655,7 @@ final class WindowRegistry: @unchecked Sendable {
             return match
         }
 
-        let switchable = windows.filter(isSwitchable)
+        let switchable = windows.filter { isSwitchable($0) }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             let titled = switchable.filter {
@@ -798,10 +878,15 @@ final class WindowRegistry: @unchecked Sendable {
     }
 
     /// Requirement 1.5.
-    private func isSwitchable(_ axWindow: AXUIElement) -> Bool {
+    private func isSwitchable(
+        _ axWindow: AXUIElement,
+        deadline: DispatchTime? = nil
+    ) -> Bool {
         guard let role = AXBridge.string(axWindow, kAXRoleAttribute as String),
               role == kAXWindowRole as String
         else { return false }
+
+        if deadline?.hasPassed == true { return false }
 
         guard let subrole = AXBridge.string(axWindow, kAXSubroleAttribute as String) else {
             // Some apps omit the subrole. Accept those: rejecting them would lose
@@ -844,5 +929,11 @@ final class WindowRegistry: @unchecked Sendable {
             return leftover.id
         }
         return nil
+    }
+}
+
+private extension DispatchTime {
+    var hasPassed: Bool {
+        DispatchTime.now().uptimeNanoseconds >= uptimeNanoseconds
     }
 }
