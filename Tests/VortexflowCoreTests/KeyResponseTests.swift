@@ -517,6 +517,76 @@ struct KeyResponseTests {
         )
     }
 
+    // MARK: - Hidden overlay: only the real chord opens
+
+    /// Carbon is silent during another app's menu. The HID tap is the fallback, and
+    /// it must not treat a bare Space as the shortcut — that would open the overlay
+    /// every time someone typed a space in Chrome.
+    @Test("⌥Space matches the hidden shortcut")
+    func hiddenShortcutMatchesOptionSpace() {
+        #expect(
+            KeyResponse.matchesGlobalShortcut(
+                keyCode: Self.space,
+                activeModifiers: Self.option,
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option,
+                shortcutModifiersRecentlyHeld: false
+            )
+        )
+    }
+
+    @Test("a bare Space does not match the hidden shortcut")
+    func hiddenShortcutRejectsBareSpace() {
+        #expect(
+            !KeyResponse.matchesGlobalShortcut(
+                keyCode: Self.space,
+                activeModifiers: Self.noModifiers,
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option,
+                shortcutModifiersRecentlyHeld: false
+            )
+        )
+    }
+
+    @Test("a recently-held Option still matches the hidden shortcut")
+    func hiddenShortcutMatchesRecentModifier() {
+        #expect(
+            KeyResponse.matchesGlobalShortcut(
+                keyCode: Self.space,
+                activeModifiers: Self.noModifiers,
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option,
+                shortcutModifiersRecentlyHeld: true
+            )
+        )
+    }
+
+    @Test("F13 matches the hidden shortcut with no modifiers")
+    func hiddenShortcutMatchesModifierFreeKey() {
+        #expect(
+            KeyResponse.matchesGlobalShortcut(
+                keyCode: Int64(kVK_F13),
+                activeModifiers: Self.noModifiers,
+                shortcutKeyCode: Int64(kVK_F13),
+                shortcutModifiers: [],
+                shortcutModifiersRecentlyHeld: false
+            )
+        )
+    }
+
+    @Test("a different key does not match the hidden shortcut")
+    func hiddenShortcutRejectsOtherKeys() {
+        #expect(
+            !KeyResponse.matchesGlobalShortcut(
+                keyCode: Self.letterA,
+                activeModifiers: Self.option,
+                shortcutKeyCode: Self.space,
+                shortcutModifiers: Self.option,
+                shortcutModifiersRecentlyHeld: false
+            )
+        )
+    }
+
     /// A key that types nothing has nothing to contribute to a search.
     @Test("a key with no characters is left alone")
     func keyWithoutCharactersPassesThrough() {

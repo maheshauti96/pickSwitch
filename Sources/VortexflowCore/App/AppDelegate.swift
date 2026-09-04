@@ -27,6 +27,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Requirement 11.1. LSUIElement in Info.plist covers the bundled app; this
         // makes `swift run` behave the same way during development.
         NSApp.setActivationPolicy(.accessory)
+        Self.installStandardEditMenu()
 
         permissions.refresh()
 
@@ -133,6 +134,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.delegate = self
         return window
+    }
+
+    /// ⌘V / ⌘C / ⌘X / ⌘A are menu key equivalents. An accessory app has no menu bar,
+    /// so without this they never resolve and a focused field can type but not paste.
+    private static func installStandardEditMenu() {
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let item = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        item.submenu = edit
+        let main = NSMenu()
+        main.addItem(item)
+        NSApp.mainMenu = main
     }
 
     /// An accessory app is not active by default, so showing a real window needs an

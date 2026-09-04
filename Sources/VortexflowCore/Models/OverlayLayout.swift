@@ -49,6 +49,8 @@ struct OverlayLayout: Equatable {
     /// and flashing. Storing the offset and moving it only when the selection would
     /// otherwise fall off the edge keeps the cards still.
     let visibleStart: Int
+    /// How many pinned-shortcut discs the seam shows: the pins plus one empty slot.
+    let shortcutSlotCount: Int
 
     init(
         style: OverlayLayoutStyle,
@@ -57,7 +59,8 @@ struct OverlayLayout: Equatable {
         availableContentWidth: CGFloat,
         availableContentHeight: CGFloat,
         visibleStart: Int = 0,
-        isSearching: Bool = false
+        isSearching: Bool = false,
+        shortcutSlotCount: Int = 0
     ) {
         self.style = style
         self.cardCount = cardCount
@@ -66,6 +69,7 @@ struct OverlayLayout: Equatable {
         self.availableContentHeight = availableContentHeight
         self.visibleStart = visibleStart
         self.isSearching = isSearching
+        self.shortcutSlotCount = shortcutSlotCount
     }
 
     /// The query pill along the top of the panel.
@@ -442,6 +446,41 @@ struct OverlayLayout: Equatable {
         }
     }
 
+    /// The pinned shortcuts' tiles — the inner turn — in panel coordinates. Angles and radii
+    /// are about `radialCentre`; only the content box carries the search chrome offset, as
+    /// with `radialSeats`. Empty for styles without a seam.
+    var shortcutSlots: [RadialLayout.Seat] {
+        guard let radial else { return [] }
+        return radial.shortcutSeats(count: shortcutSlotCount).map { tile in
+            guard searchChrome != 0 else { return tile }
+            return RadialLayout.Seat(
+                offset: tile.offset,
+                startAngle: tile.startAngle,
+                endAngle: tile.endAngle,
+                innerRadius: tile.innerRadius,
+                outerRadius: tile.outerRadius,
+                contentFrame: tile.contentFrame.offsetBy(dx: 0, dy: searchChrome)
+            )
+        }
+    }
+
+    /// The plus in the leftover gap after the last first-turn card. Panel coordinates.
+    var shortcutPlusFrame: CGRect? {
+        guard let frame = radial?.shortcutPlusFrame(pinCount: shortcutSlotCount) else { return nil }
+        return searchChrome == 0 ? frame : frame.offsetBy(dx: 0, dy: searchChrome)
+    }
+
+    /// Which tile — or the plus — an AppKit panel point falls in. The plus reports as
+    /// `shortcutSlotCount`, the index at which a new pin would be appended.
+    func shortcutSlot(atPanelPoint pointInPanel: CGPoint) -> Int? {
+        guard let radial else { return nil }
+        let point = topLeftPoint(pointInPanel)
+        return radial.shortcutSlot(
+            atContentPoint: CGPoint(x: point.x, y: point.y - searchChrome),
+            count: shortcutSlotCount
+        )
+    }
+
     /// The hollow middle, in panel coordinates.
     ///
     /// Not dead space: it captions whichever window is under the pointer. Wedges are too
@@ -765,6 +804,8 @@ struct OverlayLayout: Equatable {
         /// Switch to whatever is selected — the large preview in the list and radial
         /// styles.
         case confirmSelection
+        /// A pinned-shortcut slot in the seam between hub and first turn.
+        case shortcutSlot(Int)
         /// Nothing actionable; dismiss.
         case background
     }
@@ -776,6 +817,9 @@ struct OverlayLayout: Equatable {
     ) -> HitTarget {
         guard cardCount > 0 else { return .background }
 
+        // Slots sit inside the hub's halo reach, so they must win before the hub does.
+        if let slot = shortcutSlot(atPanelPoint: pointInPanel) { return .shortcutSlot(slot) }
+
         guard let index = cardIndex(
             atPanelPoint: pointInPanel,
             scrollOffset: scrollOffset,
@@ -784,10 +828,8 @@ struct OverlayLayout: Equatable {
             return commitsSelection(atPanelPoint: pointInPanel) ? .confirmSelection : .background
         }
 
-        // Restricted to the selected card because that is the only card the button is
-        // drawn on. Accepting it on any card would create a small region on every card
-        // that closes a window the user never saw highlighted — and since hover drives
-        // selection, the card under the cursor is the selected one anyway.
+        // Only the highlighted card draws a button. Accepting a close hit on every
+        // card would create an invisible close region on wedges that show no X.
         let point = topLeftPoint(pointInPanel)
         if index == selectedIndex,
            let card = positionedCards(scrollOffset: scrollOffset).first(where: { $0.index == index }),

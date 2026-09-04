@@ -491,14 +491,25 @@ actor BrowserTabService {
         return tabs
     }
 
+    private static let appleScriptQueueKey = DispatchSpecificKey<UInt8>()
+    private static let appleScriptQueue: DispatchQueue = {
+        let queue = DispatchQueue(label: "io.vortexflow.applescript")
+        queue.setSpecific(key: appleScriptQueueKey, value: 1)
+        return queue
+    }()
+
     private static func run(_ source: String) -> Outcome {
-        // NSAppleScript is documented as main-thread only. Running it on the actor's
-        // executor hangs indefinitely on some Chrome windows — which is what left
-        // Search through Tabs on "Looking for tabs…" forever.
-        if Thread.isMainThread {
+        // The actor's own executor hung on some Chrome windows, which is what left
+        // Search through Tabs on "Looking for tabs…" forever. `main.sync` fixed that
+        // and created a worse one: a busy Chrome Apple Event froze the event tap, so
+        // the shortcut did nothing until Chrome answered.
+        //
+        // A dedicated queue is neither. Main stays free for the tap. A hung script
+        // can stall tab search; it must not stall the overlay.
+        if DispatchQueue.getSpecific(key: appleScriptQueueKey) != nil {
             return execute(source)
         }
-        return DispatchQueue.main.sync { execute(source) }
+        return appleScriptQueue.sync { execute(source) }
     }
 
     private static func execute(_ source: String) -> Outcome {

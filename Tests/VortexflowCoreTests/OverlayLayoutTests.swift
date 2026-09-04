@@ -310,8 +310,8 @@ struct OverlayLayoutTests {
         }
     }
 
-    /// A click on the affordance must close, not switch — and only on the selected card,
-    /// which is the only card that draws one.
+    /// A click on the affordance must close, not switch — and only on the highlighted
+    /// card, which is the only card that draws one.
     @Test("Clicking the close button closes rather than switches", arguments: OverlayLayoutStyle.allCases)
     func closeButtonTargetsClose(style: OverlayLayoutStyle) {
         let selected = 2
@@ -337,8 +337,8 @@ struct OverlayLayoutTests {
         )
     }
 
-    @Test("Only the selected card offers a close button", arguments: OverlayLayoutStyle.allCases)
-    func onlySelectedCardOffersClose(style: OverlayLayoutStyle) {
+    @Test("Only the highlighted card offers a close button", arguments: OverlayLayoutStyle.allCases)
+    func onlyHighlightedCardOffersClose(style: OverlayLayoutStyle) {
         let subject = layout(style, count: 6, selected: 2)
 
         for card in subject.positionedCards() where card.index != 2 {

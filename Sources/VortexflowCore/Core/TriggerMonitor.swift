@@ -61,11 +61,11 @@ protocol TriggerMonitorDelegate: AnyObject {
 ///
 /// - `buttonTap` (`otherMouseDown | otherMouseUp`) stays enabled for the process
 ///   lifetime.
-/// - `overlayTap` (`scrollWheel | keyDown | flagsChanged`) is created disabled and
-///   toggled with `CGEvent.tapEnable`. A disabled tap is skipped by the window server
-///   entirely, so while the overlay is hidden, scroll and key events genuinely do
-///   bypass it — which is what 5.2 is protecting. Toggling is a single call with no
-///   allocation, so it adds nothing measurable to presentation time.
+/// - `overlayTap` (`scrollWheel | keyDown | flagsChanged | left/right mouse`) stays
+///   armed for the process lifetime too. While the overlay is hidden it only
+///   consumes the registered shortcut — Carbon is silent during another app's
+///   menu tracking, which is the "right-click then shortcut does nothing" failure.
+///   Clicks, scroll and typing pass through until the overlay is actually up.
 ///   `flagsChanged` is observed only so a remapped mouse button's Option-down can
 ///   arm the shortcut chord; the event itself is always passed through.
 ///
@@ -109,6 +109,12 @@ final class TriggerMonitor {
     var highestObservedButton: Int { hidMonitor.highestObservedButton }
 
     private var isOverlayTapEnabled = false
+    /// Clicks, scroll and overlay key handling. When false the tap stays armed for the
+    /// shortcut only, so a Chrome context menu cannot swallow the open.
+    private var isOverlayInteractionEnabled = false
+    /// Called from the tap thread (main run loop, common modes) so a tracking
+    /// `NSMenu.popUp` can be cancelled *now*, not after it returns.
+    var interruptTracking: (() -> Void)?
     /// AppKit screen-space frame of the visible panel. The event-tap callback runs on
     /// the same main run loop that updates this value, so reading it is serialized.
     /// It lets the tap consume card clicks while allowing outside clicks to pass to
@@ -136,6 +142,8 @@ final class TriggerMonitor {
     private var isTriggerHeld = false
     /// When the current press started, for the tap-versus-hold decision.
     private var pressTimestamp: DispatchTime?
+    /// The HID path consumed the shortcut's key-down, so Carbon will not see a release.
+    private var hidShortcutPressTimestamp: DispatchTime?
 
     /// While true, the next button press is reported through
     /// `TriggerMonitorDelegate.buttonCaptured(number:)` instead of opening the overlay.
@@ -231,14 +239,17 @@ final class TriggerMonitor {
             (1 << CGEventType.rightMouseDown.rawValue) |
             (1 << CGEventType.scrollWheel.rawValue) |
             (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.keyUp.rawValue) |
             (1 << CGEventType.flagsChanged.rawValue)
 
         if let overlayTap = makeTap(mask: overlayMask, kind: .overlay) {
             self.overlayTap = overlayTap
             overlaySource = addToRunLoop(overlayTap)
-            // Created disabled: nothing bypasses it until the overlay opens.
-            CGEvent.tapEnable(tap: overlayTap, enable: false)
-            isOverlayTapEnabled = false
+            // Armed immediately, shortcut-only, so a menu in Chrome (or anywhere)
+            // cannot make Carbon the only path.
+            CGEvent.tapEnable(tap: overlayTap, enable: true)
+            isOverlayTapEnabled = true
+            isOverlayInteractionEnabled = false
         } else {
             Log.trigger.error("failed to create overlay event tap; scroll and Escape will be unavailable")
         }
@@ -312,24 +323,26 @@ final class TriggerMonitor {
         overlaySource = nil
         isInstalled = false
         isOverlayTapEnabled = false
+        isOverlayInteractionEnabled = false
         Log.trigger.info("event taps removed")
     }
 
     /// Requirement 5.6 / 5.8.
+    ///
+    /// `enabled` is overlay interaction (clicks, scroll, search), not the tap itself.
+    /// The tap stays armed so the shortcut still opens while another app's menu is up.
     func setOverlayTapEnabled(_ enabled: Bool, clickRegion: CGRect? = nil) {
-        // Publish the region before enabling and clear it only after disabling so the
-        // callback never consumes a click without also dispatching it to the overlay.
+        isOverlayInteractionEnabled = enabled
         if enabled {
             overlayClickRegion = clickRegion
-        }
-
-        if let overlayTap, enabled != isOverlayTapEnabled {
-            CGEvent.tapEnable(tap: overlayTap, enable: enabled)
-            isOverlayTapEnabled = enabled
-        }
-
-        if !enabled {
+        } else {
             overlayClickRegion = nil
+        }
+
+        guard let overlayTap else { return }
+        if !isOverlayTapEnabled {
+            CGEvent.tapEnable(tap: overlayTap, enable: true)
+            isOverlayTapEnabled = true
         }
     }
 
@@ -339,6 +352,7 @@ final class TriggerMonitor {
     func clearHeldState() {
         isTriggerHeld = false
         pressTimestamp = nil
+        hidShortcutPressTimestamp = nil
     }
 
     private func elapsedSincePress() -> TimeInterval {
@@ -446,6 +460,11 @@ final class TriggerMonitor {
 
         switch type {
         case .leftMouseDown:
+            // Hidden: the tap stays armed for the shortcut only. Consuming a click
+            // here would steal primary clicks from Chrome, Finder, everywhere.
+            guard monitor.isOverlayInteractionEnabled else {
+                return Unmanaged.passUnretained(event)
+            }
             // AppKit does not reliably deliver primary clicks to a never-key,
             // nonactivating panel. Observe the click at the same HID-level tap that
             // already handles scrolling and keyboard confirmation, then route it to
@@ -461,6 +480,9 @@ final class TriggerMonitor {
             monitor.dispatch { $0.leftMousePressed(atScreenPoint: screenPoint) }
             return isInsideOverlay ? nil : Unmanaged.passUnretained(event)
         case .rightMouseDown:
+            guard monitor.isOverlayInteractionEnabled else {
+                return Unmanaged.passUnretained(event)
+            }
             // Same treatment as the primary click, and consumed on the same condition: a
             // secondary click on a card must not also open the context menu of whatever
             // application is underneath the overlay.
@@ -541,7 +563,10 @@ final class TriggerMonitor {
             return nil
 
         case .scrollWheel:
-            // Requirement 5.7. Reached only while the overlay tap is enabled.
+            guard monitor.isOverlayInteractionEnabled else {
+                return Unmanaged.passUnretained(event)
+            }
+            // Requirement 5.7.
             let delta = Self.scrollDelta(from: event)
             if delta != 0 {
                 monitor.dispatch { $0.scrollReceived(delta: delta) }
@@ -560,6 +585,14 @@ final class TriggerMonitor {
             )
             return Unmanaged.passUnretained(event)
 
+        case .keyUp:
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            if let held = monitor.consumeHIDShortcutRelease(keyCode: keyCode) {
+                monitor.dispatch { $0.triggerButtonReleased(heldFor: held) }
+                return nil
+            }
+            return Unmanaged.passUnretained(event)
+
         case .keyDown:
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             monitor.armShortcutModifierIfNeeded(
@@ -567,6 +600,31 @@ final class TriggerMonitor {
                 flags: event.flags,
                 requiresFlagSet: false
             )
+            let activeModifiers = CGEventSource.flagsState(.combinedSessionState)
+                .union(event.flags)
+            let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            let recentlyHeld = DispatchTime.now().uptimeNanoseconds
+                < monitor.shortcutModifierArmedUntilNanoseconds
+
+            // Overlay hidden: only the registered chord is ours. Escape, Return, arrows
+            // and typing must reach Chrome (and everyone else) or the always-on tap
+            // would make the machine unusable.
+            if !monitor.isOverlayInteractionEnabled {
+                let matches = KeyResponse.matchesGlobalShortcut(
+                    keyCode: keyCode,
+                    activeModifiers: activeModifiers,
+                    shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) },
+                    shortcutModifiers: monitor.keyboardShortcut?.eventFlags ?? [],
+                    shortcutModifiersRecentlyHeld: recentlyHeld
+                )
+                guard matches else { return Unmanaged.passUnretained(event) }
+                if isAutorepeat { return nil }
+                monitor.markHIDShortcutConsumed()
+                monitor.interruptTrackingIfNeeded()
+                monitor.dispatch { $0.keyboardShortcutPressed() }
+                return nil
+            }
+
             // Decided by `KeyResponse` rather than here: a C callback is the worst place in the app
             // to keep branching logic, and the branch that was here shipped a defect no test could
             // have reached.
@@ -579,15 +637,13 @@ final class TriggerMonitor {
                 // inventing one, and missing one is the failure that matters here — it turns the
                 // shortcut into a space. Taking either source's word for it needs both to be wrong
                 // in the same direction at the same instant.
-                activeModifiers: CGEventSource.flagsState(.combinedSessionState)
-                    .union(event.flags),
+                activeModifiers: activeModifiers,
                 characters: Self.characters(from: event),
-                isAutorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
+                isAutorepeat: isAutorepeat,
                 shortcutKeyCode: monitor.keyboardShortcut.map { Int64($0.keyCode) },
                 shortcutModifiers: monitor.keyboardShortcut?.eventFlags ?? [],
                 isSearching: monitor.isSearchActive,
-                shortcutModifiersRecentlyHeld: DispatchTime.now().uptimeNanoseconds
-                    < monitor.shortcutModifierArmedUntilNanoseconds
+                shortcutModifiersRecentlyHeld: recentlyHeld
             ) {
             case .dismiss:
                 monitor.dispatch { $0.escapePressed() }
@@ -597,6 +653,8 @@ final class TriggerMonitor {
             case .triggerShortcut:
                 // Consumed, which is the point: the Carbon hotkey behind this would otherwise
                 // receive the same keystroke and act on it twice.
+                monitor.markHIDShortcutConsumed()
+                monitor.interruptTrackingIfNeeded()
                 monitor.dispatch { $0.keyboardShortcutPressed() }
                 return nil
             case .confirm:
@@ -701,9 +759,34 @@ final class TriggerMonitor {
         return 0
     }
 
+    /// The HID tap consumed the shortcut's down, so Carbon will not emit a matching up.
+    private func markHIDShortcutConsumed() {
+        hidShortcutPressTimestamp = DispatchTime.now()
+    }
+
+    /// Cancel a tracking `NSMenu` *now*, on the tap thread, so `popUp` returns before
+    /// the open is dispatched. `DispatchQueue.main.async` would sit behind the menu.
+    private func interruptTrackingIfNeeded() {
+        guard contextMenuIsTracking else { return }
+        interruptTracking?()
+    }
+
+    private func consumeHIDShortcutRelease(keyCode: Int64) -> TimeInterval? {
+        guard hidShortcutPressTimestamp != nil else { return nil }
+        guard keyboardShortcut.map({ Int64($0.keyCode) }) == keyCode else { return nil }
+        let start = hidShortcutPressTimestamp
+        hidShortcutPressTimestamp = nil
+        guard let start else { return 0 }
+        let nanoseconds = DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds
+        return TimeInterval(nanoseconds) / 1_000_000_000
+    }
+
     /// Hop to the main actor so delegate work never happens inside the tap callback.
+    ///
+    /// `.common` so a tracking menu in Chrome (or anywhere) cannot sit on the default
+    /// mode and hold the open until the user dismisses the menu.
     private func dispatch(_ body: @escaping @MainActor (TriggerMonitorDelegate) -> Void) {
-        DispatchQueue.main.async { [weak self] in
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in
             MainActor.assumeIsolated {
                 guard let delegate = self?.delegate else { return }
                 body(delegate)
@@ -721,10 +804,9 @@ final class TriggerMonitor {
     /// 1. **Only the tap that was disabled is touched.** Re-applying state to the
     ///    *other* tap is what created the original loop: disabling the overlay tap
     ///    produced a disable event, which was answered by disabling it again.
-    /// 2. **A disable we asked for is not a fault.** The overlay tap is deliberately
-    ///    disabled every time the overlay closes, and macOS reports that the same way
-    ///    it reports a real fault. If the tap is not supposed to be on, its disable
-    ///    notification is simply acknowledged and dropped.
+    /// 2. **Both taps stay armed.** Closing the overlay no longer disables the
+    ///    overlay tap — it only drops interaction — so a disable notification is
+    ///    always a real fault and is always re-armed.
     private func handleDisabled(reason: CGEventType, kind: TapKind) {
         switch kind {
         case .button:
@@ -737,10 +819,7 @@ final class TriggerMonitor {
 
         case .overlay:
             guard let overlayTap else { return }
-            guard isOverlayTapEnabled else {
-                // Self-inflicted and expected: the overlay just closed. Do nothing.
-                return
-            }
+            isOverlayTapEnabled = true
             recordUnexpectedDisable(reason: reason, tap: "overlay")
             guard shouldReArmNow else { return }
             CGEvent.tapEnable(tap: overlayTap, enable: true)

@@ -297,13 +297,21 @@ final class OverlayState: ObservableObject {
     /// Whether closing windows is possible at all, i.e. Accessibility is granted.
     @Published var canCloseWindows: Bool = false
 
-    /// True while the cursor is on the selected card's close affordance, so it can
-    /// respond to the pointer.
+    /// The card whose close affordance the cursor is on, if any.
     ///
     /// Published, unlike the hover index, because it changes only when the cursor
-    /// crosses the button's edge — a handful of times per presentation rather than at
+    /// crosses a button's edge — a handful of times per presentation rather than at
     /// the 60 Hz the hover sampler runs at.
-    @Published var isCloseButtonHovered: Bool = false
+    @Published var hoveredCloseButtonIndex: Int? = nil
+
+    /// What the user pinned into the seam, in slot order. The plus is a separate mark.
+    @Published var pinnedShortcuts: [PinnedShortcut] = PinnedShortcut.load()
+    /// Favicons fetched for `.link` slots, keyed by URL so reordering needs no bookkeeping.
+    @Published var slotIcons: [URL: NSImage] = [:]
+    /// The slot a press started on and has not released yet; release decides run or reorder.
+    @Published var draggingSlot: Int? = nil
+    /// The slot under the pointer, for its hover lift.
+    @Published var hoveredSlot: Int? = nil
 
     /// True once the strip is staying open on its own rather than tracking a held
     /// button. Drives a hint line, because "it vanished the moment I let go" was the
@@ -333,8 +341,14 @@ final class OverlayState: ObservableObject {
             availableContentWidth: availableContentWidth,
             availableContentHeight: availableContentHeight,
             visibleStart: visibleStart,
-            isSearching: showsSearch
+            isSearching: showsSearch,
+            shortcutSlotCount: PinnedShortcut.visibleSlotCount(forPins: pinnedShortcuts.count)
         )
+    }
+
+    /// The pin in a slot, or `nil` for the trailing empty slot.
+    func pinnedShortcut(inSlot slot: Int) -> PinnedShortcut? {
+        pinnedShortcuts.indices.contains(slot) ? pinnedShortcuts[slot] : nil
     }
 
     var selectedEntry: WindowEntry? {

@@ -39,8 +39,17 @@ final class ActivationService {
 
     /// - Returns: `true` when the target window was raised, `false` when only
     ///   app-level activation was possible (the Requirement 10.10 degraded path).
+    /// - Parameters:
+    ///   - displayLayout: current screens, so a window on the other monitor can be
+    ///     moved onto the one the user is looking at.
+    ///   - lookingAt: the display the overlay / pointer is on.
     @discardableResult
-    func activate(_ entry: WindowEntry, canUseAccessibility: Bool) throws -> Bool {
+    func activate(
+        _ entry: WindowEntry,
+        canUseAccessibility: Bool,
+        displayLayout: DisplayLayout = .empty,
+        lookingAt: DisplayInfo? = nil
+    ) throws -> Bool {
         let stopwatch = Stopwatch("activation", logger: Log.activation)
         defer { stopwatch.log() }
 
@@ -122,18 +131,23 @@ final class ActivationService {
             app.unhide()
         }
 
-        guard canUseAccessibility, let axWindow = entry.axElement else {
+        guard canUseAccessibility else {
             // Requirement 10.10: without Accessibility, the best available action is
             // to bring the owning application forward.
             app.activate()
             return false
         }
 
-        // Requirement 7.7 / 7.8: the window may have closed between enumeration and
-        // now. Probe before acting so a dead element does not get a raise.
-        guard registry.windowStillExists(entry) else {
+        // The snapshot handle often dies when Electron replaces the window after a
+        // display move. Resolve against what Accessibility has *now* before giving up.
+        guard let axWindow = registry.resolveAXElement(for: entry) else {
             registry.invalidateCache(for: entry.processID)
-            throw Failure.windowGone
+            app.activate()
+            Log.activation.info("""
+                could not resolve \(entry.applicationName, privacy: .public) \
+                window \(entry.windowID, privacy: .public); activated the application
+                """)
+            return false
         }
 
         // Requirement 7.4.
@@ -141,7 +155,30 @@ final class ActivationService {
             AXBridge.setBool(axWindow, kAXMinimizedAttribute as String, false)
         }
 
-        return raiseAndActivate(entry, app: app, axWindow: axWindow)
+        let liveFrame = currentFrame(of: axWindow) ?? entry.frame
+        let plan = WindowActivationPlan.resolve(
+            isOnActiveSpace: entry.isOnActiveSpace,
+            windowDisplayNumber: displayLayout.display(for: liveFrame)?.number,
+            lookingAtDisplayNumber: lookingAt?.number
+        )
+
+        if plan == .moveThenRaise, let destination = lookingAt {
+            let size = AXBridge.size(axWindow, kAXSizeAttribute as String) ?? liveFrame.size
+            let frame = destination.frameForMovedWindow(size: size)
+            let moved = AXBridge.setFrame(axWindow, frame)
+            Log.activation.info("""
+                moved \(entry.applicationName, privacy: .public) onto \
+                screen \(destination.number, privacy: .public) so the click is visible; \
+                accepted: \(moved, privacy: .public)
+                """)
+        }
+
+        return raiseAndActivate(
+            entry,
+            app: app,
+            axWindow: axWindow,
+            activateApplicationFirst: plan != .raiseInPlace
+        )
     }
 
     /// Put this window in front of everything else, without treating it as a switch.
@@ -158,28 +195,39 @@ final class ActivationService {
         if app.isHidden {
             app.unhide()
         }
-        guard canUseAccessibility, let axWindow = entry.axElement else {
+        guard canUseAccessibility, let axWindow = registry.resolveAXElement(for: entry) else {
             app.activate()
             return false
         }
-        return raiseAndActivate(entry, app: app, axWindow: axWindow)
+        return raiseAndActivate(entry, app: app, axWindow: axWindow, activateApplicationFirst: false)
     }
 
-    /// Raise the window within its application, then activate the application.
+    /// Raise the window within its application and activate the application.
     ///
-    /// Raise first: activating first produces a flicker of whichever window the app
-    /// already had in front. A rejected `AXRaise` is not a failed switch — plenty of
-    /// applications decline it on a window that is already frontmost, or manage their
-    /// own ordering, and still come forward from `app.activate()`.
+    /// Raise first when the window is already on this desktop: activating first
+    /// produces a flicker of whichever window the app already had in front.
+    /// Activate first when it is not — raising an off-Space window while the app
+    /// is in the background does not switch desktops, which is the measured
+    /// failure for Chrome tabs and the same path a moved Claude window takes.
+    ///
+    /// A rejected `AXRaise` is not a failed switch — plenty of applications
+    /// decline it on a window that is already frontmost, or manage their own
+    /// ordering, and still come forward from `app.activate()`.
     private func raiseAndActivate(
         _ entry: WindowEntry,
         app: NSRunningApplication,
-        axWindow: AXUIElement
+        axWindow: AXUIElement,
+        activateApplicationFirst: Bool
     ) -> Bool {
+        if activateApplicationFirst {
+            app.activate()
+        }
         let raised = AXBridge.perform(axWindow, kAXRaiseAction as String)
         AXBridge.setBool(axWindow, kAXMainAttribute as String, true)
         AXBridge.setBool(axWindow, kAXFocusedAttribute as String, true)
-        app.activate()
+        if !activateApplicationFirst {
+            app.activate()
+        }
         if !raised {
             Log.activation.debug("""
                 AXRaise declined by \(entry.applicationName, privacy: .public); \
@@ -187,6 +235,13 @@ final class ActivationService {
                 """)
         }
         return raised
+    }
+
+    private func currentFrame(of element: AXUIElement) -> CGRect? {
+        guard let origin = AXBridge.point(element, kAXPositionAttribute as String),
+              let size = AXBridge.size(element, kAXSizeAttribute as String)
+        else { return nil }
+        return CGRect(origin: origin, size: size)
     }
 
     /// Close a window from the switcher, without switching to it.
@@ -203,12 +258,8 @@ final class ActivationService {
         // Tabs and installed-app search results are not windows and never receive this
         // affordance, so reaching either target kind here is always a programming error.
         guard entry.isWindow else { throw Failure.notClosable }
-        guard canUseAccessibility, let axWindow = entry.axElement else {
+        guard canUseAccessibility, let axWindow = registry.resolveAXElement(for: entry) else {
             throw Failure.notClosable
-        }
-        guard registry.windowStillExists(entry) else {
-            registry.invalidateCache(for: entry.processID)
-            throw Failure.windowGone
         }
         guard let button = AXBridge.element(axWindow, kAXCloseButtonAttribute as String) else {
             throw Failure.notClosable
@@ -227,6 +278,6 @@ final class ActivationService {
     /// one are rare, and the failure is handled: the press throws `notClosable` and the
     /// card stays put.
     func canAttemptClose(_ entry: WindowEntry, canUseAccessibility: Bool) -> Bool {
-        entry.isWindow && canUseAccessibility && entry.axElement != nil
+        entry.isWindow && canUseAccessibility && registry.resolveAXElement(for: entry) != nil
     }
 }

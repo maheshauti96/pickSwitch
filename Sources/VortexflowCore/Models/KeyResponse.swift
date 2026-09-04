@@ -222,4 +222,24 @@ enum KeyResponse: Equatable, Sendable {
         guard let characters, WindowSearch.isSearchable(characters) else { return .passThrough }
         return .typeIntoSearch(characters)
     }
+
+    /// The registered shortcut, pressed while the overlay is hidden.
+    ///
+    /// Carbon is silent during another application's menu tracking. The HID tap is the
+    /// fallback, and it must not use `forKeyDown` — that path is written for an overlay
+    /// that is already up, and would consume Escape, Return, arrows and typing
+    /// system-wide. This only matches the actual chord (or a modifier that was just
+    /// seen, for mouse software that injects the key bare).
+    static func matchesGlobalShortcut(
+        keyCode: Int64,
+        activeModifiers: CGEventFlags,
+        shortcutKeyCode: Int64?,
+        shortcutModifiers: CGEventFlags,
+        shortcutModifiersRecentlyHeld: Bool
+    ) -> Bool {
+        guard let shortcutKeyCode, keyCode == shortcutKeyCode else { return false }
+        if shortcutModifiers.isEmpty { return true }
+        if activeModifiers.isSuperset(of: shortcutModifiers) { return true }
+        return shortcutModifiersRecentlyHeld
+    }
 }

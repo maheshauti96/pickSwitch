@@ -529,11 +529,81 @@ final class WindowRegistry: @unchecked Sendable {
         return rememberedWindows[windowID]?.axElement
     }
 
+    /// A handle that still answers, even if the snapshot one died after a display move.
+    ///
+    /// Electron apps (Claude, Chrome) often replace the window when it changes
+    /// screens. The card still names the old `CGWindowID`; the raise has to find
+    /// whatever Accessibility now has for that process.
+    func resolveAXElement(for entry: WindowEntry) -> AXUIElement? {
+        if let snapshot = entry.axElement, isLive(snapshot) {
+            return snapshot
+        }
+        if let remembered = axElement(for: entry.windowID), isLive(remembered) {
+            return remembered
+        }
+        return liveAXElement(
+            processID: entry.processID,
+            windowID: entry.windowID,
+            title: entry.title,
+            frame: entry.frame
+        )
+    }
+
     /// True when the target window still exists (Requirement 7.7, 7.8).
     func windowStillExists(_ entry: WindowEntry) -> Bool {
-        guard let axElement = entry.axElement else { return false }
-        // Any successful attribute read proves the element is still live.
-        return AXBridge.copyAttribute(axElement, kAXRoleAttribute as String) != nil
+        resolveAXElement(for: entry) != nil
+    }
+
+    private func isLive(_ element: AXUIElement) -> Bool {
+        AXBridge.copyAttribute(element, kAXRoleAttribute as String) != nil
+    }
+
+    /// Walk the application's current window list. Other-Space windows are absent
+    /// from it; those still have to come from the remembered handle above.
+    private func liveAXElement(
+        processID: pid_t,
+        windowID: CGWindowID,
+        title: String,
+        frame: CGRect
+    ) -> AXUIElement? {
+        let app = applicationElement(for: processID)
+        guard let windows = AXBridge.elements(app, kAXWindowsAttribute as String) else {
+            return nil
+        }
+
+        if let match = windows.first(where: { AXBridge.windowID(for: $0) == windowID }) {
+            return match
+        }
+
+        let switchable = windows.filter(isSwitchable)
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            let titled = switchable.filter {
+                (AXBridge.string($0, kAXTitleAttribute as String) ?? "") == trimmed
+            }
+            if titled.count == 1 {
+                return titled[0]
+            }
+            if titled.count > 1 {
+                return titled.min { lhs, rhs in
+                    frameDistance(lhs, to: frame) < frameDistance(rhs, to: frame)
+                }
+            }
+        }
+
+        if switchable.count == 1 {
+            return switchable[0]
+        }
+        return nil
+    }
+
+    private func frameDistance(_ element: AXUIElement, to target: CGRect) -> CGFloat {
+        let origin = AXBridge.point(element, kAXPositionAttribute as String) ?? .zero
+        let size = AXBridge.size(element, kAXSizeAttribute as String) ?? .zero
+        let frame = CGRect(origin: origin, size: size)
+        let dx = frame.midX - target.midX
+        let dy = frame.midY - target.midY
+        return dx * dx + dy * dy
     }
 
     // MARK: - Z-order

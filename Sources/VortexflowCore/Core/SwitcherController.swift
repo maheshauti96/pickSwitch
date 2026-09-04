@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Coordinates a single switch: trigger in, window activated out.
 ///
@@ -150,6 +151,10 @@ public final class SwitcherController {
     /// opposite order to the one they performed them in, and the observed gap was 3 ms.
     private static let spaceChangeGrace: TimeInterval = 1.0
     private var isPresenting = false
+    /// Incremented at the start of every `beginPresentation`. A finish whose attempt
+    /// is no longer current is discarded, so a second press can supersede a stuck
+    /// Chrome enumeration instead of being swallowed.
+    private var presentationAttempt: UInt64 = 0
     /// Set when the trigger comes up before enumeration finished, so a fast flick
     /// still switches instead of being swallowed.
     private var activateAsSoonAsReady = false
@@ -250,6 +255,9 @@ public final class SwitcherController {
         // opened.
         triggerMonitor.keyboardShortcut = settings.hotKeyShortcut
         triggerMonitor.logsAllHIDInput = settings.logsAllHIDInput
+        triggerMonitor.interruptTracking = { [weak self] in
+            self?.openContextMenu?.cancelTracking()
+        }
 
         // Requirement 5.14 / 10.9: no tap means hotkey-only, not a dead app.
         let tapInstalled = triggerMonitor.install()
@@ -470,15 +478,6 @@ public final class SwitcherController {
     // MARK: - Presentation
 
     private func beginPresentation(mode: PresentationMode) {
-        // Both refusals below are logged, and that is not noise. "The switcher did not open" was
-        // reported with nothing in the log to say why, because every reason it declines to open was
-        // silent — so the report could not be told apart from a trigger that never arrived, a
-        // presentation that opened and was dismissed again, or a genuine refusal.
-        guard !isPresenting else {
-            Log.overlay.info("trigger ignored: a presentation is already in flight")
-            return
-        }
-
         // A press arriving while the overlay is up never reaches here: `TriggerResponse` has
         // already turned it into a commit, a dismissal or nothing at all.
         guard !state.isVisible else {
@@ -486,15 +485,16 @@ public final class SwitcherController {
             return
         }
 
-        // Cancel a dismissal-time request that is still in its grace period. Once its synchronous
-        // Apple Event has begun it cannot be cancelled safely; in that short interval, do not put
-        // the overlay underneath a possible Automation sheet.
+        // Cancel a dismissal-time request that is still in its grace period. The overlay
+        // still opens: waiting on Chrome's Automation prompt is how "it does not open
+        // on Chrome" happened. A first-time sheet may appear after we are already up.
         invalidateBrowserInspections()
-        guard !isBrowserAuthorizationInFlight else {
-            Log.registry.debug("browser authorization is in flight; deferring overlay presentation")
-            return
-        }
 
+        presentationAttempt &+= 1
+        let attempt = presentationAttempt
+        if isPresenting {
+            Log.overlay.info("superseding an in-flight presentation")
+        }
         isPresenting = true
         invalidateBrowserTabLoad()
         pendingSearchConfirmation = nil
@@ -574,7 +574,8 @@ public final class SwitcherController {
                         reduceMotion: reduceMotion,
                         tintWindows: tintWindows,
                         increaseContrast: increaseContrast,
-                        stopwatch: stopwatch
+                        stopwatch: stopwatch,
+                        attempt: attempt
                     )
                 }
             }
@@ -596,9 +597,18 @@ public final class SwitcherController {
         reduceMotion: Bool,
         tintWindows: Bool,
         increaseContrast: Bool,
-        stopwatch: Stopwatch
+        stopwatch: Stopwatch,
+        attempt: UInt64
     ) {
-        defer { isPresenting = false }
+        defer {
+            if presentationAttempt == attempt {
+                isPresenting = false
+            }
+        }
+        guard presentationAttempt == attempt else {
+            Log.overlay.debug("stale presentation discarded")
+            return
+        }
         guard let panel else { return }
 
         mruTracker.prune(livingWindowIDs: Set(enumerated.map(\.windowID)))
@@ -620,7 +630,10 @@ public final class SwitcherController {
         state.viewMode = viewMode
         state.displayLayout = displayLayout
         state.canCloseWindows = permissions.accessibilityGranted
-        state.isCloseButtonHovered = false
+        state.hoveredCloseButtonIndex = nil
+        state.draggingSlot = nil
+        state.hoveredSlot = nil
+        refreshSlotIcons()
         state.load(
             entries: ordered.resting,
             // Everything found, so a window the history depth kept out of the resting view is still
@@ -1318,13 +1331,17 @@ public final class SwitcherController {
         do {
             let raisedExactWindow = try activation.activate(
                 entry,
-                canUseAccessibility: permissions.accessibilityGranted
+                canUseAccessibility: permissions.accessibilityGranted,
+                displayLayout: state.displayLayout,
+                lookingAt: lookingAtDisplay()
             )
             if !raisedExactWindow {
                 Log.activation.debug("activated app only for \(entry.applicationName, privacy: .public)")
             }
         } catch ActivationService.Failure.windowGone {
-            // Requirement 7.7, 7.8.
+            // Requirement 7.7, 7.8. The app-level fallback now lives inside
+            // `activate` for a window whose handle died; this is only reached if
+            // something still throws.
             Log.activation.info("target window vanished before activation; leaving focus alone")
             mruTracker.forget(windowID: entry.windowID)
         } catch ActivationService.Failure.applicationGone {
@@ -1537,6 +1554,12 @@ public final class SwitcherController {
     private func sampleHover() {
         guard state.isVisible, let panel, !state.entries.isEmpty else { return }
         let point = NSEvent.mouseLocation
+        let slot = shortcutSlot(atScreenPoint: point, panel: panel)
+        if state.hoveredSlot != slot { state.hoveredSlot = slot }
+        if let dragging = state.draggingSlot {
+            trackSlotDrag(from: dragging, at: point, panel: panel)
+            return
+        }
         let index = cardIndex(atScreenPoint: point, panel: panel)
 
         updateCloseButtonHover(at: point, panel: panel)
@@ -1563,9 +1586,9 @@ public final class SwitcherController {
         }
     }
 
-    /// Track whether the cursor is on the close affordance, so it can light up.
+    /// Track which close affordance the cursor is on, so that one can light up.
     private func updateCloseButtonHover(at point: CGPoint, panel: OverlayPanel) {
-        var isOnCloseButton = false
+        var hovered: Int?
 
         if panel.frame.contains(point) {
             let pointInPanel = CGPoint(
@@ -1576,13 +1599,14 @@ public final class SwitcherController {
                 atPanelPoint: pointInPanel,
                 scrollOffset: state.scrollOffset,
                 selectedScale: state.selectedScale
-            ), state.entries.indices.contains(index) {
-                isOnCloseButton = state.canClose(state.entries[index])
+            ), state.entries.indices.contains(index),
+               state.canClose(state.entries[index]) {
+                hovered = index
             }
         }
 
-        if state.isCloseButtonHovered != isOnCloseButton {
-            state.isCloseButtonHovered = isOnCloseButton
+        if state.hoveredCloseButtonIndex != hovered {
+            state.hoveredCloseButtonIndex = hovered
         }
     }
 
@@ -1608,6 +1632,10 @@ public final class SwitcherController {
         }
 
         guard state.isVisible, let panel else { return }
+        if let slot = shortcutSlot(atScreenPoint: point, panel: panel) {
+            showSlotMenu(slot, at: point)
+            return
+        }
         guard let index = cardIndex(atScreenPoint: point, panel: panel),
               index < state.entries.count
         else {
@@ -2187,8 +2215,8 @@ public final class SwitcherController {
             selectedScale: state.selectedScale
         ) {
         case .close(let index):
-            // No button is drawn for a window that cannot be closed, so a click there
-            // means the card, not the affordance.
+            // No button is drawn for a window that cannot be closed, so a click in
+            // that corner means the card, not the affordance.
             guard state.entries.indices.contains(index),
                   state.canClose(state.entries[index]) else {
                 state.setSelection(index)
@@ -2209,6 +2237,10 @@ public final class SwitcherController {
             commitSelection()
             return true
 
+        case .shortcutSlot(let slot):
+            pressShortcutSlot(slot)
+            return true
+
         case .confirmSelection:
             // The list and radial styles preview the selected window at size. A click
             // there means "this one", not "never mind".
@@ -2223,6 +2255,156 @@ public final class SwitcherController {
             // application underneath.
             dismiss(activating: nil)
             return true
+        }
+    }
+
+    // MARK: - Pinned shortcut slots
+
+    private func shortcutSlot(atScreenPoint point: CGPoint, panel: OverlayPanel) -> Int? {
+        state.layout.shortcutSlot(
+            atPanelPoint: CGPoint(x: point.x - panel.frame.minX, y: point.y - panel.frame.minY)
+        )
+    }
+
+    /// The empty slot asks what to pin. A pin waits for the release: on itself it runs, on
+    /// another slot it moves there. The 60 Hz hover sampler watches for the release, because
+    /// the overlay tap never sees mouse-up.
+    private func pressShortcutSlot(_ slot: Int) {
+        if state.pinnedShortcut(inSlot: slot) == nil {
+            showSlotMenu(slot, at: NSEvent.mouseLocation)
+        } else {
+            state.draggingSlot = slot
+        }
+    }
+
+    private func trackSlotDrag(from slot: Int, at point: CGPoint, panel: OverlayPanel) {
+        guard NSEvent.pressedMouseButtons & 1 == 0 else { return }
+        state.draggingSlot = nil
+        guard let shortcut = state.pinnedShortcut(inSlot: slot) else { return }
+        let target = shortcutSlot(atScreenPoint: point, panel: panel)
+        if let target, target != slot {
+            // A move, not a swap: dropping on the empty slot sends the pin to the end.
+            state.pinnedShortcuts.remove(at: slot)
+            state.pinnedShortcuts.insert(shortcut, at: min(target, state.pinnedShortcuts.count))
+            PinnedShortcut.save(state.pinnedShortcuts)
+        } else if target == slot {
+            Log.overlay.info("running pinned shortcut \(shortcut.title, privacy: .public)")
+            dismiss(activating: nil)
+            shortcut.perform()
+        }
+    }
+
+    /// Both the empty-slot click and the right-click land here; the same tracking flags the
+    /// card menu uses keep the tap from swallowing the click that picks an item.
+    private func showSlotMenu(_ slot: Int, at point: CGPoint) {
+        if !state.isPersistent {
+            presentationMode = .toggle
+            state.isPersistent = true
+            activateAsSoonAsReady = false
+        }
+        let menu = NSMenu()
+        var actions: [MenuAction] = []
+        func add(_ title: String, _ run: @escaping @MainActor () -> Void) {
+            let action = MenuAction(run)
+            actions.append(action)
+            menu.addItem(withTitle: title, action: #selector(MenuAction.fire), keyEquivalent: "").target = action
+        }
+        let pinned = state.pinnedShortcut(inSlot: slot)
+        if let pinned {
+            add("Open \(pinned.title)") {
+                self.dismiss(activating: nil)
+                pinned.perform()
+            }
+            add("Remove") {
+                self.state.pinnedShortcuts.remove(at: slot)
+                PinnedShortcut.save(self.state.pinnedShortcuts)
+            }
+            menu.addItem(.separator())
+        }
+        let verb = pinned == nil ? "Pin" : "Replace with"
+        add("\(verb) Link…") { self.assignSlot(slot, using: self.askForLink) }
+        add("\(verb) App…") { self.assignSlot(slot, using: self.askForApp) }
+        add("\(verb) Keyboard Shortcut…") { self.assignSlot(slot, using: self.askForKeys) }
+        // Five pins fill the first turn and hide the plus. This is how a sixth one starts —
+        // the inner turn only appears once it has something to show.
+        if pinned != nil,
+           state.pinnedShortcuts.count >= PinnedShortcut.firstLayerCount,
+           state.pinnedShortcuts.count < PinnedShortcut.slotCount {
+            menu.addItem(.separator())
+            let next = state.pinnedShortcuts.count
+            add("Add Link…") { self.assignSlot(next, using: self.askForLink) }
+            add("Add App…") { self.assignSlot(next, using: self.askForApp) }
+            add("Add Keyboard Shortcut…") { self.assignSlot(next, using: self.askForKeys) }
+        }
+        isShowingContextMenu = true
+        triggerMonitor.contextMenuIsTracking = true
+        openContextMenu = menu
+        defer {
+            isShowingContextMenu = false
+            triggerMonitor.contextMenuIsTracking = false
+            if openContextMenu === menu { openContextMenu = nil }
+        }
+        menu.popUp(positioning: nil, at: point, in: nil)
+        withExtendedLifetime(actions) {}
+    }
+
+    /// The overlay comes down first: its panel cannot take key focus, and its tap would treat
+    /// a click on the dialog as a click outside.
+    private func assignSlot(_ slot: Int, using ask: @escaping @MainActor () -> PinnedShortcut?) {
+        dismiss(activating: nil)
+        Task { @MainActor in
+            NSApp.activate(ignoringOtherApps: true)
+            guard let shortcut = ask() else { return }
+            if state.pinnedShortcuts.indices.contains(slot) {
+                state.pinnedShortcuts[slot] = shortcut
+            } else if state.pinnedShortcuts.count < PinnedShortcut.slotCount {
+                state.pinnedShortcuts.append(shortcut)
+            }
+            PinnedShortcut.save(state.pinnedShortcuts)
+        }
+    }
+
+    private func askForLink() -> PinnedShortcut? {
+        let field = PinLinkField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        field.placeholderString = "https://"
+        guard runPinDialog("Pin a link", "Opens in your default browser.", accessory: field) else { return nil }
+        var text = field.stringValue.trimmingCharacters(in: .whitespaces)
+        if !text.contains("://") { text = "https://" + text }
+        return URL(string: text).flatMap { $0.host == nil ? nil : .link($0) }
+    }
+
+    private func askForApp() -> PinnedShortcut? {
+        let panel = NSOpenPanel()
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.prompt = "Pin"
+        return panel.runModal() == .OK ? panel.url.map(PinnedShortcut.app) : nil
+    }
+
+    private func askForKeys() -> PinnedShortcut? {
+        let field = ShortcutCaptureField(frame: NSRect(x: 0, y: 0, width: 300, height: 28))
+        let hint = "Press the keys now. They are sent to the front window when you click the slot."
+        guard runPinDialog("Pin a keyboard shortcut", hint, accessory: field) else { return nil }
+        return field.captured.map(PinnedShortcut.keys)
+    }
+
+    private func runPinDialog(_ title: String, _ hint: String, accessory: NSView) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = hint
+        alert.accessoryView = accessory
+        alert.addButton(withTitle: "Pin")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = accessory
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func refreshSlotIcons() {
+        for case .link(let url) in state.pinnedShortcuts where state.slotIcons[url] == nil {
+            Task { [weak self] in
+                guard let image = await self?.browserFavicons.favicon(for: url.absoluteString) else { return }
+                self?.state.slotIcons[url] = NSImage(cgImage: image, size: .zero)
+            }
         }
     }
 
@@ -2353,13 +2535,40 @@ public final class SwitcherController {
 
     /// One entry point for both triggers, differing only where they should.
     private func handlePress(from source: TriggerSource) {
+        if isShowingContextMenu {
+            openContextMenu?.cancelTracking()
+        }
+        if source == .keyboardShortcut {
+            hotKeyMonitor.noteArrival()
+        }
+
+        let onScreen = OverlayPresence.isOnScreen(
+            stateVisible: state.isVisible,
+            panelVisible: panel?.isVisible ?? false,
+            frame: panel?.frame ?? .zero,
+            isRevealed: state.isRevealed
+        )
+
+        // A leftover `isVisible` with nothing on screen used to make the shortcut
+        // *close* an overlay the user could not see. Repair, then open.
+        if state.isVisible && !onScreen {
+            Log.overlay.info("overlay flag was leftover; repairing and opening")
+            dismiss(activating: nil)
+            suppressTriggerUntil = nil
+            beginPresentation(mode: .hold)
+            return
+        }
+
         switch TriggerResponse.forPress(
             from: source,
-            overlayVisible: state.isVisible,
+            overlayVisible: onScreen,
             mode: presentationMode
         ) {
         case .open:
-            guard !isTriggerSuppressed else {
+            if TriggerOpenGate.shouldIgnoreDuplicate(
+                source: source,
+                recentlyDismissed: isTriggerSuppressed
+            ) {
                 Log.trigger.debug("ignoring trigger press immediately after a dismissal")
                 return
             }
@@ -2380,6 +2589,7 @@ public final class SwitcherController {
             // stuck state was indistinguishable from a trigger that never arrived.
             Log.trigger.info("""
                 trigger press ignored: overlay visible=\(self.state.isVisible, privacy: .public), \
+                onScreen=\(onScreen, privacy: .public), \
                 mode=\(String(describing: self.presentationMode), privacy: .public), \
                 presenting=\(self.isPresenting, privacy: .public), \
                 menuTracking=\(self.isShowingContextMenu, privacy: .public)

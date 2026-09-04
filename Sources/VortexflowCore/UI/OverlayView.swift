@@ -237,12 +237,11 @@ struct OverlayView: View {
         .position(x: card.frame.midX, y: card.frame.midY)
     }
 
-    /// The close affordance, on the selected card only.
+    /// The close affordance, on the selected card only — which is the card under the
+    /// pointer, because hover drives selection.
     ///
     /// Drawn from the layout's rectangle rather than as an overlay inside the card, so
     /// that what is on screen and what the click handler tests are the same geometry.
-    /// Restricting it to the selected card is what keeps those two in step: hover drives
-    /// selection, so the selected card is the one under the cursor.
     @ViewBuilder
     private func closeButton(for positioned: OverlayLayout.PositionedCard) -> some View {
         let entry = state.entries[positioned.index]
@@ -250,7 +249,7 @@ struct OverlayView: View {
         if positioned.index == state.selectedIndex, state.canClose(entry) {
             let frame = layout.closeButtonFrame(for: positioned, selectedScale: state.selectedScale)
 
-            CloseButtonView(isActive: state.isCloseButtonHovered)
+            CloseButtonView(isActive: state.hoveredCloseButtonIndex == positioned.index)
                 .zIndex(2)
                 .position(x: frame.midX, y: frame.midY)
         }
@@ -354,6 +353,37 @@ struct OverlayView: View {
             }
             .zIndex(1)
 
+            // The inner turn: pinned shortcuts in the seam. Below the hub layers so the halo
+            // stays on top, and it enters the way the wedges do — blooming out from the hub.
+            ForEach(layout.shortcutSlots, id: \.offset) { tile in
+                let slot = tile.offset
+                let shortcut = state.pinnedShortcut(inSlot: slot)
+                ShortcutTileView(
+                    shortcut: shortcut,
+                    favicon: { if case .link(let url) = shortcut { return state.slotIcons[url] }; return nil }(),
+                    seat: tile,
+                    centre: layout.radialCentre,
+                    panelSize: layout.panelSize,
+                    scale: layout.radialScale,
+                    isHovered: state.hoveredSlot == slot && state.draggingSlot == nil,
+                    isDragging: state.draggingSlot == slot,
+                    isDropTarget: state.draggingSlot != nil && state.draggingSlot != slot && state.hoveredSlot == slot
+                )
+                .opacity(state.isRevealed ? 1 : 0)
+                .scaleEffect(state.isRevealed ? 1 : OverlayReveal.initialScale, anchor: revealAnchor)
+                .animation(hubRevealAnimation?.delay(0.03 * Double(slot)), value: state.isRevealed)
+            }
+            .zIndex(1.5)
+
+            if let plus = layout.shortcutPlusFrame {
+                ShortcutPlusView(
+                    frame: plus,
+                    isHovered: state.hoveredSlot == state.pinnedShortcuts.count && state.draggingSlot == nil
+                )
+                .opacity(state.isRevealed ? 1 : 0)
+                .animation(hubRevealAnimation, value: state.isRevealed)
+            }
+
             HubRing(
                 frame: layout.radialHubFrame,
                 ambience: hubAmbience,
@@ -395,6 +425,9 @@ struct OverlayView: View {
             }
 
             hubCaption
+                // Cross-fades the window caption and a slot caption as the pointer moves between
+                // the ring and the seam, the same way one window's caption fades into another's.
+                .animation(captionChangeAnimation, value: state.hoveredSlot)
                 .zIndex(5)
 
             // Drawn last so it sits above the wedge it belongs to.
@@ -500,7 +533,10 @@ struct OverlayView: View {
     /// With nothing selected it disappears entirely and the middle really is a hole.
     @ViewBuilder
     private var hubCaption: some View {
-        if let entry = state.selectedEntry {
+        if let slot = state.hoveredSlot,
+           slot == state.pinnedShortcuts.count || layout.shortcutSlots.indices.contains(slot) {
+            slotCaption(for: state.pinnedShortcut(inSlot: slot))
+        } else if let entry = state.selectedEntry {
             let frame = layout.radialHubFrame
 
             // Sizes, line counts and how far each line may shrink all come from `HubTypography`,
@@ -616,6 +652,38 @@ struct OverlayView: View {
             .animation(hubRevealAnimation, value: state.isRevealed)
             .position(x: frame.midX, y: frame.midY)
         }
+    }
+
+    /// The hub answering for a slot instead of a window while the pointer is on one.
+    ///
+    /// The slots are the only thing on the ring that carries no label, and the hub is already
+    /// where "what is under my pointer" is answered. The third line doubles as the only
+    /// instruction the feature has: nobody has to guess what the plus does or that pins move.
+    private func slotCaption(for shortcut: PinnedShortcut?) -> some View {
+        let frame = layout.radialHubFrame
+        let scale = layout.radialScale
+        let type = HubTypography(radialScale: scale)
+        return VStack(spacing: 3 * scale) {
+            Text(shortcut?.kindLabel ?? "Empty slot")
+                .font(.system(size: type.sourceSize, weight: .medium))
+                .lineLimit(1)
+                .foregroundStyle(palette.hubSecondaryText)
+            Text(shortcut?.title ?? "Pin a link, app or shortcut")
+                .font(.system(size: type.titleSize, weight: .semibold))
+                .lineLimit(type.titleLines)
+                .minimumScaleFactor(type.titleMinimumScale)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(palette.text)
+            Text(shortcut == nil ? "Click to choose" : "Click to open · drag to reorder")
+                .font(.system(size: type.statusSize, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(type.statusMinimumScale)
+                .foregroundStyle(palette.hubSecondaryText)
+        }
+        .padding(.horizontal, 14 * scale)
+        .frame(width: frame.width * HubChrome.wellOpaqueFraction)
+        .frame(width: frame.width, height: frame.height)
+        .position(x: frame.midX, y: frame.midY)
     }
 
     // MARK: - Selected window

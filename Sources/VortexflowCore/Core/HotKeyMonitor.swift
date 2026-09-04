@@ -146,6 +146,18 @@ final class HotKeyMonitor {
         return true
     }
 
+    /// The HID tap delivered the shortcut, so Settings should stop saying it has
+    /// never fired — even when Carbon stayed silent because a menu was tracking.
+    ///
+    /// Does not stamp a press time. Carbon's hold-to-switch clock is only meaningful
+    /// when Carbon itself saw the down; mixing the two would skew a real Carbon hold.
+    func noteArrival() {
+        if !hasEverFired {
+            hasEverFired = true
+            Log.trigger.info("global hotkey fired for the first time; the shortcut is reaching VortexFlow")
+        }
+    }
+
     private func recordFiring() {
         pressTimestamp = DispatchTime.now()
         if !hasEverFired {
