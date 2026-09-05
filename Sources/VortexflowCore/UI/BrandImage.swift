@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The VortexFlow colour mark, loaded from the same files the website brand pack produced.
 ///
-/// In-app chrome uses the four-colour ring on a clear field. The white squircle
+/// In-app chrome uses the three-colour spiral on a clear field. The dark squircle
 /// is the Finder / Dock icon only — it is a plate, and windows already have one.
 ///
 /// Looked up in `Bundle.main` first (the assembled `.app`) and `Bundle.module`
