@@ -48,6 +48,7 @@
   const RING_INSET = 7;
   const MINT = '#7ee8d0';
   const SEL_FILL = '#c5e8df';
+  const GLASS = window.VortexGlass;
 
   function contentSize() {
     const innerMid = FIRST_RING + RING_THICKNESS / 2;
@@ -229,6 +230,7 @@
     }
 
     connectedCallback() {
+      this._observeGlass();
       if (this.hasAttribute('managed')) { this.setAttribute('tabindex', '0'); return; }
       const scene = SCENES[this.getAttribute('scene')] || null;
       let items = scene ? scene.items : DEFAULT_ITEMS;
@@ -281,6 +283,62 @@
       cancelAnimationFrame(this._raf);
       clearTimeout(this._typeTimer);
       if (this._io) this._io.disconnect();
+      cancelAnimationFrame(this._glassRAF);
+      this._glassObserver?.disconnect();
+      this._glassObserver = null;
+      document.removeEventListener('visibilitychange', this._glassVisibility);
+    }
+
+    setAppearance(appearance) {
+      this.setAttribute('appearance', appearance === 'dark' ? 'dark' : 'light');
+    }
+
+    setAmbientPaused(paused) {
+      this._ambientPaused = Boolean(paused);
+      this._syncGlassMotion();
+    }
+
+    _observeGlass() {
+      if (!this.hasAttribute('glass') || !GLASS || this._glassObserver) return;
+      this._glassVisible = false;
+      this._glassVisibility = () => this._syncGlassMotion();
+      document.addEventListener('visibilitychange', this._glassVisibility);
+      this._glassObserver = new IntersectionObserver((entries) => {
+        this._glassVisible = entries.some((entry) => entry.isIntersecting);
+        this._syncGlassMotion();
+      }, { threshold: .01 });
+      this._glassObserver.observe(this);
+    }
+
+    _syncGlassMotion() {
+      if (!this.hasAttribute('glass') || !GLASS) return;
+      cancelAnimationFrame(this._glassRAF);
+      this._glassRAF = null;
+      const running = Boolean(this._liquidPath) && GLASS.shouldAnimate({ connected: this.isConnected,
+        visible: this._glassVisible, hidden: document.hidden, reduced: this._reduced, paused: this._ambientPaused });
+      this.dataset.glassMotion = running ? 'running' : this._reduced ? 'reduced' : 'paused';
+      if (!running) { this._drawGlass(GLASS.resting); return; }
+      this._glassLast = 0;
+      const frame = (now) => {
+        if (now - this._glassLast >= GLASS.frameInterval) {
+          this._glassLast = now;
+          this._drawGlass(GLASS.sample(now / 1000));
+        }
+        this._glassRAF = requestAnimationFrame(frame);
+      };
+      this._glassRAF = requestAnimationFrame(frame);
+    }
+
+    _drawGlass(motion) {
+      if (!this._liquidPath) return;
+      this._liquidPath.setAttribute('d', GLASS.contour(HUB_RADIUS - RING_INSET, motion));
+      this.style.setProperty('--glass-energy', motion.energy.toFixed(3));
+      this._liquidSheen?.setAttribute('stroke-dashoffset', String(-motion.phase / (Math.PI * 2) * 100));
+    }
+
+    _setGlassGlow(color) {
+      if (!this.hasAttribute('glass')) return;
+      this.style.setProperty('--glass-glow', color);
     }
 
     // The scene controller owns timing. The renderer never navigates or sends a query.
@@ -363,6 +421,7 @@
       this._reduced = Boolean(reduced);
       this.toggleAttribute('reduce-motion', this._reduced);
       if (this._reduced) this.stopMotion();
+      this._syncGlassMotion();
     }
 
     setQueryText(query, visible = true) {
@@ -406,7 +465,8 @@
       this._hubK.style.display = '';
       this._hubS.style.display = '';
       this.shadowRoot.querySelector('.hub-ring')?.setAttribute('stroke', '#eef5ef');
-      if (this.hasAttribute('story')) this._hub.style.boxShadow = '0 0 28px 4px #f0fff03d, inset 0 0 18px #ffffff88';
+      this._setGlassGlow('#d3f3e7');
+      if (this.hasAttribute('story') && !this.hasAttribute('glass')) this._hub.style.boxShadow = '0 0 28px 4px #f0fff03d, inset 0 0 18px #ffffff88';
       if (this._coupling) this._coupling.setAttribute('d', '');
       if (announce) {
         this._sr.textContent = (pin.kind || 'Pinned shortcut') + ', ' + pin.title;
@@ -479,6 +539,7 @@
     _build() {
       const items = this._items;
       const N = items.length;
+      const glassMode = this.hasAttribute('glass') && Boolean(GLASS);
       const seats = Array.from({ length: N }, (_, i) => seatOf(i, this._winding));
       this._geo = seats;
       this._aim = (seats[Math.min(this._prefer, N - 1)] || seats[0]).midA * R2D + this._angle;
@@ -504,6 +565,8 @@
           <feGaussianBlur in="SourceGraphic" stdDeviation="1.1" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
+        <filter id="vx-liquid-shoulder" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
+        <filter id="vx-liquid-halo" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="11"/></filter>
         <linearGradient id="vx-preview-g" x1="18" y1="14" x2="46" y2="50" gradientUnits="userSpaceOnUse">
           <stop stop-color="#7ae0ff"/><stop offset=".35" stop-color="#7b5cff"/>
           <stop offset=".7" stop-color="#ff5ad5"/><stop offset="1" stop-color="#ffb24a"/>
@@ -534,26 +597,28 @@
           <path d="M14 56c2-12 10-18 18-18s16 6 18 18" fill="#3a3a38"/>
         </symbol>
         <symbol id="vx-search" viewBox="0 0 64 64">
-          <circle cx="29" cy="29" r="13.5" fill="none" stroke="#1c1c1e" stroke-width="3.6"/>
-          <path d="M39 39l14 14" fill="none" stroke="#1c1c1e" stroke-width="3.6" stroke-linecap="round"/>
+          <circle cx="29" cy="29" r="13.5" fill="none" stroke="currentColor" stroke-width="3.6"/>
+          <path d="M39 39l14 14" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/>
         </symbol>
         <symbol id="vx-open" viewBox="0 0 64 64">
-          <rect x="12" y="12" width="40" height="40" rx="9" fill="none" stroke="#1c1c1e" stroke-width="3.2"/>
-          <path d="M28 24h12v12M26 38l14-14" fill="none" stroke="#1c1c1e" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="12" y="12" width="40" height="40" rx="9" fill="none" stroke="currentColor" stroke-width="3.2"/>
+          <path d="M28 24h12v12M26 38l14-14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
         </symbol>
         <symbol id="vx-grok" viewBox="0 0 64 64">
           <rect width="64" height="64" rx="12" fill="#111"/>
           <path d="M18 44c10-22 26-28 32-16" fill="none" stroke="#f3f3f3" stroke-width="5" stroke-linecap="round"/>
           <ellipse cx="30" cy="34" rx="11" ry="13" transform="rotate(-34 30 34)" fill="none" stroke="#f3f3f3" stroke-width="4"/>
         </symbol>`;
+      if (glassMode) defs += `<path id="vx-liquid-contour" d="${GLASS.contour(HUB_RADIUS - RING_INSET, GLASS.resting)}" pathLength="100"/>`;
 
       const wedges = [];
       for (let k = 0; k < N; k++) {
         const it = items[k];
         const s = seats[k];
+        const glassPalette = glassMode ? GLASS.palette(it.fill) : null;
         const d = wedgePath(s.inner, s.outer, s.start, s.end, CORNER);
         const innerHL = arcPath(s.inner + 2, s.start, s.end, CORNER, 1);
-        const outerHL = arcPath(s.outer - 1.6, s.end, s.start, CORNER, 1);
+        const outerHL = arcPath(s.outer - 1.6, s.end, s.start, CORNER, 0);
 
         defs += `<radialGradient id="vxg${k}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="${f3(s.outer)}" fr="${f3(s.inner)}">
           <stop offset="0" stop-color="#fff" stop-opacity=".42"/>
@@ -601,10 +666,11 @@
           : '';
 
         wedges.push(`
-      <g class="wedge" data-i="${k}" role="button" tabindex="-1" aria-label="${esc(this._itemLabel(it))}" style="--fill:${it.fill || '#ececec'};--sel:${it.sel || SEL_FILL}">
+      <g class="wedge" data-i="${k}" role="button" tabindex="-1" aria-label="${esc(this._itemLabel(it))}" style="--fill:${it.fill || '#ececec'};--sel:${it.sel || SEL_FILL}${glassPalette ? ';--glass-dark:' + glassPalette.dark + ';--glass-selected-dark:' + glassPalette.selectedDark + ';--glass-rim:' + glassPalette.rim : ''}">
         <path class="card" d="${d}"/>
         <path class="sel" d="${d}"/>
         <path class="glass" d="${d}" fill="url(#vxg${k})"/>
+        ${glassMode ? `<path class="glass-bevel" d="${d}"/>` : ''}
         <path class="rim-in" d="${innerHL}"/>
         <path class="rim-out" d="${outerHL}"/>
         <g class="content" data-i="${k}">
@@ -785,8 +851,61 @@
   :host([story]) .qcaret { display: none; }
   :host([story]) .close { display: none !important; }
   :host([story][reduce-motion]) *, :host([story][reduce-motion]) *::before { animation: none !important; transition: none !important; }
+  /* The same optical hierarchy as the Mac widget: translucent body, colored
+     shoulder, fine white bevel. Icons and captions remain independent of motion. */
+  :host([glass]) { --glass-ink: #222729; --glass-secondary: #485151; --glass-energy: .55; --glass-glow: #bcebdc; --glass-ambient: color-mix(in srgb, var(--glass-glow) 62%, white); }
+  :host([glass]) .wedge .card { fill-opacity: .68; stroke: #ffffffcc; stroke-width: 1.1; filter: drop-shadow(0 8px 10px #17242129); }
+  :host([glass]) .wedge .sel { fill-opacity: .70; }
+  :host([glass]) .wedge .glass { mix-blend-mode: screen; opacity: .65; }
+  :host([glass]) .glass-bevel { fill: none; stroke: #ffffffde; stroke-width: 1.4; pointer-events: none; }
+  :host([glass]) .wedge .rim-in { stroke: var(--glass-rim, #e6f6ef); stroke-width: 6; filter: blur(2.6px); opacity: .45; }
+  :host([glass]) .wedge .rim-out { stroke: #ffffffb3; stroke-width: 3.4; filter: blur(1.8px); }
+  :host([glass]) .wedge.on .rim-in { stroke: var(--glass-ambient); stroke-width: 9; filter: blur(3px); opacity: .65; }
+  :host([glass]) .wedge .lbl { fill: var(--glass-ink); stroke: none; font-weight: 530; }
+  :host([glass]) .ico-wrap { color: var(--glass-ink); }
+  :host([glass]) .hub { background: #eae8e4cc; border: none; box-shadow: none; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+  :host([glass]) .hub .t { color: var(--glass-ink); text-shadow: none; font-weight: 620; }
+  :host([glass]) .hub .k, :host([glass]) .hub .s { color: var(--glass-secondary); text-shadow: none; }
+  :host([glass]) .hub.pulse { animation: none; }
+  :host([glass]) .halo, :host([glass]) .hub-ring { display: none; }
+  .liquid-hub { pointer-events: none; fill: none; }
+  .liquid-hub use { stroke: var(--glass-ambient); }
+  .liquid-hub .liquid-halo { stroke-width: 22; opacity: calc(.22 + var(--glass-energy) * .2); filter: url(#vx-liquid-halo); }
+  .liquid-hub .liquid-shoulder { stroke-width: 10; opacity: calc(.26 + var(--glass-energy) * .22); filter: url(#vx-liquid-shoulder); }
+  .liquid-hub .liquid-core { stroke-width: 2.8; opacity: .9; filter: url(#vx-ring); }
+  .liquid-hub .liquid-crest { stroke: #fff; stroke-width: 1; opacity: .82; }
+  .liquid-hub .liquid-sheen { stroke: #fff; stroke-width: 2; stroke-dasharray: 14 86; opacity: .62; filter: url(#vx-ring); }
+  :host([glass]) .pin-card { fill: #f1f4ede0; stroke: #ffffffc7; stroke-width: 1.3; }
+  :host([glass]) .pin-seat text { fill: var(--glass-ink); }
+  :host([glass]) .qpill { background: #fafbf6e8; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid #fff9; }
+  :host([glass]) .qpill svg { stroke: currentColor; }
+  :host([glass][appearance="dark"]) { --glass-ink: #f4f7f5; --glass-secondary: #d0ddd7; --glass-ambient: var(--glass-glow); }
+  :host([glass][appearance="dark"]) .wedge .card { fill: var(--glass-dark, #19221f); fill-opacity: .82; stroke: #ffffff2e; filter: drop-shadow(0 8px 12px #0006); }
+  :host([glass][appearance="dark"]) .wedge .sel { fill: var(--glass-selected-dark, #224c46); fill-opacity: .75; }
+  :host([glass][appearance="dark"]) .wedge .glass { opacity: .70; }
+  :host([glass][appearance="dark"]) .glass-bevel { stroke: var(--glass-rim, #e6f6ef); opacity: .38; stroke-width: .85; }
+  :host([glass][appearance="dark"]) .wedge .rim-in { stroke-width: 9; filter: blur(4.2px); opacity: .85; }
+  :host([glass][appearance="dark"]) .wedge .rim-out { stroke: var(--glass-rim, #e6f6ef); stroke-width: 5; filter: blur(3px); opacity: .60; }
+  :host([glass][appearance="dark"]) .wedge.on .rim-in { stroke-width: 12; opacity: 1; }
+  :host([glass][appearance="dark"]) .hub { background: #080d0bbb; box-shadow: inset 0 0 24px #b8ddcd08; }
+  :host([glass][appearance="dark"]) .liquid-crest { opacity: .38; }
+  :host([glass][appearance="dark"]) .pin-card { fill: #1b2925dd; stroke: #d9f1e44d; }
+  :host([glass][appearance="dark"]) .pin-seat.on .pin-card { fill: #2b4e42; stroke: #c3edda; }
+  :host([glass][appearance="dark"]) .qpill { background: #17231ee8; color: #f0f5f1; border-color: #c4ddce4d; }
+  :host([glass][appearance="dark"]) .qinput { color: #f0f5f1; }
+  :host([glass][appearance="dark"]) .qinput::placeholder { color: #c5d2cb; }
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    :host([glass]) .wedge .card, :host([glass]) .wedge .sel, :host([glass]) .pin-card { fill-opacity: 1; }
+    :host([glass]) .hub, :host([glass]) .qpill { background: #f1f2ee; backdrop-filter: none; -webkit-backdrop-filter: none; }
+    :host([glass][appearance="dark"]) .hub, :host([glass][appearance="dark"]) .qpill { background: #101914; }
+  }
+  :host([glass][reduce-motion]) *, :host([glass][reduce-motion]) *::before { animation: none !important; transition: none !important; }
   @container (max-width: 420px) {
     :host([story]) .hub { font-size: 12px; }
+    :host([glass]:not([search])) .hub { font-size: clamp(8px,3cqi,10px); }
+    :host([glass]:not([search])) .hub .t { max-width: 94%; overflow-wrap: normal; }
+    :host([glass][search]) .stage { --lift: -8%; }
+    :host([glass][search]) .qpill { top: 8%; }
     :host([story][search]) .hub { font-size: 14px; }
     :host([story][search]) .hub .k { display: block; font-size: 10px; }
     :host([story][search]) .hub .t { max-width: 94%; font-size: 13px; overflow-wrap: normal; -webkit-line-clamp: 3; }
@@ -804,6 +923,13 @@
     <g class="orbit">${wedgeMarkup}<g class="coupling"><path d=""/></g></g>
     <circle class="hub-ring" r="${f3(HUB_RADIUS - RING_INSET)}" fill="none" stroke="#c8fff4" stroke-width="9" opacity=".4" filter="url(#vx-glow)"/>
     <circle class="hub-ring" r="${f3(HUB_RADIUS - RING_INSET)}" fill="none" stroke="#f4fffe" stroke-width="1.7" opacity=".95" filter="url(#vx-ring)"/>
+    ${glassMode ? `<g class="liquid-hub" aria-hidden="true">
+      <use class="liquid-halo" href="#vx-liquid-contour"/>
+      <use class="liquid-shoulder" href="#vx-liquid-contour"/>
+      <use class="liquid-core" href="#vx-liquid-contour"/>
+      <use class="liquid-crest" href="#vx-liquid-contour"/>
+      <use class="liquid-sheen" href="#vx-liquid-contour"/>
+    </g>` : ''}
   </svg>
   <div class="ring"></div>
   <div class="hub">
@@ -828,6 +954,8 @@
       this._contentEls = [...this.shadowRoot.querySelectorAll('.content')];
       this._uprightEls = [...this.shadowRoot.querySelectorAll('.upright')];
       this._hub = this.shadowRoot.querySelector('.hub');
+      this._liquidPath = this.shadowRoot.querySelector('#vx-liquid-contour');
+      this._liquidSheen = this.shadowRoot.querySelector('.liquid-sheen');
       this._hubK = this.shadowRoot.querySelector('.hub .k');
       this._hubT = this.shadowRoot.querySelector('.hub .t');
       this._hubS = this.shadowRoot.querySelector('.hub .s');
@@ -859,6 +987,7 @@
       cancelAnimationFrame(this._raf);
       this._raf = requestAnimationFrame(this._tick);
       this._drawCoupling();
+      this._syncGlassMotion();
     }
 
     playScene(name) {
@@ -1021,8 +1150,9 @@
       this._hubK.style.display = this._hubK.textContent ? '' : 'none';
       this._hubS.style.display = this._hubS.textContent ? '' : 'none';
       this._glow = it.glow || MINT;
+      this._setGlassGlow(it.glow || (GLASS ? GLASS.palette(it.fill).glow : MINT));
       this.shadowRoot.querySelector('.hub-ring')?.setAttribute('stroke', this._glow);
-      if (this.hasAttribute('story')) this._hub.style.boxShadow = '0 0 28px 4px ' + this._glow + '4d, inset 0 0 18px #ffffff88';
+      if (this.hasAttribute('story') && !this.hasAttribute('glass')) this._hub.style.boxShadow = '0 0 28px 4px ' + this._glow + '4d, inset 0 0 18px #ffffff88';
       if (this._coupling) this._coupling.parentElement.style.setProperty('--glow', this._glow);
       this._drawCoupling();
       if (announce) this.dispatchEvent(new CustomEvent('vortex-select', { detail: it, bubbles: true }));

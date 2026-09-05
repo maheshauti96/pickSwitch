@@ -30,15 +30,19 @@ struct HubWell: View {
     let backdropIcon: NSImage?
     let isRevealed: Bool
     let reduceMotion: Bool
+    var increaseContrast: Bool = false
 
     @Environment(\.overlayPalette) private var palette
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.overlayReduceTransparencyOverride) private var transparencyOverride
 
     var body: some View {
+        let opaque = increaseContrast || (transparencyOverride ?? systemReduceTransparency)
         let clearSide = frame.width * HubChrome.wellClearFraction
         let solidFraction = HubChrome.wellOpaqueFraction / HubChrome.wellClearFraction
         let scrim = palette.hubWellFill.opacity(
-            colorScheme == .dark ? HubChrome.wellScrimOpacityDark : HubChrome.wellScrimOpacityLight
+            opaque ? 1 : (colorScheme == .dark ? HubChrome.wellScrimOpacityDark : HubChrome.wellScrimOpacityLight)
         )
         // Matches `HubRing`'s stroke circle, so the bloom peaks exactly where the rim sits.
         let ringSide = frame.width - HubChrome.ringInset * 2
@@ -93,11 +97,14 @@ struct HubWell: View {
             //
             // What the type needs is not opacity, it is a bounded luminance *range*, and that is
             // `wellScrimOpacity` below.
-            FrostedDisc(material: .hudWindow, solidFraction: solidFraction)
-                .frame(width: clearSide, height: clearSide)
+            if !opaque {
+                FrostedDisc(material: .hudWindow, solidFraction: solidFraction)
+                    .frame(width: clearSide, height: clearSide)
+                    .opacity(colorScheme == .dark ? 0.36 : 0.70)
+            }
 
             // Between the blur and the scrim: the substrate shows through it, and the scrim caps it.
-            if let backdropIcon {
+            if let backdropIcon, !opaque {
                 HubBackdropIcon(frame: frame, icon: backdropIcon)
             }
 
@@ -181,6 +188,7 @@ struct HubWell: View {
                 // added to a bright wallpaper it was the single largest contributor to the rim
                 // clipping out to white.
                 .blendMode(.normal)
+                .opacity(opaque ? 0 : 1)
         }
         .frame(width: frame.width, height: frame.height)
         // No clip: cutting the blur at `hubRadius` is the inner circular outline
@@ -278,10 +286,17 @@ struct HubRingHalo: View {
     let angle: Double
     let isRevealed: Bool
     let reduceMotion: Bool
+    var isVisible: Bool = true
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        HubMotionView(animated: HubMotion.shouldAnimate(
+            isVisible: isVisible, isRevealed: isRevealed, reduceMotion: reduceMotion
+        )) { motion in halo(energy: motion.energy) }
+    }
+
+    private func halo(energy: Double) -> some View {
         let hubRadius = frame.width / 2
         let outer = hubRadius + HubChrome.haloReach
         let side = outer * 2
@@ -307,11 +322,11 @@ struct HubRingHalo: View {
         // only 21 luminance available, so it needs most of them. That is why the light value went up
         // nearly three times: at 0.20 the rendered glow was gone 8px out, and the light reference's
         // is still going at +20.
-        let even = HubHalo.crest(for: colorScheme)
+        let even = HubHalo.crest(for: colorScheme) * (0.72 + 0.28 * energy)
 
         let scaleLength = HubHalo.scaleLength(for: colorScheme)
 
-        ZStack {
+        return ZStack {
             Circle()
                 .fill(
                     HubHalo.falloff(
@@ -355,6 +370,7 @@ struct HubRingHalo: View {
                 .blendMode(additive ? .plusLighter : .normal)
         }
         .blur(radius: HubChrome.haloBlur)
+        .scaleEffect(0.992 + 0.016 * energy)
         .allowsHitTesting(false)
         .opacity(isRevealed ? 1 : 0)
         .animation(haloReveal, value: isRevealed)
@@ -367,48 +383,22 @@ struct HubRingHalo: View {
     }
 }
 
-/// Brand halo on the void's rim, brightest toward the selection, breathing while up.
-///
-/// Drawn in front of the wedges, inset from the seam. Not a stroked circle: brightness
-/// lives on the selected side and the opposite side falls to nothing, which is why the
-/// mock has no outlined disc. `TimelineView` is the motion: SwiftUI will not interpolate
-/// an `AngularGradient` across a transaction, so a hotspot driven only by `startAngle`
-/// snapped rather than swept.
+/// A breathing, gently rippling optical rim around a fixed caption/hit target.
 struct HubRing: View {
-
     let frame: CGRect
     let ambience: Color
     let angle: Double
     let isRevealed: Bool
     let reduceMotion: Bool
+    var isVisible: Bool = true
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let paused = reduceMotion || !isRevealed
-        // Exactly one of these draws, which was not previously true.
-        //
-        // The resting ring used to be painted unconditionally with the animated one layered over
-        // it, on the belief that `TimelineView` does not produce a frame inside `cacheDisplay`.
-        // It does: rendering the same hub with and without motion measures luminance 238 against
-        // 184, so whenever the overlay was actually animating the core stroke was being composited
-        // twice. Additively, and on top of the rear halo, that put the green and blue channels at
-        // 255 for 68 of 72 bearings — the rim was a clipped white circle, and no adjustment to any
-        // of these constants could change it because the arithmetic had already overflowed.
-        //
-        // `HubTintTests.ringIsVisibleOnTheWell` renders with motion enabled and requires the rim to
-        // be brighter than the well, so the animated branch cannot silently stop painting.
-        ZStack {
-            if paused {
-                ring(energy: 0.55, sheen: 0)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: false)) { timeline in
-                    ring(
-                        energy: Self.energy(at: timeline.date, paused: false),
-                        sheen: Self.sheen(at: timeline.date, paused: false)
-                    )
-                }
-            }
+        HubMotionView(animated: HubMotion.shouldAnimate(
+            isVisible: isVisible, isRevealed: isRevealed, reduceMotion: reduceMotion
+        )) { motion in
+            ring(motion: motion)
         }
         .allowsHitTesting(false)
         .opacity(isRevealed ? 1 : 0)
@@ -417,114 +407,67 @@ struct HubRing: View {
         .position(x: frame.midX, y: frame.midY)
     }
 
-    private func ring(energy: Double, sheen: Double) -> some View {
-        let inset = HubChrome.ringInset
-        let glow = HubChrome.ringGlowThickness * CGFloat(0.90 + 0.15 * energy)
-        let ringSide = frame.width - inset * 2
-        let pad = HubChrome.ringGlowBlur * 3
-        let additive = colorScheme == .dark
-        // A narrow loop of bright light, a little brighter toward the selection. The breadth of the
-        // reference's glow lives in `HubRingHalo` behind the cards; widening *this* is what turns
-        // the rim into a torus.
-        //
-        // Bright, and nearly even around the circle. Both of those are measurements. The dark
-        // reference's rim peaks at luminance 213 and is uniform the whole way round, brightening
-        // only slightly at the coupling; this stroke was carrying 0.27 and measured 144, with the
-        // far side down at 0.13. A dim wide ring plus a strong rear halo is precisely how a crisp
-        // line of light turns into a soft coloured haze — the peak has to be sharp for the bloom
-        // around it to read as bloom.
-        //
-        // It also fixes the saturation on its own. The reference measures 0.20 at the peak and
-        // 0.27–0.31 on its shoulders: not a less saturated colour, a peak bright enough to wash
-        // toward white. Ours sat at a flat 0.32 across the whole band because nothing was bright
-        // enough to wash.
-        // Capped short of clipping. Additive compositing over the rear halo reaches white long
-        // before opacity 1, and a white rim is a different thing from a bright mint one: the
-        // reference peaks at luminance 213 *while still measuring 0.196 saturation*, where 0.60
-        // here clipped to 249 at 0.109 and the hue drained out of the brightest pixel on screen.
-        // Near-opaque, because this stroke now blends normally rather than adding: its opacity is
-        // how much of the rim's own colour survives rather than how much light it contributes.
-        // `hubRing` is already the reference's measured rim, (179,223,213), so a rim drawn at full
-        // strength lands on that value exactly — and lands on it over a black desktop and a bright
-        // one alike, which was the whole problem.
-        // Dark is near-opaque because it changed from adding light to painting it, and the
-        // opacity is now how much of the rim's own colour survives. Light is left where it was:
-        // it always composited normally, so it never had the clipping problem, and raising it to
-        // match turned a soft bloom into a painted stroke that covered the void it sits in —
-        // `HubTintTests.wellRimIsNotAPlate` catches exactly that.
-        // Light Mode was raised after measuring what it actually rendered rather than what it
-        // composites to in the abstract. Its per-bearing rim peaked at luminance 224 over a bright
-        // desktop and 200 over a dark one, against a well of 229 and a reference rim of 254: the
-        // "rim" was *darker than the surface it sits on* for part of the way round, which is not a
-        // rim at all. Most of that is the blur mixing a 0.80-opacity stroke with the void beside it,
-        // and the correction is opacity rather than width because the width already matches.
-        let even = colorScheme == .dark ? 0.94 + 0.05 * energy : 0.86 + 0.09 * energy
-        let peak = min(1, colorScheme == .dark ? 0.98 + 0.02 * energy : 0.94 + 0.06 * energy)
+    private func ring(motion: HubMotion.Sample) -> some View {
+        let ringSide = max(1, frame.width - HubChrome.ringInset * 2)
+        let glow = HubChrome.ringGlowThickness * CGFloat(0.90 + 0.25 * motion.energy)
+        let pad = HubChrome.haloSpread
+        let even = colorScheme == .dark ? 0.76 + 0.22 * motion.energy : 0.84 + 0.15 * motion.energy
+        let peak = min(1, even + 0.08)
+        let contour = LiquidHubContour(motion: motion)
 
         return ZStack {
-            // Normal blending, in both schemes, and that is the one thing here that is not a
-            // matter of degree.
-            //
-            // The core used to composite additively in Dark Mode, which is right over a dark
-            // desktop and wrong over any other: additive light added to a bright wallpaper clips,
-            // and a clipped rim has no hue left. Measured over a sunset desktop the ring resolved
-            // to (255,255,255) at zero saturation — a white donut — where the same code over black
-            // gave (186,236,206) against the reference's (179,223,213). The wallpaper was choosing
-            // the colour of the overlay's one brand signal.
-            //
-            // Blending normally at near-full opacity makes the rim the colour it says it is
-            // whatever is behind it. The breadth around it stays additive, in `HubRingHalo`: a
-            // bloom washing out against a bright surface is what light does, and it is the core
-            // that has to carry the identity.
-            Circle()
-                .stroke(HubHalo.gradient(ring: ambience, even: even, peak: peak), lineWidth: glow)
+            // The moving contour carries its own soft shoulder; the wider, quiet
+            // atmospheric field remains in HubRingHalo behind the cards.
+            contour
+                .stroke(ambience.opacity(0.18 + 0.22 * motion.energy), lineWidth: 10)
+                .frame(width: ringSide, height: ringSide)
+                .padding(pad)
+                .blur(radius: 7)
+                .opacity(colorScheme == .light ? 0.45 : 1)
+                .blendMode(colorScheme == .light ? .plusLighter : .normal)
+            contour
+                .stroke(HubHalo.gradient(ring: ambience, even: even, peak: peak, angle: angle), lineWidth: glow)
                 .frame(width: ringSide, height: ringSide)
                 .padding(pad)
                 .blur(radius: HubChrome.ringGlowBlur)
-                .rotationEffect(.radians(angle))
-
-            Circle()
-                .stroke(sheenGradient, lineWidth: glow * 0.35)
+            // A narrow achromatic crest reads as emitted light on a bright
+            // desktop; tint belongs in the shoulder, not in a dull outline.
+            contour
+                .stroke(.white.opacity(colorScheme == .light ? 0.94 : 0), lineWidth: glow * 0.38)
                 .frame(width: ringSide, height: ringSide)
                 .padding(pad)
-                .blur(radius: HubChrome.ringGlowBlur * 0.7)
-                .rotationEffect(.radians(sheen))
-                .blendMode(additive ? .plusLighter : .screen)
+                .blur(radius: 0.45)
+            // Rotate the light, not a second copy of the contour. Both strokes
+            // must describe exactly the same liquid boundary.
+            contour
+                .stroke(sheenGradient(phase: motion.phase), lineWidth: glow * 0.72)
+                .frame(width: ringSide, height: ringSide)
+                .padding(pad)
+                .blur(radius: 0.45)
+                .blendMode(colorScheme == .dark ? .screen : .normal)
         }
     }
 
-    private var sheenGradient: AngularGradient {
-        AngularGradient(
-            gradient: Gradient(stops: [
-                .init(color: .white.opacity(0), location: 0),
-                .init(color: .white.opacity(0), location: 0.44),
-                // Quiet. This is white, and the rim is already close to its ceiling; at 0.28 the
-                // travelling highlight tipped whatever it passed over into flat white. There is no
-                // white anywhere in the references' rim — only a brighter patch of the same mint.
-                .init(color: .white.opacity(0.15), location: 0.5),
-                .init(color: .white.opacity(0), location: 0.56),
-                .init(color: .white.opacity(0), location: 1),
-            ]),
-            center: .center,
-            angle: .degrees(0)
-        )
+    private func sheenGradient(phase: Double) -> AngularGradient {
+        AngularGradient(gradient: Gradient(stops: [
+            .init(color: .white.opacity(0), location: 0),
+            .init(color: .white.opacity(0), location: 0.40),
+            .init(color: .white.opacity(0.42), location: 0.50),
+            .init(color: .white.opacity(0), location: 0.60),
+            .init(color: .white.opacity(0), location: 1),
+        ]), center: .center, angle: .radians(phase))
     }
 
     private var ringReveal: Animation? {
-        guard !reduceMotion else { return nil }
-        return .easeOut(duration: OverlayReveal.ringDuration)
+        reduceMotion ? nil : .easeOut(duration: OverlayReveal.ringDuration)
     }
 
     static func energy(at date: Date, paused: Bool) -> Double {
-        guard !paused else { return 0.55 }
-        let turns = date.timeIntervalSinceReferenceDate / HubChrome.pulsePeriod
-        return 0.5 + 0.5 * sin(turns * 2 * .pi)
+        HubMotion.sample(at: date.timeIntervalSinceReferenceDate, animated: !paused).energy
     }
 
     static func sheen(at date: Date, paused: Bool) -> Double {
-        guard !paused else { return 0 }
-        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: HubChrome.sheenPeriod)
-        return phase / HubChrome.sheenPeriod * 2 * .pi
+        HubMotion.sample(at: date.timeIntervalSinceReferenceDate, animated: !paused).phase
     }
 }
 
@@ -541,22 +484,14 @@ struct HubCoupling: View {
     let innerRadius: CGFloat
     let isRevealed: Bool
     let reduceMotion: Bool
+    var isVisible: Bool = true
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let paused = reduceMotion || !isRevealed
-        // Exactly one of these draws, for the reason given on `HubRing.body`: layering the animated
-        // tongue over a resting one composited the coupling twice while the overlay was up.
-        ZStack {
-            if paused {
-                tongue(energy: 0.55)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: false)) { timeline in
-                    tongue(energy: HubRing.energy(at: timeline.date, paused: false))
-                }
-            }
-        }
+        HubMotionView(animated: HubMotion.shouldAnimate(
+            isVisible: isVisible, isRevealed: isRevealed, reduceMotion: reduceMotion
+        )) { motion in tongue(energy: motion.energy) }
         .rotationEffect(.radians(angle))
         .position(
             x: centre.x + midR * CGFloat(cos(angle)),
@@ -882,7 +817,7 @@ enum HubHalo {
     /// because the eye judges a closed line by its weakest arc. That is most of what "not bright
     /// enough" was pointing at, and it costs nothing to fix: the selection still gets its lift from
     /// `peak` here and from `HubRingHalo`'s lobe behind the cards.
-    static func gradient(ring: Color, even: Double, peak: Double) -> AngularGradient {
+    static func gradient(ring: Color, even: Double, peak: Double, angle: Double = 0) -> AngularGradient {
         let far = even * 0.90
         return AngularGradient(
             gradient: Gradient(stops: [
@@ -894,7 +829,7 @@ enum HubHalo {
                 .init(color: ring.opacity(peak), location: 1),
             ]),
             center: .center,
-            angle: .degrees(0)
+            angle: .radians(angle)
         )
     }
 }

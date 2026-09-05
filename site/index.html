@@ -42,15 +42,16 @@
       }
       ]
       }</script>
-    <link rel="stylesheet" href="/css/showcase.css?v=2">
+    <link rel="stylesheet" href="/css/showcase.css?v=3">
     <script src="/js/site.js?v=17" defer>
     </script>
-    <script src="/js/vortex-spiral.js?v=18" defer>
+    <script src="/js/vortex-glass.js?v=1" defer></script>
+    <script src="/js/vortex-spiral.js?v=19" defer>
     </script>
-    <script src="/js/showcase.js?v=2" defer>
+    <script src="/js/showcase.js?v=3" defer>
     </script>
   </head>
-  <body class="showcase-page spiral-revision">
+  <body class="showcase-page spiral-revision" data-appearance="dark">
   <a class="skip" href="#main">Skip to content</a>
   <nav id="nav" class="nav" aria-label="Primary">
     <div class="wrap nav-in">
@@ -82,7 +83,11 @@
           <figure id="product-demo" class="spiral-showcase" aria-label="Interactive VortexFlow spiral" tabindex="-1">
             <div id="story-stage" class="spiral-stage" data-scene="windows">
               <span class="demo-badge">Interactive product demo</span>
-              <vortex-spiral id="hero-spiral" managed story searchable instant static nohint></vortex-spiral>
+              <div class="glass-appearance" role="group" aria-label="Demo appearance">
+                <button type="button" data-appearance-choice="light" aria-pressed="false">Light</button>
+                <button type="button" data-appearance-choice="dark" aria-pressed="true">Dark</button>
+              </div>
+              <vortex-spiral id="hero-spiral" glass appearance="dark" managed story searchable instant static nohint></vortex-spiral>
               <div id="story-pointer" class="ghost-pointer" aria-hidden="true"><img src="/img/ui/pointer.svg" width="30" height="30" alt=""><span></span></div>
               <div id="story-receipt" class="story-receipt" role="status" hidden><img id="receipt-icon" src="/img/logos/chrome.png" width="26" height="26" alt=""><div><strong id="receipt-title"></strong><span>In this demo</span></div></div>
             </div>
@@ -106,14 +111,14 @@
         <div class="visual-pair">
           <article class="visual-card">
             <header><h3>Your favorites fit right in.</h3><p>Links, apps, and keyboard shortcuts. Pinned into the spiral.</p></header>
-            <div class="pin-demo-stage"><vortex-spiral id="pin-spiral" managed story instant static nohint></vortex-spiral></div>
+            <div class="pin-demo-stage"><vortex-spiral id="pin-spiral" glass appearance="dark" managed story instant static nohint></vortex-spiral></div>
             <div class="visual-foot"><p id="pin-caption" role="status">Hover a pin to peek. Click to open.</p><button id="pin-reset" type="button">Reset pins</button></div>
           </article>
           <article id="arrange" class="visual-card">
             <span id="menu" class="legacy-anchor"></span>
             <header><h3>More from every window.</h3><p>Preview it. Resize it. Move it to the screen you’re using.</p></header>
             <div id="context-stage" class="context-demo-stage" data-placement="rest">
-              <vortex-spiral id="context-spiral" managed story instant static nohint></vortex-spiral>
+              <vortex-spiral id="context-spiral" glass appearance="dark" managed story instant static nohint></vortex-spiral>
               <div id="context-menu" class="context-popover" role="group" aria-label="Example window actions">
                 <div class="context-title"><img src="/img/logos/chrome.png" width="21" height="21" alt=""><strong>Google Chrome</strong><button type="button" data-window-action="close" aria-label="Close example window">×</button></div>
                 <div class="context-preview" role="img" aria-label="Fictional Launch notes window preview"><span>PROJECT NORTHSTAR</span><strong>Launch notes</strong><p>A clear plan.<br> A little room to focus.</p><small>Draft complete · Ready for review</small></div>
@@ -143,7 +148,7 @@
               <p id="layout-description" class="layout-description" role="status">Spiral · Icons around your pointer.</p>
               <label class="preview-toggle"><input id="layout-thumbnails" type="checkbox" disabled> Show window previews <span id="preview-availability">Available in Strip, Grid &amp; List</span></label>
             </div>
-            <div id="layout-preview" class="layout-preview" role="tabpanel" aria-labelledby="layout-spiral"><div class="layout-preview-bar"><span>Layout preview</span><span>Example windows</span></div><vortex-spiral id="layout-ring" managed instant static nohint></vortex-spiral><div id="layout-cards" class="layout-cards" hidden></div><p id="layout-selection" class="layout-selection">Release brief · Chrome</p><div id="layout-pins" class="layout-pin-legend"></div></div>
+            <div id="layout-preview" class="layout-preview" role="tabpanel" aria-labelledby="layout-spiral"><div class="layout-preview-bar"><span>Layout preview</span><span>Example windows</span></div><vortex-spiral id="layout-ring" glass appearance="dark" managed instant static nohint></vortex-spiral><div id="layout-cards" class="layout-cards" hidden></div><p id="layout-selection" class="layout-selection">Release brief · Chrome</p><div id="layout-pins" class="layout-pin-legend"></div></div>
           </div>
         </details>
       </div>

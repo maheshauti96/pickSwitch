@@ -250,27 +250,22 @@ struct OverlayPaletteTests {
         }
     }
 
-    /// The wash is the card, not a hint added to whatever is behind it.
-    ///
-    /// A wedge draws no opaque plate, so whatever the frosted substrate transmits is the card. At
-    /// the previous values — 0.76 in Dark Mode and 0.24 in Light — the wallpaper was supplying most
-    /// of it: the same window measured luminance 205 over a bright desktop and 68 over a dark one,
-    /// which made the card's identity, its lightness *and* the contrast of its own label properties
-    /// of the user's wallpaper rather than of the window. `OverlayRenderingTests` measures that from
-    /// the render; this pins the constant that decides it.
-    @Test("The glass wash owns the card rather than hinting at it")
+    /// Leave meaningful transmission in the body while protecting the caption
+    /// locally. Rendered contrast over black and white is tested separately.
+    @Test("Glass transmits its backdrop while captions keep a local contrast floor")
     func glassWashOwnsTheCard() {
         for (name, palette) in palettes {
             let scheme: ColorScheme = name == "dark" ? .dark : .light
             for selected in [true, false] {
                 let wash = palette.glassWashOpacity(selected: selected, scheme: scheme)
                 #expect(
-                    wash >= 0.85,
-                    "\(name) \(selected ? "selected" : "rest") wash \(wash) leaves the card to the desktop"
+                    wash > 0 && wash < 0.80,
+                    "\(name) \(selected ? "selected" : "rest") wash \(wash) hides the glass"
                 )
                 // Not entirely opaque: the remainder is what lets the desktop modulate the surface
                 // and what the macOS 26 material needs to behave like a material at its edges.
                 #expect(wash < 1, "\(name) \(selected ? "selected" : "rest") wash admits no light at all")
+                #expect(palette.glassCaptionScrimOpacity(scheme: scheme) >= 0.55)
             }
         }
 

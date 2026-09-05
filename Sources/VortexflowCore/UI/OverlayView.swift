@@ -339,7 +339,8 @@ struct OverlayView: View {
                 ambience: hubAmbience,
                 angle: state.radialRingAngle,
                 isRevealed: state.isRevealed,
-                reduceMotion: state.reduceMotion
+                reduceMotion: state.reduceMotion,
+                isVisible: state.isVisible
             )
             .animation(selectionAnimation, value: state.radialRingAngle)
             .animation(ambienceAnimation, value: hubAmbience)
@@ -389,7 +390,8 @@ struct OverlayView: View {
                 ambience: hubAmbience,
                 angle: state.radialRingAngle,
                 isRevealed: state.isRevealed,
-                reduceMotion: state.reduceMotion
+                reduceMotion: state.reduceMotion,
+                isVisible: state.isVisible
             )
             .animation(selectionAnimation, value: state.radialRingAngle)
             .animation(ambienceAnimation, value: hubAmbience)
@@ -405,7 +407,8 @@ struct OverlayView: View {
                 ambience: hubAmbience,
                 backdropIcon: hubBackdropIcon,
                 isRevealed: state.isRevealed,
-                reduceMotion: state.reduceMotion
+                reduceMotion: state.reduceMotion,
+                increaseContrast: state.increaseContrast
             )
             .animation(ambienceAnimation, value: hubAmbience)
             .zIndex(3)
@@ -417,7 +420,8 @@ struct OverlayView: View {
                     angle: state.radialRingAngle,
                     innerRadius: selectedCouplingInnerRadius,
                     isRevealed: state.isRevealed,
-                    reduceMotion: state.reduceMotion
+                    reduceMotion: state.reduceMotion,
+                    isVisible: state.isVisible
                 )
                 .animation(selectionAnimation, value: state.radialRingAngle)
                 .animation(ambienceAnimation, value: hubAmbience)

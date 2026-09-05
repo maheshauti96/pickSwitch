@@ -53,6 +53,17 @@
   let booted = false;
   let manualSearch = false;
 
+  function setAppearance(appearance) {
+    root.dataset.appearance = appearance;
+    all('vortex-spiral').forEach((widget) => widget.setAppearance(appearance));
+    all('[data-appearance-choice]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.appearanceChoice === appearance));
+    });
+  }
+  all('[data-appearance-choice]').forEach((button) => button.addEventListener('click', () => {
+    setAppearance(button.dataset.appearanceChoice);
+  }));
+
   const chapterCopy = {
     windows: ['01 / Your windows', 'Everything open. One place to choose.'],
     search: ['02 / Find a tab', 'A few letters. The right tab.'],
@@ -169,6 +180,7 @@
     if (reason === 'manual') takeover = true;
     hidePointer();
     spiral.stopMotion();
+    if (reason === 'button') all('vortex-spiral').forEach((widget) => widget.setAmbientPaused(true));
     play.setAttribute('aria-pressed', 'false');
     play.textContent = completed ? 'Play' : takeover ? 'Play story' : 'Resume';
     stage.dataset.playing = 'false';
@@ -241,6 +253,7 @@
     userPaused = false;
     takeover = false;
     playing = true;
+    all('vortex-spiral').forEach((widget) => widget.setAmbientPaused(false));
     clockStart = performance.now();
     play.textContent = 'Pause';
     play.setAttribute('aria-pressed', 'true');
@@ -496,6 +509,7 @@
   }));
   all('a[href="#layouts"]').forEach((link) => link.addEventListener('click', () => { $('#layouts').open = true; }));
   customElements.whenDefined('vortex-spiral').then(() => {
+    setAppearance(root.dataset.appearance || 'dark');
     applyReduced(reduced);
     fullWindowScene(false);
     resetPins();

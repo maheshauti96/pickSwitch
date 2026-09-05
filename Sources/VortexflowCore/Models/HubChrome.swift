@@ -155,35 +155,11 @@ enum HubChrome {
     /// soft enough that nothing in here reads as a second piece of UI while leaving the shape legible.
     static let backdropIconBlurFraction: CGFloat = 0.055
 
-    /// How strongly the watermark is painted, per scheme — *before* the scrim takes its share.
-    ///
-    /// These stopped being a contrast budget when the watermark moved underneath `wellScrimOpacity`,
-    /// and that is the whole reason they can be this large. What reaches the eye is
-    /// `(1 - wellScrimOpacity)` of the value here: at 0.80 in Dark Mode, 0.85 painted resolves to
-    /// about 0.17 effective, so this is a little over three times the light the old 0.05 delivered
-    /// while the caption sits on a surface the scrim has already bounded.
-    ///
-    /// The history is worth keeping because it explains why the old numbers looked arbitrary. While
-    /// the icon was painted *on top of* an opaque plate its opacity was the only thing between it and
-    /// 9pt type, so it was solved as a contrast budget against a uniformly white icon in Dark Mode and
-    /// a uniformly black one in Light — and the answer kept coming out at a value that made the
-    /// feature invisible. It went 0.12, then 0.10, then 0.05, chased down each time the hub interior
-    /// was measured against the references, because a blurred icon averages close to its own mean
-    /// luminance and at 0.10 over a fill of 14 it resolved to 36: the watermark *was* the hub
-    /// interior. Every one of those steps traded the feature away to fix a symptom of where it was
-    /// drawn rather than of how strong it was.
-    ///
-    /// The floor is no longer arithmetic either. `HubTintTests` requires the hub centre's
-    /// red-minus-green to move by more than 0.03 between a red icon and a green one; that used to
-    /// bind at about 0.039 and now has an order of magnitude of room.
-    ///
-    /// Light went to 1.0 when `wellScrimOpacityLight` went to 0.80. What reaches the eye is
-    /// `(1 - scrim)` of the value here, so the extra scrim would have taken the watermark from 0.256
-    /// effective down to 0.16; painting the icon at full strength underneath brings it back to 0.20.
-    /// There is nowhere further to go — this is the ceiling — which is the honest cost of holding the
-    /// hub's interior near the card field, and it is 22% of the watermark rather than all of it.
-    static let backdropIconOpacityDark: Double = 0.68
-    static let backdropIconOpacityLight: Double = 1.0
+    /// A quiet identity hint under the contrast scrim. The reference's dark
+    /// center is mostly a void: a strong white icon must not turn it into a
+    /// grey disc. Keep a little more ink in Light Mode, where the scrim is heavier.
+    static let backdropIconOpacityDark: Double = 0.28
+    static let backdropIconOpacityLight: Double = 0.36
 
     /// How heavily the well's tint is laid over its frosted substrate, `0...1`.
     ///
@@ -326,8 +302,8 @@ enum HubChrome {
     static let selectedInnerArcWidth: CGFloat = 5.0
 
     /// Seconds for one breath of the ring. Slow enough not to compete with aiming.
-    static let pulsePeriod: Double = 1.8
+    static let pulsePeriod: Double = 3.8
 
     /// Seconds for the traveling sheen to walk once around the ring.
-    static let sheenPeriod: Double = 7.0
+    static let sheenPeriod: Double = 7.6
 }

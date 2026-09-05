@@ -56,6 +56,10 @@ struct WindowWedgeView: View {
 
     @Environment(\.overlayPalette) private var palette
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.overlayReduceTransparencyOverride) private var transparencyOverride
+
+    private var opaqueSurface: Bool { increaseContrast || (transparencyOverride ?? systemReduceTransparency) }
 
     private var fill: Color {
         // Selected is a stronger self, not a recolor to the brand. The brand lives on the hub
@@ -108,13 +112,15 @@ struct WindowWedgeView: View {
             // specular and the label along with it.
             glass
                 .shadow(
-                    color: .black.opacity(shadowOpacity),
-                    radius: shadowRadius,
+                    color: .black.opacity(shadowOpacity * (colorScheme == .light ? 0.60 : 0.80)),
+                    radius: max(5, shadowRadius * 1.3),
                     y: shadowRadius / 2
                 )
 
-            glassLighting
-            glassRims
+            if !opaqueSurface {
+                glassLighting
+                glassRims
+            }
 
             content
                 .frame(width: seat.contentFrame.width, height: seat.contentFrame.height)
@@ -133,14 +139,23 @@ struct WindowWedgeView: View {
     /// the macOS 26 path and the fallback — without it Dark Mode tiles read as slate.
     @ViewBuilder
     private var glass: some View {
-        if increaseContrast {
+        if opaqueSurface {
             shape.fill(fill)
             shape.stroke(borderColor, lineWidth: borderWidth)
         } else {
+            let bounds = shape.materialBounds
+            let local = shape.localized(to: bounds)
             if #available(macOS 26.0, *) {
-                NativeWedgeGlass(shape: shape, tint: glassTint, panelSize: panelSize)
+                NativeWedgeGlass(shape: local, tint: glassTint.opacity(isSelected ? 0.20 : 0.10), size: bounds.size)
+                    .position(x: bounds.midX, y: bounds.midY)
+                    .allowsHitTesting(false)
             } else {
-                shape.fill(.ultraThinMaterial)
+                // One substrate only: stacking two system materials turns clear
+                // glass into a milky grey slab, particularly in Dark Mode.
+                WedgeGlassBackdrop(shape: local, dark: colorScheme == .dark, emphasized: isSelected)
+                    .frame(width: bounds.width, height: bounds.height)
+                    .position(x: bounds.midX, y: bounds.midY)
+                    .allowsHitTesting(false)
             }
             shape.fill(glassTint.opacity(glassWash))
             if isSelected {
@@ -187,7 +202,7 @@ struct WindowWedgeView: View {
                             .init(color: .white.opacity(0.05), location: 0.34),
                             .init(color: .white.opacity(0.02), location: 0.62),
                             .init(color: .white.opacity(0.10), location: 0.86),
-                            .init(color: .white.opacity(0.32), location: 1),
+                            .init(color: .white.opacity(0.22), location: 1),
                         ]
                     ),
                     center: UnitPoint(
@@ -198,8 +213,7 @@ struct WindowWedgeView: View {
                     endRadius: seat.outerRadius
                 )
             )
-            .blendMode(.overlay)
-            .opacity(increaseContrast ? 0 : 1)
+            .blendMode(.screen)
             .allowsHitTesting(false)
     }
 
@@ -208,6 +222,18 @@ struct WindowWedgeView: View {
         let inner = WedgeInnerArc(seat: seat, centre: centre, cornerRadius: metrics.cornerRadius)
         let outer = WedgeOuterArc(seat: seat, centre: centre, cornerRadius: metrics.cornerRadius)
         let rim = palette.glassRim(for: tint, selected: isSelected, scheme: colorScheme)
+        // A continuous catch also lights the straight seams, as in the supplied mocks.
+        shape.stroke(
+            LinearGradient(colors: [.white.opacity(colorScheme == .light ? 0.72 : 0.38),
+                rim.opacity(0.32), .white.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing),
+            lineWidth: 0.85
+        ).blur(radius: 0.4)
+        if colorScheme == .light {
+            // A fine white bevel makes the pale surface read as glass even
+            // against a bright desktop, where a tinted edge alone disappears.
+            shape.stroke(.white.opacity(0.92), lineWidth: 1.3)
+            shape.stroke(.white.opacity(0.38), lineWidth: 4).blur(radius: 2)
+        }
         // Wider in Dark Mode, and the two schemes want opposite things here.
         //
         // Measured with one routine over both references — inner-arc peak against the darkest point
@@ -292,7 +318,7 @@ struct WindowWedgeView: View {
         // been halved, so in absolute terms it was drawing 88 luminance against the reference's 149.
         outer
             .stroke(
-                Color.white.opacity(colorScheme == .light ? 0.30 : 0.50),
+                Color.white.opacity(0.30),
                 lineWidth: colorScheme == .dark ? 4.2 : 2.6
             )
             .blur(radius: colorScheme == .dark ? 3.0 : 2.4)
@@ -491,6 +517,18 @@ struct WindowWedgeView: View {
         }
         .padding(.horizontal, 2)
         .frame(maxWidth: .infinity)
+        .background {
+            if !opaqueSurface {
+                // Keep the contrast floor local to text instead of painting over
+                // 95% of the entire pane. Feathered ends avoid a nested label card.
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(palette.cardFill.opacity(palette.glassCaptionScrimOpacity(scheme: colorScheme)))
+                    .padding(.horizontal, -16)
+                    .padding(.vertical, -12)
+                    .blur(radius: 10)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     /// Markers for this window, none of which are load-bearing enough to cost the name any width.
@@ -572,11 +610,11 @@ struct WindowWedgeView: View {
 private struct NativeWedgeGlass: View {
     let shape: WedgeShape
     let tint: Color
-    let panelSize: CGSize
+    let size: CGSize
 
     var body: some View {
         Color.clear
-            .frame(width: panelSize.width, height: panelSize.height)
-            .glassEffect(Glass.regular.tint(tint).interactive(), in: shape)
+            .frame(width: size.width, height: size.height)
+            .glassEffect(Glass.clear.tint(tint), in: shape)
     }
 }
