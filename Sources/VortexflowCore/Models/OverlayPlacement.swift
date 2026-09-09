@@ -99,13 +99,45 @@ enum OverlayPlacement {
         return max(StripLayout.cardSize.height, usable - StripLayout.contentInset * 2)
     }
 
-    /// Pick the display containing the cursor; fall back to the first display when
-    /// the cursor is in no display's bounds, which happens transiently while
-    /// displays are being reconfigured.
+    /// Pick the display the pointer is on.
+    ///
+    /// Not `CGRect.contains`. AppKit reports a pointer resting in a display's top pixel
+    /// row — the menu bar — at exactly `frame.maxY`, which `contains` treats as outside.
+    /// On the main display that slip was invisible, because the fallback was the main
+    /// display too. On any other display it sent the overlay to the wrong monitor: shortcut
+    /// pressed with the pointer in the MacBook's menu bar, overlay drawn on the external
+    /// screen, and the user — seeing nothing — pressing again and closing it.
+    ///
+    /// So each display is hit-tested the way the pointer's own geometry works (the
+    /// `NSMouseInRect` rule, see `containsPointer`), and a pointer that still lands in no
+    /// display — which happens transiently while displays are reconfigured — goes to the
+    /// nearest display rather than an arbitrary first one.
     static func displayIndexContaining(cursor: CGPoint, frames: [CGRect]) -> Int? {
-        if let index = frames.firstIndex(where: { $0.contains(cursor) }) {
+        guard !frames.isEmpty else { return nil }
+        if let index = frames.firstIndex(where: { containsPointer(cursor, $0) }) {
             return index
         }
-        return frames.isEmpty ? nil : 0
+
+        var nearest = 0
+        var nearestDistance = CGFloat.infinity
+        for (index, frame) in frames.enumerated() {
+            let dx = max(frame.minX - cursor.x, 0, cursor.x - frame.maxX)
+            let dy = max(frame.minY - cursor.y, 0, cursor.y - frame.maxY)
+            let distance = dx * dx + dy * dy
+            if distance < nearestDistance {
+                nearestDistance = distance
+                nearest = index
+            }
+        }
+        return nearest
+    }
+
+    /// `NSMouseInRect(point, frame, false)` without AppKit: the left and top edges are
+    /// inside, the right and bottom edges are not. That is the range a pointer can
+    /// actually report on a display in bottom-left screen coordinates: the top pixel row
+    /// converts to `maxY` exactly, and the rightmost column to `maxX - 1`.
+    static func containsPointer(_ point: CGPoint, _ frame: CGRect) -> Bool {
+        point.x >= frame.minX && point.x < frame.maxX
+            && point.y > frame.minY && point.y <= frame.maxY
     }
 }

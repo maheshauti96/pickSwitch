@@ -671,9 +671,14 @@ public final class SwitcherController {
         // while the flag says otherwise silently swallows every press.
         Log.overlay.debug("panel ordered front; isVisible now true")
         presentedAt = Date().timeIntervalSinceReferenceDate
+        // Where it went is part of the record. "It opened but I could not see it" is
+        // indistinguishable from "it did not open" without the display it was drawn on.
         Log.overlay.info("""
             presenting \(ordered.resting.count, privacy: .public) cards \
-            (\(ordered.all.count, privacy: .public) searchable)
+            (\(ordered.all.count, privacy: .public) searchable) \
+            on display \(Self.describe(visibleFrame), privacy: .public) \
+            at \(Self.describe(CGRect(origin: origin, size: size)), privacy: .public); \
+            pointer \(Int(cursor.x), privacy: .public),\(Int(cursor.y), privacy: .public)
             """)
         stopwatch.log()
 
@@ -2517,8 +2522,24 @@ public final class SwitcherController {
 
     // MARK: - Helpers
 
+    /// A rectangle for the log: `x,y w×h`, whole points.
+    private static func describe(_ rect: CGRect) -> String {
+        "\(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
+    }
+
+    /// The screen the pointer is on, by the pointer's own edge rules.
+    ///
+    /// Routed through `OverlayPlacement` rather than `frame.contains`, which misses a pointer
+    /// in the menu bar and used to send the overlay to the main display instead.
     private static func screen(containing point: CGPoint) -> NSScreen? {
-        NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
+        let screens = NSScreen.screens
+        guard let index = OverlayPlacement.displayIndexContaining(
+            cursor: point,
+            frames: screens.map(\.frame)
+        ) else {
+            return NSScreen.main
+        }
+        return screens[index]
     }
 
     /// The keyboard shortcut goes through exactly the same path as the mouse button.

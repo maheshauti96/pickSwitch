@@ -141,10 +141,38 @@ struct OverlayPlacementTests {
         #expect(OverlayPlacement.displayIndexContaining(cursor: CGPoint(x: -700, y: 500), frames: frames) == 1)
     }
 
-    @Test("A cursor outside every display falls back to the first")
-    func cursorOutsideAllDisplaysFallsBack() {
+    @Test("A cursor outside every display goes to the nearest one")
+    func cursorOutsideAllDisplaysGoesToNearest() {
         let frames = [primary, leftOfPrimary]
         #expect(OverlayPlacement.displayIndexContaining(cursor: CGPoint(x: 9000, y: 9000), frames: frames) == 0)
+        #expect(OverlayPlacement.displayIndexContaining(cursor: CGPoint(x: -9000, y: 500), frames: frames) == 1)
+    }
+
+    /// The arrangement this was found on: a 1080p external display as the main screen with the
+    /// MacBook to its right, its top 53 points lower. A pointer resting in the MacBook's menu
+    /// bar is reported at exactly the MacBook frame's `maxY`, which `CGRect.contains` rejects.
+    /// The old fallback then chose the main display, and the overlay opened on the wrong monitor.
+    @Test("A pointer in a secondary display's menu bar still belongs to that display")
+    func pointerInMenuBarStaysOnItsDisplay() {
+        let external = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let builtIn = CGRect(x: 1920, y: 45, width: 1512, height: 982)
+        let frames = [external, builtIn]
+
+        #expect(OverlayPlacement.displayIndexContaining(cursor: CGPoint(x: 2600, y: builtIn.maxY), frames: frames) == 1)
+        #expect(OverlayPlacement.displayIndexContaining(cursor: CGPoint(x: 800, y: external.maxY), frames: frames) == 0)
+        // The left edge is inside too; the right edge belongs to the neighbour.
+        #expect(OverlayPlacement.displayIndexContaining(cursor: CGPoint(x: 1920, y: 500), frames: frames) == 1)
+        #expect(OverlayPlacement.displayIndexContaining(cursor: CGPoint(x: 1919, y: 500), frames: frames) == 0)
+    }
+
+    @Test("Pointer containment follows the NSMouseInRect edge rule")
+    func pointerContainmentEdges() {
+        let frame = CGRect(x: 100, y: 100, width: 200, height: 100)
+        #expect(OverlayPlacement.containsPointer(CGPoint(x: 100, y: 200), frame))   // top-left corner
+        #expect(OverlayPlacement.containsPointer(CGPoint(x: 299, y: 101), frame))
+        #expect(!OverlayPlacement.containsPointer(CGPoint(x: 300, y: 150), frame))  // right edge
+        #expect(!OverlayPlacement.containsPointer(CGPoint(x: 200, y: 100), frame))  // bottom edge
+        #expect(!OverlayPlacement.containsPointer(CGPoint(x: 200, y: 201), frame))
     }
 
     @Test("No displays yields no index")
