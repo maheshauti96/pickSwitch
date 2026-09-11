@@ -267,40 +267,20 @@ struct OverlayPalette {
         )
     }
 
-    /// How heavily `glassTint` is washed over the frosted substrate, `0...1`.
-    ///
-    /// High, in both schemes, and that is the correction rather than a preference.
-    ///
-    /// A wedge draws no opaque plate — unlike the strip, grid and list, whose fills the palette
-    /// deliberately made fully opaque for exactly this reason — so whatever the frosted substrate
-    /// transmits *is* the card. At 0.24 in Light Mode the wallpaper was supplying three quarters of
-    /// it: the same window measured luminance 205 over a bright desktop and 68 over a dark one, so
-    /// the card's identity, its lightness, and the contrast of its own label all belonged to the
-    /// user's choice of wallpaper. In Dark Mode the tint's chroma was being diluted from 0.34 to
-    /// 0.20, which is the visible half of the complaint: the glass looked far less tinted in
-    /// practice than in the references.
-    ///
-    /// 0.95 leaves 5% transmission, which is enough for the desktop to modulate the surface and for
-    /// the macOS 26 material to keep its edge behaviour, and little enough that the card is the same
-    /// card over any wallpaper. The references are not translucent either: what makes their wedges
-    /// read as glass is the rim light on both arcs and the thickness gradient between them, not what
-    /// shows through.
-    ///
-    /// Raised from 0.92 for a reason that only appeared once `glassTint` got darker. 8% of the
-    /// wallpaper is 8% either way, but it stopped being a modulation and started being the card: a
-    /// dark tinted body is about 22 luminance, so a bright desktop was adding 19 to it and very
-    /// nearly doubling it, where the same 8% over the old 46-luminance body moved it by a third.
-    /// Measured across a black and a photographic desktop the dark card's spread was 10.5
-    /// luminance at 0.92 and 6 at 0.95, and the light card gained the 7 it was short of the
-    /// reference over a dark desktop.
+    /// A color wash over the live frosted substrate, not an opaque painted pane.
+    /// Labels have their own feathered contrast floor, so the body can transmit
+    /// the backdrop and retain the material's refraction and edge lighting.
     func glassWashOpacity(selected: Bool, scheme: ColorScheme) -> Double {
         switch (scheme, selected) {
-        case (.dark, true): return 0.95
-        case (.dark, false): return 0.95
-        case (_, true): return 0.95
-        case (_, false): return 0.95
+        case (.dark, true): return 0.64
+        case (.dark, false): return 0.62
+        case (_, true): return 0.70
+        case (_, false): return 0.68
         }
     }
+
+    /// Local caption protection, independent of the wallpaper's brightness.
+    func glassCaptionScrimOpacity(scheme: ColorScheme) -> Double { scheme == .dark ? 0.70 : 0.55 }
 
     /// The hub's ambience: every glow the middle throws, hued by the window under the pointer.
     ///

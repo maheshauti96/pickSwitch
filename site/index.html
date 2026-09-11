@@ -1,527 +1,209 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VortexFlow — the open-source window switcher for macOS, at your cursor or key</title>
-  <meta name="description" content="A spiral of every window and tab you have open appears around the pointer — or from any keyboard shortcut. Free and open source under MIT. Native Swift, no telemetry, no account. For heavy macOS users.">
-  <link rel="canonical" href="https://vortexflow.io/">
-  <meta property="og:site_name" content="VortexFlow">
-  <meta property="og:title" content="VortexFlow — Every window and tab, at your cursor or key. Open source.">
-  <meta property="og:description" content="A spiral of every window and tab you have open appears around the pointer — or from any keyboard shortcut. Free and open source under MIT. Download, or read the code.">
-  <meta property="og:url" content="https://vortexflow.io/">
-  <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=2">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:type" content="website">
-  <meta name="twitter:title" content="VortexFlow — the open-source window switcher for macOS">
-  <meta name="twitter:description" content="A spiral of every window and tab you have open appears around the pointer — or from any keyboard shortcut. Free and open source under MIT. No telemetry, no account.">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=2">
-  <link rel="icon" href="/img/favicon.svg?v=2" type="image/svg+xml">
-  <link rel="icon" href="/img/favicon-32.png?v=2" type="image/png" sizes="32x32">
-  <link rel="apple-touch-icon" href="/img/apple-touch.png?v=2">
-  <meta name="theme-color" content="#f6f4f1">
-  <link rel="stylesheet" href="/css/site.css?v=17">
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@graph": [
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VortexFlow — find the right window, stay in your flow</title>
+    <meta name="description" content="Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Join the preview waitlist.">
+    <link rel="canonical" href="https://vortexflow.io/">
+    <meta property="og:site_name" content="VortexFlow">
+    <meta property="og:title" content="Find the right window. Stay in your flow.">
+    <meta property="og:description" content="Switch windows, find browser tabs, and open your favorites. Join the preview waitlist.">
+    <meta property="og:url" content="https://vortexflow.io/">
+    <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=3">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:type" content="website">
+    <meta name="twitter:title" content="VortexFlow — find the right window, stay in your flow">
+    <meta name="twitter:description" content="Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Join the preview waitlist.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=3">
+    <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
+    <link rel="icon" href="/img/favicon-32.png?v=3" type="image/png" sizes="32x32">
+    <link rel="apple-touch-icon" href="/img/apple-touch.png?v=3">
+    <meta name="theme-color" content="#f6f4f1">
+    <link rel="stylesheet" href="/css/site.css?v=17">
+    <script type="application/ld+json">{
+      "@context": "https://schema.org",
+      "@graph": [
       {
-        "@type": "WebSite",
-        "name": "VortexFlow",
-        "url": "https://vortexflow.io/"
+      "@type": "WebSite",
+      "name": "VortexFlow",
+      "url": "https://vortexflow.io/"
       },
       {
-        "@type": "SoftwareApplication",
-        "name": "VortexFlow",
-        "operatingSystem": "macOS 15",
-        "applicationCategory": "UtilitiesApplication",
-        "url": "https://vortexflow.io/",
-        "downloadUrl": "https://github.com/maheshauti96/VortexFlow/releases/latest",
-        "installUrl": "https://vortexflow.io/download/",
-        "license": "https://github.com/maheshauti96/VortexFlow/blob/main/LICENSE",
-        "isAccessibleForFree": true,
-        "description": "A free, open-source window switcher for macOS. A spiral of every window and tab you have open appears around the pointer, or from any keyboard shortcut.",
-        "image": "https://vortexflow.io/img/og-image.png?v=2",
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD",
-          "availability": "https://schema.org/InStock"
-        }
-      },
-      {
-        "@type": "SoftwareSourceCode",
-        "name": "VortexFlow",
-        "codeRepository": "https://github.com/maheshauti96/VortexFlow",
-        "programmingLanguage": "Swift",
-        "runtimePlatform": "macOS",
-        "license": "https://opensource.org/licenses/MIT"
+      "@type": "SoftwareApplication",
+      "name": "VortexFlow",
+      "operatingSystem": "macOS 15",
+      "applicationCategory": "UtilitiesApplication",
+      "url": "https://vortexflow.io/",
+      "description": "Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Join the preview waitlist.",
+      "image": "https://vortexflow.io/img/og-image.png?v=3"
       }
-    ]
-  }
-  </script>
-</head>
-<body>
+      ]
+      }</script>
+    <link rel="stylesheet" href="/css/showcase.css?v=3">
+    <script src="/js/site.js?v=17" defer>
+    </script>
+    <script src="/js/vortex-glass.js?v=1" defer></script>
+    <script src="/js/vortex-spiral.js?v=19" defer>
+    </script>
+    <script src="/js/showcase.js?v=3" defer>
+    </script>
+  </head>
+  <body class="showcase-page spiral-revision" data-appearance="dark">
   <a class="skip" href="#main">Skip to content</a>
-
   <nav id="nav" class="nav" aria-label="Primary">
     <div class="wrap nav-in">
-      <a class="mark" href="#top">
-        <img src="/img/mark.svg?v=2" width="22" height="22" alt="" aria-hidden="true">
-        <span>VortexFlow</span>
-      </a>
-      <div class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#contribute">Open source</a>
-        <a href="#privacy">Privacy</a>
-        <a href="#faq">FAQ</a>
-        <a class="btn btn-ghost btn-sm" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">
-          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-          GitHub<span class="btn-count" data-stars></span>
-        </a>
-        <a class="btn btn-primary btn-sm" href="/download/">Download</a>
-      </div>
+      <a class="mark" href="#top"><img src="/img/mark.svg?v=3" width="26" height="26" alt=""><span>VortexFlow</span></a>
+      <div class="desktop-links"><a href="#product-demo">The spiral</a><a href="#features">Inside VortexFlow</a><a href="#pricing">Pricing</a></div>
+      <a class="btn btn-primary nav-cta" href="#waitlist">Get notified</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
+    </div>
+    <div id="mobile-menu" class="mobile-menu" hidden>
+      <a href="#product-demo">See the spiral</a><a href="#features">Pins &amp; window actions</a><a href="#layouts">Five layouts</a><a href="#pricing">$5 &amp; seven days free</a><a href="#privacy">Privacy &amp; questions</a>
     </div>
   </nav>
-
   <main id="main">
-    <section id="top" class="hero" aria-labelledby="hero-h">
-      <div class="wrap hero-in">
-        <a class="badge" href="https://github.com/maheshauti96/VortexFlow/releases/latest" rel="noopener">
-          <span class="badge-dot" aria-hidden="true"></span>
-          <b>Open source</b> <span class="sep">·</span> MIT <span class="sep">·</span> <span data-release-tag>v1.0.0</span> for macOS
-        </a>
-        <h1 id="hero-h">Every window and tab,<br>at your <span class="roll" aria-hidden="true"><span class="roll-track"><span>cursor</span><span>key</span><span>cursor</span></span></span><span class="sr-only">cursor or key</span></h1>
-        <p class="lede">A spiral of every window and tab you have open appears around the pointer. Same overlay from any keyboard shortcut. Free and open source, forever.</p>
-        <div class="cta-row">
-          <a class="btn btn-primary btn-lg" href="https://github.com/maheshauti96/VortexFlow/releases/latest" data-download rel="noopener">
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5v8.3M4.6 6.6L8 10l3.4-3.4M2.5 12.5h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Download for macOS
-          </a>
-          <a class="btn btn-ghost btn-lg" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-            View on GitHub
-          </a>
-        </div>
-        <ul class="chips" aria-label="Requirements">
-          <li><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M11.2 8.4c0-1.5 1.2-2.2 1.3-2.2-.7-1-1.8-1.2-2.2-1.2-.9-.1-1.8.5-2.3.5-.5 0-1.2-.5-2-.5-1 0-2 .6-2.5 1.5-1.1 1.9-.3 4.7.8 6.2.5.8 1.1 1.6 1.9 1.6.8 0 1.1-.5 2-.5.9 0 1.2.5 2 .5.8 0 1.4-.8 1.9-1.5.6-.9.8-1.7.8-1.8 0 0-1.7-.6-1.7-2.6zM9.7 4c.4-.5.7-1.2.6-1.9-.6 0-1.3.4-1.8.9-.4.4-.7 1.1-.6 1.8.7.1 1.4-.3 1.8-.8z"/></svg>macOS 15 or later</li>
-          <li>Apple silicon &amp; Intel</li>
-          <li>2 MB download</li>
-          <li>No account</li>
-          <li>No telemetry</li>
-        </ul>
-        <p class="cta-meta"><a href="/download/">Install notes</a> · <a href="https://github.com/maheshauti96/VortexFlow/releases" rel="noopener">Release notes</a><span data-download-version hidden></span></p>
-
-        <div class="mac" id="live-spiral">
-          <div class="mac-lid">
-            <div class="screen-wrap demo-screen" style="--w:16;--h:10">
-              <div class="screen-desk" aria-hidden="true"></div>
-              <vortex-spiral demo nohint static></vortex-spiral>
-              <div class="demo-cursor" aria-hidden="true">
-                <span class="demo-ripple"></span>
-                <svg viewBox="0 0 32 32" width="28" height="28">
-                  <path d="M5 3.2l.4 22.2 6.2-6.1 4.2 10.1 3.8-1.6-4.3-9.8H24z" fill="#fff" stroke="#1a1a1a" stroke-width="1.6" stroke-linejoin="round"/>
-                </svg>
-              </div>
-            </div>
+    <section id="top" class="flow-hero" aria-labelledby="hero-h">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="overline">Your whole workspace. Within reach.</p>
+          <h1 id="hero-h">Find the right window.<br> <span>Stay in your flow.</span></h1>
+          <p class="hero-lede">Windows, tabs, and favorites.<br> Together at your cursor or key.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary btn-lg" href="#pricing">Get VortexFlow · $5</a>
+            <a class="trial-link" href="#pricing">Try seven days free <span aria-hidden="true">↗</span></a>
           </div>
-          <div class="mac-base" aria-hidden="true"><span class="mac-notch"></span></div>
+          <p class="availability"><span class="coming-soon">Coming soon</span> Purchase and trial downloads</p>
+          <div class="hero-facts"><span>Mouse or keyboard</span><span>macOS 15+</span><span>Local window data</span></div>
         </div>
-
-        <p class="hero-print">Middle-click, a thumb button, or a shortcut of your choosing · Any mouse, any keyboard · Windows stay on your Mac</p>
-      </div>
-    </section>
-
-    <span id="gesture" hidden></span>
-    <span id="spiral" hidden></span>
-
-    <section class="stats-band" aria-label="Project facts">
-      <div class="wrap">
-        <ul class="stats">
-          <li><span class="stat-n">0</span><span class="stat-l">third-party dependencies</span></li>
-          <li><span class="stat-n">780<small>+</small></span><span class="stat-l">automated tests</span></li>
-          <li><span class="stat-n">0<small> bytes</small></span><span class="stat-l">sent anywhere by the app</span></li>
-          <li><span class="stat-n">MIT</span><span class="stat-l">licensed, free forever</span></li>
-        </ul>
-      </div>
-    </section>
-
-    <section id="how" class="sec" aria-labelledby="how-h">
-      <div class="wrap">
-        <header class="sec-head">
-          <p class="step-n">How it works</p>
-          <h2 id="how-h">Press. See. Pick.</h2>
-          <p class="sec-sub">Three things, and your hand never leaves the mouse. If both hands are on the keyboard, the same three things happen from a shortcut.</p>
-        </header>
-        <ul class="trio">
-          <li>
-            <p class="step-n"><b>01</b> Press</p>
-            <h3>Any mouse, any button.</h3>
-            <p>Middle-click works with no setup. For a thumb or side button, press <em>Detect Button</em> and then press it — VortexFlow watches earlier in the input pipeline than most mouse utilities, so buttons other apps can’t see usually still work.</p>
-            <figure class="step-shot top"><img src="/img/step-press.webp" alt="A mouse with an illuminated thumb button" loading="lazy" width="900" height="900"></figure>
-          </li>
-          <li>
-            <p class="step-n"><b>02</b> See</p>
-            <h3>Every window, around the pointer.</h3>
-            <p>Each window is its own card — including minimized ones, other Spaces, and full-screen apps. Browser windows show the icon of the site that is open in them, so three Chromes look like three different things.</p>
-            <figure class="step-shot"><img src="/img/step-see.webp" alt="The VortexFlow spiral of window cards over a desktop wallpaper" loading="lazy" width="890" height="900"></figure>
-          </li>
-          <li>
-            <p class="step-n"><b>03</b> Pick</p>
-            <h3>Flick, release, done.</h3>
-            <p>The window you were just in is the second card, already under the pointer. Or start typing to filter by app, title, tab host, or URL path — and launch an app that isn’t running without leaving for Spotlight.</p>
-            <figure class="step-shot gradient contain"><img src="/img/step-pick.webp" alt="The spiral with a selected card in the centre reading Home / X, 2 of 2" loading="lazy" width="900" height="900"></figure>
-          </li>
-        </ul>
-      </div>
-    </section>
-
-    <section id="features" class="band" aria-labelledby="features-h">
-      <div class="wrap">
-        <header class="sec-head">
-          <p class="step-n">What it does</p>
-          <h2 id="features-h">Built for desks with too many windows.</h2>
-          <p class="sec-sub">Cmd-Tab switches applications. VortexFlow switches windows and tabs — the thing you actually wanted — and treats the mouse as a first-class way to do it.</p>
-        </header>
-        <ul class="feature-grid">
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg></div>
-            <h3>Every window is a card</h3>
-            <p>Four Finder windows are four cards, each with its own title, thumbnail, and place in the recency order — not one icon hiding four things.</p>
-          </li>
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.5" cy="12" r="5.5"/><circle cx="15.5" cy="12" r="5.5"/></svg></div>
-            <h3>Same-app windows look different</h3>
-            <p>Cards take a hint of colour from their icon, and browser windows show the site’s own icon layered on the browser’s. Three Chromes, three faces.</p>
-          </li>
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 2.5v6M6 9.5h12"/></svg></div>
-            <h3>Any mouse, any button</h3>
-            <p>Middle-click with no setup, or Detect Button for a side or thumb button. Works with buttons other utilities can’t even see.</p>
-          </li>
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h1M10 10h1M14 10h1M18 10h0M7 14h10"/></svg></div>
-            <h3>Keyboard optional</h3>
-            <p>A global shortcut opens the same spiral. Press it again to close. Both hands on the keys, same result.</p>
-          </li>
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5"/></svg></div>
-            <h3>Five layouts</h3>
-            <p>A strip, a grid, a list with a large preview, and two round arrangements that fan around the cursor. Live screenshots or large icons in each.</p>
-          </li>
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg></div>
-            <h3>Real previews</h3>
-            <p>Thumbnails come from ScreenCaptureKit, captured when the overlay is up, never saved. The selected card keeps refreshing.</p>
-          </li>
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2.5"/><path d="M7 8V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg></div>
-            <h3>Spaces, minimized, full screen</h3>
-            <p>Windows on other desktops, hidden in the Dock, or full screen are all in the spiral. Nothing is out of reach because of where it lives.</p>
-          </li>
-          <li class="feature">
-            <div class="feature-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></div>
-            <h3>Type to narrow it down</h3>
-            <p>Filter by app, title, tab host, or URL path. Apps that aren’t running show up too, so you can launch one without leaving for Spotlight.</p>
-          </li>
-        </ul>
-        <p class="feature-more">Also: a right-click menu with live preview, tab search, media controls, and window placement — <a href="#menu">below</a>. And the full list is in the <a href="https://github.com/maheshauti96/VortexFlow#readme" rel="noopener">README</a>.</p>
-      </div>
-    </section>
-
-    <section id="search" class="sec" aria-labelledby="search-h">
-      <div class="wrap">
-        <header class="sec-head">
-          <h2 id="search-h">Type it. The spiral still has an answer.</h2>
-          <p class="sec-sub">Filter by app, title, tab host, and URL path. If nothing local matches, search the web, open the first result, or send the query to ChatGPT, Claude, or Grok — without leaving the overlay.</p>
-        </header>
-        <div class="pair">
-          <figure class="shot-wrap live">
-            <div class="shot-desk" style="--shot:url('/img/tab-search.jpg')">
-              <vortex-spiral scene="tab-search"></vortex-spiral>
-            </div>
-            <figcaption>It’s open. The tab comes up with the site’s icon on the browser.</figcaption>
-          </figure>
-          <figure class="shot-wrap live">
-            <div class="shot-desk" style="--shot:url('/img/web-search.jpg')">
-              <vortex-spiral scene="web-search"></vortex-spiral>
-            </div>
-            <figcaption>It isn’t. Search the web, skip to the first result, or prompt an assistant.</figcaption>
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <section id="menu" class="band" aria-labelledby="menu-h">
-      <div class="wrap split">
-        <figure class="shot-wrap live menu-shot">
-          <div class="shot-desk menu-desk" data-reveal style="--shot:url('/img/card-menu.jpg')">
-            <vortex-spiral scene="card-menu"></vortex-spiral>
-            <div class="card-menu" role="menu" aria-label="Card actions">
-              <div class="cm-id">
-                <img src="/img/logos/chrome.png" width="16" height="16" alt="">
-                <span>Google Chrome</span>
-                <span class="cm-ctrls">
-                  <button type="button" class="cm-ctrl" title="Minimise" aria-label="Minimise">−</button>
-                  <button type="button" class="cm-ctrl cm-close" title="Close" aria-label="Close">×</button>
-                </span>
+        <div class="hero-demo-column">
+          <span id="spiral" class="legacy-anchor"></span><span id="live-spiral" class="legacy-anchor"></span>
+          <figure id="product-demo" class="spiral-showcase" aria-label="Interactive VortexFlow spiral" tabindex="-1">
+            <div id="story-stage" class="spiral-stage" data-scene="windows">
+              <span class="demo-badge">Interactive product demo</span>
+              <div class="glass-appearance" role="group" aria-label="Demo appearance">
+                <button type="button" data-appearance-choice="light" aria-pressed="false">Light</button>
+                <button type="button" data-appearance-choice="dark" aria-pressed="true">Dark</button>
               </div>
-              <div class="cm-preview">
-                <div class="cm-chrome">
-                  <span class="cm-tab">
-                    <img src="/img/logos/chrome.png" width="8" height="8" alt="">
-                    Pull Request #2140
+              <vortex-spiral id="hero-spiral" glass appearance="dark" managed story searchable instant static nohint></vortex-spiral>
+              <div id="story-pointer" class="ghost-pointer" aria-hidden="true"><img src="/img/ui/pointer.svg" width="30" height="30" alt=""><span></span></div>
+              <div id="story-receipt" class="story-receipt" role="status" hidden><img id="receipt-icon" src="/img/logos/chrome.png" width="26" height="26" alt=""><div><strong id="receipt-title"></strong><span>In this demo</span></div></div>
+            </div>
+            <figcaption class="story-caption">
+              <div><span id="story-phase" class="overline">01 / Your windows</span><strong id="story-caption">Everything open. One place to choose.</strong></div>
+              <div class="story-controls"><button id="story-play" type="button" aria-pressed="true">Pause</button><button id="story-replay" type="button">Replay</button><button id="story-search" type="button">Search</button></div>
+            </figcaption>
+            <div class="story-chapters" role="group" aria-label="Demo chapters">
+              <button type="button" data-chapter="windows" aria-pressed="true">Windows</button><button type="button" data-chapter="search" aria-pressed="false">Find a tab</button><button type="button" data-chapter="web" aria-pressed="false">Search &amp; ask</button><button type="button" data-chapter="pins" aria-pressed="false">Pinned favorites</button>
+            </div>
+            <div class="demo-preferences"><p id="story-instruction" class="demo-instruction">Click a card, use arrow keys and Enter, or type to find it.</p><label class="motion-choice"><input id="story-reduced" type="checkbox"> Reduced motion</label></div>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="visual-section" aria-labelledby="features-h">
+      <span id="workflows" class="legacy-anchor"></span><span id="search" class="legacy-anchor"></span><span id="gesture" class="legacy-anchor"></span>
+      <div class="wrap">
+        <header class="section-heading"><p class="overline">Less hunting. More doing.</p><h2 id="features-h">A small gesture.<br> A world of shortcuts.</h2></header>
+        <div class="visual-pair">
+          <article class="visual-card">
+            <header><h3>Your favorites fit right in.</h3><p>Links, apps, and keyboard shortcuts. Pinned into the spiral.</p></header>
+            <div class="pin-demo-stage"><vortex-spiral id="pin-spiral" glass appearance="dark" managed story instant static nohint></vortex-spiral></div>
+            <div class="visual-foot"><p id="pin-caption" role="status">Hover a pin to peek. Click to open.</p><button id="pin-reset" type="button">Reset pins</button></div>
+          </article>
+          <article id="arrange" class="visual-card">
+            <span id="menu" class="legacy-anchor"></span>
+            <header><h3>More from every window.</h3><p>Preview it. Resize it. Move it to the screen you’re using.</p></header>
+            <div id="context-stage" class="context-demo-stage" data-placement="rest">
+              <vortex-spiral id="context-spiral" glass appearance="dark" managed story instant static nohint></vortex-spiral>
+              <div id="context-menu" class="context-popover" role="group" aria-label="Example window actions">
+                <div class="context-title"><img src="/img/logos/chrome.png" width="21" height="21" alt=""><strong>Google Chrome</strong><button type="button" data-window-action="close" aria-label="Close example window">×</button></div>
+                <div class="context-preview" role="img" aria-label="Fictional Launch notes window preview"><span>PROJECT NORTHSTAR</span><strong>Launch notes</strong><p>A clear plan.<br> A little room to focus.</p><small>Draft complete · Ready for review</small></div>
+                <div class="context-meta"><strong>Launch notes</strong><span>Another Space · Chrome</span></div>
+                <p class="context-label">Move &amp; resize</p>
+                <div class="context-actions"><button type="button" data-window-action="left">Left half</button><button type="button" data-window-action="right">Right half</button><button type="button" data-window-action="fill">Fill</button><button type="button" data-window-action="display">Move to display</button></div>
+              </div>
+              <article id="context-result" class="context-result" hidden><div><img src="/img/logos/chrome.png" width="20" height="20" alt=""> Launch notes</div><h4>Room to focus.</h4><p>Your window, where you need it.</p></article>
+            </div>
+            <div class="visual-foot"><p id="context-caption" role="status">Try a window action in this example.</p><button id="context-reset" type="button">Reset window</button></div>
+          </article>
+        </div>
+        <div class="quiet-facts"><span>Per-window recency</span><span>Tap to browse · hold to switch</span><span>Across Spaces &amp; displays</span><span>Site, audio &amp; private-window cues</span></div>
+      </div>
+    </section>
+
+    <section class="layouts-section">
+      <div class="wrap">
+        <details id="layouts" class="layout-drawer">
+          <summary><span><strong>A spiral at heart. Five ways to see your windows.</strong><small>Spiral · Circular · Strip · Grid · List</small></span><span class="disclosure-copy">Explore layouts</span></summary>
+          <div class="layout-grid">
+            <div class="layout-copy">
+              <h2>Make it feel like you.</h2>
+              <div class="layout-tabs" role="tablist" aria-label="Choose an example layout">
+                <button role="tab" type="button" id="layout-spiral" aria-selected="true" aria-controls="layout-preview" data-layout="spiral">Spiral</button><button role="tab" type="button" id="layout-circular" aria-selected="false" aria-controls="layout-preview" tabindex="-1" data-layout="circular">Circular</button><button role="tab" type="button" id="layout-strip" aria-selected="false" aria-controls="layout-preview" tabindex="-1" data-layout="strip">Strip</button><button role="tab" type="button" id="layout-grid" aria-selected="false" aria-controls="layout-preview" tabindex="-1" data-layout="grid">Grid</button><button role="tab" type="button" id="layout-list" aria-selected="false" aria-controls="layout-preview" tabindex="-1" data-layout="list">List</button>
+              </div>
+              <p id="layout-description" class="layout-description" role="status">Spiral · Icons around your pointer.</p>
+              <label class="preview-toggle"><input id="layout-thumbnails" type="checkbox" disabled> Show window previews <span id="preview-availability">Available in Strip, Grid &amp; List</span></label>
+            </div>
+            <div id="layout-preview" class="layout-preview" role="tabpanel" aria-labelledby="layout-spiral"><div class="layout-preview-bar"><span>Layout preview</span><span>Example windows</span></div><vortex-spiral id="layout-ring" glass appearance="dark" managed instant static nohint></vortex-spiral><div id="layout-cards" class="layout-cards" hidden></div><p id="layout-selection" class="layout-selection">Release brief · Chrome</p><div id="layout-pins" class="layout-pin-legend"></div></div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section id="pricing" class="pricing-section" aria-labelledby="pricing-h" data-commerce-state="upcoming" data-price="5" data-currency="USD" data-trial-days="7">
+      <div class="wrap">
+        <header class="pricing-heading"><p class="overline">A little app. A simple choice.</p><h2 id="pricing-h">Try it. Make it yours.</h2><p>Purchase and trial downloads are coming soon.</p></header>
+        <div class="offer-grid">
+          <article class="offer trial-offer"><span class="offer-label">FREE TRIAL</span><div class="offer-price">7 <span>days</span></div><p>A week to find your flow.</p><button type="button" class="future-action" data-commerce-action="trial" disabled>Trial download · coming soon</button><a href="#waitlist" data-notify-interest="trial">Notify me when I can try it ↗</a></article>
+          <article class="offer purchase-offer"><span class="offer-label">VORTEXFLOW</span><div class="offer-price">$5</div><p>All your windows, within reach.</p><button type="button" class="future-action" data-commerce-action="purchase" disabled>Purchase · coming soon</button><a href="#waitlist" data-notify-interest="purchase">Notify me when I can buy it ↗</a></article>
+        </div>
+        <p class="offer-note">No payment or trial starts today. Leave your email and we’ll let you know when it’s ready.</p>
+      </div>
+    </section>
+
+    <section id="privacy" class="privacy-section">
+      <div class="wrap privacy-grid">
+        <div><p class="overline">Your workspace stays yours.</p><h2>On your Mac.<br> Under your control.</h2><p>Window titles and previews stay local.</p><a class="text-link" href="/privacy/">Privacy, plainly explained ↗</a></div>
+        <div id="faq" class="compact-faq">
+          <details><summary>How do mouse and keyboard activation work?</summary><p>Tap to leave the switcher open, or hold and release to switch. Choose a mouse button or keyboard shortcut in Settings. The previous window is preselected, using per-window recency.</p></details>
+          <details><summary>What can I pin?</summary><p>Links, apps, and keyboard shortcuts can be pinned into the spiral and reordered by dragging. Separately, you can choose running apps to always show first; their windows retain recency ordering.</p></details>
+          <details><summary>Which windows and tabs can I find?</summary><p>Search by title, app, site, or URL path. Supported tab providers include Chrome, Safari, Edge, Brave, Arc, Comet, Chromium, and Apple Terminal. If windows and tabs do not match, installed applications can appear. Web and assistant actions open their provider sites.</p></details>
+          <details><summary>What permissions do I need?</summary><p>Grant only the permissions for the features you want. Icon View needs no Screen Recording. Strip, Grid, and List can show window previews; Spiral and Circular use icons. <a href="/permissions/">Permission guide.</a></p></details>
+          <details><summary>What about private windows and screen sharing?</summary><p>Private windows use the browser’s icon; their site icon is not fetched. You can opt the overlay out of screenshots, but behavior depends on macOS and the recording app. Check your setup before sharing.</p></details>
+          <details><summary>Can I buy it or start the trial now?</summary><p>Not yet. The planned purchase price is $5, with a seven-day free trial. Checkout and downloadable trial builds are coming next. Joining the notification list does not create an account or start the trial. <a href="/terms/">Full terms.</a></p></details>
+        </div>
+      </div>
+    </section>
+
+    <section id="waitlist" class="waitlist-section" aria-labelledby="waitlist-h">
+      <div class="wrap waitlist-grid">
+        <div><p class="overline">Be there for the first click.</p><h2 id="waitlist-h">Your next flow<br> starts here.</h2><p id="notify-copy">We’ll email you when VortexFlow is ready to buy or try.</p><span class="waitlist-meta">macOS 15+ · $5 purchase · Seven days free to try</span></div>
+        <div><form id="waitlist-form" class="waitlist" action="https://formsubmit.co/maheshauti00@gmail.com" method="POST">
+              <input type="hidden" name="_next" value="https://vortexflow.io/thanks/">
+              <input type="hidden" name="_subject" value="VortexFlow waitlist">
+              <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+              <div class="waitlist-fields">
+                <label>
+                  <span>Email</span>
+                  <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" aria-describedby="signup-privacy">
+                </label>
+                <label>
+                  <span>Name <em>(optional)</em>
                   </span>
-                </div>
-                <div class="cm-page">
-                  <div class="cm-ghbar">Pull request <b>#2140</b></div>
-                  <div class="cm-ghtitle">feat: session store</div>
-                  <div class="cm-files">
-                    <span>SwitcherController.swift</span>
-                    <span>OverlayState.swift</span>
-                    <span class="add">+128 −41</span>
-                  </div>
-                </div>
+                  <input type="text" name="name" autocomplete="name" placeholder="Your name">
+                </label>
               </div>
-              <div class="cm-cap">
-                <div class="cm-title">feat: session store</div>
-                <div class="cm-src">github.com</div>
-              </div>
-              <dl class="cm-facts">
-                <div><dt>Desktop</dt><dd>Another · just now</dd></div>
-                <div><dt>Window</dt><dd>2 of 4</dd></div>
-              </dl>
-              <button type="button" class="cm-row" role="menuitem">
-                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.2 10.2L14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                Search through Tabs
-              </button>
-              <div class="cm-div"></div>
-              <div class="cm-sec">
-                <div class="cm-lab">Move &amp; Resize</div>
-                <div class="cm-tiles">
-                  <button type="button" title="Left half" aria-label="Left half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="2.6" y="2.6" width="11" height="12.8" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
-                  <button type="button" title="Right half" aria-label="Right half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="14.4" y="2.6" width="11" height="12.8" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
-                  <button type="button" title="Top half" aria-label="Top half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="2.6" y="2.6" width="22.8" height="6.2" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
-                  <button type="button" title="Bottom half" aria-label="Bottom half"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><rect x="2.6" y="9.2" width="22.8" height="6.2" rx="1.4" fill="currentColor" opacity=".28"/></svg></button>
-                </div>
-              </div>
-              <div class="cm-sec">
-                <div class="cm-lab">Fill &amp; Arrange</div>
-                <div class="cm-tiles">
-                  <button type="button" title="Fill" aria-label="Fill"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
-                  <button type="button" title="Left two-thirds" aria-label="Left two-thirds"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M14 2.5v13" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
-                  <button type="button" title="Right two-thirds" aria-label="Right two-thirds"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M14 2.5v13M14 9h12.3" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
-                  <button type="button" title="Top left" aria-label="Top left"><svg viewBox="0 0 28 18"><rect x="1.2" y="1.2" width="25.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M14 2.5v13M2.5 9h23" fill="none" stroke="currentColor" stroke-width="1.35"/></svg></button>
-                </div>
-              </div>
-              <button type="button" class="cm-row" role="menuitem">
-                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 13V8.5M3 13h4.5M13 3H8.5M13 3v4.5M3 13l10-10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                Full Screen
-              </button>
-              <button type="button" class="cm-row" role="menuitem">
-                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="4" width="9" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="5.5" y="7.5" width="9" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
-                Move to Built-in Retina Display
-              </button>
-            </div>
-          </div>
-        </figure>
-        <div>
-          <p class="step-n">Right-click a card</p>
-          <h2 id="menu-h">The rest of the window, without hunting for it.</h2>
-          <p class="sec-sub">A live preview. Search through Tabs on Chrome, Safari, Edge, Brave, Arc, Comet and Chromium — including other desktops. Play / pause / next if something is playing. Move &amp; Resize, Fill &amp; Arrange, Full Screen, Move to Display. Full-screen windows leave the Space first, then place — so a live-share window can come off a shared screen.</p>
-        </div>
-      </div>
-    </section>
-
-    <section id="contribute" class="sec" aria-labelledby="oss-h">
-      <div class="wrap">
-        <header class="sec-head">
-          <p class="step-n">Open source</p>
-          <h2 id="oss-h">Free, MIT-licensed, and built in the open.</h2>
-          <p class="sec-sub">VortexFlow is a native Swift and AppKit app with no third-party dependencies — the spiral, the event taps, the tab search, all of it — and the whole thing is on GitHub under the MIT license. Read it, fork it, or fix the one thing that annoys you. A window switcher lives in the most private part of your Mac; you should be able to see exactly what it does there.</p>
-        </header>
-        <ul class="trio oss">
-          <li>
-            <p class="step-n">Read</p>
-            <h3>The code, not a promise.</h3>
-            <p>Every claim on this page — no telemetry, favicons never fetched for a private window, thumbnails never saved — is a function you can open. Start with <code>SwitcherController.swift</code>.</p>
-            <a class="btn btn-ghost" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">
-              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-              Browse the source
-            </a>
-          </li>
-          <li>
-            <p class="step-n">Contribute</p>
-            <h3>Bugs, mice, and browsers.</h3>
-            <p>The best contributions are the ones only you can make: a mouse whose thumb button we have never seen, a browser we do not read tabs from yet, a layout that falls apart at forty windows. Issues and pull requests are both welcome.</p>
-            <a href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">Open an issue or pick one up →</a>
-          </li>
-          <li>
-            <p class="step-n">Build</p>
-            <h3>One command from clone to Applications.</h3>
-            <p>Swift Package Manager, Xcode’s command-line tools, nothing else. The script assembles the bundle, signs it, and installs it.</p>
-            <pre class="code"><span class="cm"># macOS 15+, Xcode command-line tools</span>
-git clone https://github.com/maheshauti96/VortexFlow.git
-cd VortexFlow
-Scripts/build-app.sh --install</pre>
-            <a href="/download/#source">Building from source →</a>
-          </li>
-        </ul>
-        <div class="oss-foot">
-          <div>
-            <h3>Help wanted</h3>
-            <p>Real gaps, not busywork. Open an issue before a large change so nobody builds the same thing twice.</p>
-            <ul class="wants">
-              <li>Tab search for Firefox, Vivaldi, Opera, and Zen — Chrome, Safari, Edge, Brave, Arc, Comet, and Chromium are covered.</li>
-              <li>A Homebrew cask, so <code>brew install --cask vortexflow</code> works.</li>
-              <li>Notarization, so the first launch stops needing Open Anyway.</li>
-              <li>Mice we have never seen: if Detect Button misses one of yours, that is a bug report we want.</li>
-            </ul>
-          </div>
-          <div data-contributors-wrap hidden>
-            <h3>People who made it</h3>
-            <p>Everyone whose commits are in <code>main</code>.</p>
-            <ul class="contributors" data-contributors aria-label="Contributors"></ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="privacy" class="band" aria-labelledby="privacy-h">
-      <div class="wrap narrow">
-        <header class="sec-head">
-          <h2 id="privacy-h">Your windows stay on your Mac</h2>
-          <p class="sec-sub">No account, no analytics, no telemetry. Window titles, screenshots, and what you type into the overlay never leave the machine — and because the code is open, that is a fact you can check rather than a policy you have to trust.</p>
-        </header>
-        <ul class="facts">
-          <li><span class="fact-k">Free, and staying free</span><span class="fact-v">MIT-licensed. No paid tier, no trial clock, no license key. <a href="/license/">The license, in full.</a></span></li>
-          <li><span class="fact-k">No account</span><span class="fact-v">Download it, open it, use it. There is nothing to sign in to and nothing that reports home.</span></li>
-          <li><span class="fact-k">Permissions are optional</span><span class="fact-v">It runs with any subset and tells you what you are missing. <a href="/permissions/">What each one buys.</a></span></li>
-          <li><span class="fact-k">Signed, not notarized</span><span class="fact-v">macOS will say the developer cannot be verified — notarization needs a paid Apple account. <a href="/download/#gatekeeper">Open Anyway, once.</a></span></li>
-        </ul>
-      </div>
-    </section>
-
-    <section id="faq" class="sec" aria-labelledby="faq-h">
-      <div class="wrap narrow">
-        <header class="sec-head">
-          <h2 id="faq-h">Questions</h2>
-        </header>
-        <div class="faq">
-          <details class="q">
-            <summary><span>Is this for me?</span></summary>
-            <div class="a"><p>If you keep a handful of apps and Cmd-Tab is fine, no. If you live in many windows, many Chromes, Spaces, and a mouse that already has a spare button, yes.</p></div>
-          </details>
-          <details class="q">
-            <summary><span>Is it really free?</span></summary>
-            <div class="a"><p>Yes. VortexFlow is open source under the <a href="/license/">MIT license</a>. There is no paid tier, no trial, no license key, and no account. Download the build or compile it yourself — either way it is the same code.</p></div>
-          </details>
-          <details class="q">
-            <summary><span>Does it send anything anywhere?</span></summary>
-            <div class="a"><p>No analytics and no telemetry. The one network request it makes is to fetch a site’s icon so a browser window can show what is open in it — unauthenticated, no cookies, and never for a private window. Deny it network access and everything still works minus the icons. <a href="/privacy/">The whole policy is short.</a></p></div>
-          </details>
-          <details class="q">
-            <summary><span>Why does macOS say the developer can’t be verified?</span></summary>
-            <div class="a"><p>The app is signed but not notarized, because notarization needs a paid Apple Developer account. Open <em>System Settings → Privacy &amp; Security</em> and choose <em>Open Anyway</em>. You do it once. Or build from source and skip Gatekeeper entirely. <a href="/download/#gatekeeper">Step by step.</a></p></div>
-          </details>
-          <details class="q">
-            <summary><span>Where should I download it from?</span></summary>
-            <div class="a"><p>Only from this site or from <a href="https://github.com/maheshauti96/VortexFlow/releases" rel="noopener">GitHub Releases</a>. VortexFlow asks for Accessibility, Input Monitoring, and Screen Recording — exactly the permissions a tampered copy would love to have. If you found it anywhere else, don’t run it; get it here or build it from source.</p></div>
-          </details>
-          <details class="q">
-            <summary><span>How can I help?</span></summary>
-            <div class="a"><p>Use it on a real desk and <a href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">report what breaks</a> — especially mice and browsers we have not seen. Pull requests are welcome; the codebase is plain Swift with a large test suite, so most changes come with a test. Stars help other people find it.</p></div>
-          </details>
-          <details class="q">
-            <summary><span>Does this replace Cmd-Tab?</span></summary>
-            <div class="a"><p>No. Cmd-Tab still exists. VortexFlow is a spiral at the cursor. A keyboard shortcut does the same job if both hands are on the keys.</p></div>
-          </details>
-          <details class="q">
-            <summary><span>How is this different from AltTab?</span></summary>
-            <div class="a"><p>AltTab is a keyboard window switcher — Windows Alt-Tab on a Mac. VortexFlow is a spiral of windows at the cursor that also works from a shortcut. <a href="/compare/">Longer comparison.</a></p></div>
-          </details>
-          <details class="q">
-            <summary><span>Does middle-click still open links?</span></summary>
-            <div class="a"><p>Not while VortexFlow owns middle-click — it has to consume the button or the click would land underneath. Move to a side button in Settings, or use the keyboard shortcut and leave middle-click alone.</p></div>
-          </details>
-        </div>
+              <button type="submit" class="btn btn-primary btn-lg">Notify me at launch</button>
+              <p id="signup-privacy" class="signup-privacy">We’ll use your email for launch updates. This form is handled by FormSubmit. <a href="/privacy/">Read our privacy policy.</a>
+              </p>
+            </form></div>
       </div>
     </section>
   </main>
-
-  <footer>
-    <div class="wrap foot-in">
-      <div class="foot-cta" id="download">
-        <h2>Start at the cursor</h2>
-        <p class="foot-sub">Free and open source · macOS 15 or later</p>
-        <div class="cta-row">
-          <a class="btn btn-primary btn-lg" href="https://github.com/maheshauti96/VortexFlow/releases/latest" data-download rel="noopener">
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5v8.3M4.6 6.6L8 10l3.4-3.4M2.5 12.5h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Download for macOS
-          </a>
-          <a class="btn btn-ghost btn-lg" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-            Star on GitHub<span class="btn-count" data-stars></span>
-          </a>
-        </div>
-        <p class="cta-meta"><a href="/download/">Install notes and building from source</a><span data-download-version hidden></span></p>
-        <ul class="includes">
-          <li>MIT-licensed, free forever</li>
-          <li>No account, no telemetry</li>
-          <li>Windows, titles and screenshots stay local</li>
-          <li>Any mouse · any keyboard</li>
-          <li>Native Swift, no dependencies</li>
-        </ul>
-      </div>
-    </div>
-    <div class="wrap">
-      <div class="foot-cols">
-        <div class="foot-brand">
-          <a class="mark" href="#top">
-            <img src="/img/mark.svg?v=2" width="22" height="22" alt="" aria-hidden="true">
-            <span>VortexFlow</span>
-          </a>
-          <p>A free, open-source window switcher for macOS. Every window and tab, at your cursor or key.</p>
-        </div>
-        <div class="foot-col">
-          <h3>Product</h3>
-          <ul>
-            <li><a href="/download/">Download</a></li>
-            <li><a href="#features">Features</a></li>
-            <li><a href="/compare/">Compare</a></li>
-            <li><a href="/permissions/">Permissions</a></li>
-            <li><a href="/blog/">Blog</a></li>
-          </ul>
-        </div>
-        <div class="foot-col">
-          <h3>Community</h3>
-          <ul>
-            <li><a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">GitHub</a></li>
-            <li><a href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">Issues</a></li>
-            <li><a href="https://github.com/maheshauti96/VortexFlow/pulls" rel="noopener">Pull requests</a></li>
-            <li><a href="https://github.com/maheshauti96/VortexFlow/releases" rel="noopener">Releases</a></li>
-            <li><a href="#contribute">Contributing</a></li>
-          </ul>
-        </div>
-        <div class="foot-col">
-          <h3>Legal</h3>
-          <ul>
-            <li><a href="/license/">MIT License</a></li>
-            <li><a href="/privacy/">Privacy</a></li>
-            <li><a href="/terms/">Terms</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="foot-bottom">
-        <span>© 2026 VortexFlow contributors · Released under the <a href="/license/">MIT License</a></span>
-        <span>Made with Swift and AppKit · <a href="https://github.com/maheshauti96/VortexFlow/blob/main/site" rel="noopener">This site is in the repo too</a></span>
-      </div>
-    </div>
-  </footer>
-
-  <script src="/js/site.js?v=16"></script>
-  <script src="/js/vortex-spiral.js?v=15" defer></script>
+  <footer class="flow-footer"><div class="wrap"><a class="mark" href="#top"><img src="/img/mark.svg?v=3" width="24" height="24" alt=""><span>VortexFlow</span></a><p>A little less friction between you and your work.</p><nav aria-label="Footer"><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/privacy/">Privacy</a><a href="/permissions/">Permissions</a><a href="/terms/">Terms</a></nav><span>© 2026 VortexFlow</span></div></footer>
 </body>
 </html>

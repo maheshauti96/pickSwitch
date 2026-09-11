@@ -13,6 +13,13 @@ import VortexflowCore
 // main-actor isolated, so the setup is wrapped in `assumeIsolated` rather than
 // scattering nonisolated escapes across the AppKit types.
 MainActor.assumeIsolated {
+    #if DEBUG
+    if VisualPreview.isRequested {
+        VisualPreview.run()
+        exit(0)
+    }
+    #endif
+
     // `--probe` reports permission state and enumeration results, then exits without
     // installing an event tap or showing any UI. A menu-bar agent has nowhere good to
     // surface that, and it is the fastest way to tell a setup problem from a bug.

@@ -43,11 +43,12 @@
   const PADDING = 12;
   const CONTENT_MARGIN = 4;
   const PREFERRED_H = 76;
-  const TITLE_PX = 12;
+  const TITLE_PX = 15;
   const ARTWORK = 56;
   const RING_INSET = 7;
   const MINT = '#7ee8d0';
   const SEL_FILL = '#c5e8df';
+  const GLASS = window.VortexGlass;
 
   function contentSize() {
     const innerMid = FIRST_RING + RING_THICKNESS / 2;
@@ -59,11 +60,13 @@
     return { width, height };
   }
 
-  function seatOf(offset) {
+  function seatOf(offset, winding = 'spiral') {
     const slot = offset % SEATS_PER_TURN;
     const start = START_ANGLE + slot * SWEEP + WEDGE_GAP / 2;
     const end = START_ANGLE + (slot + 1) * SWEEP - WEDGE_GAP / 2;
-    const inner = FIRST_RING + offset * RADIAL_STEP;
+    const inner = winding === 'circular'
+      ? FIRST_RING + Math.floor(offset / SEATS_PER_TURN) * (RING_THICKNESS + TURN_GAP)
+      : FIRST_RING + offset * RADIAL_STEP;
     const outer = inner + RING_THICKNESS;
     const midA = (start + end) / 2;
     const midR = (inner + outer) / 2;
@@ -115,8 +118,12 @@
   }
 
   function wrapLabel(text, maxWidth, font) {
+    if (text.startsWith('Prompt on ')) return ['Prompt on', text.slice(10)];
+    if (text === 'Open first result') return ['Open first', 'result'];
+    if (text === 'Search the web') return ['Search the', 'web'];
     const maxChars = Math.max(5, Math.floor(maxWidth / (font * 0.56)));
     if (text.length <= maxChars) return [text];
+    if (!text.includes(' ') && text.length <= maxChars + 2) return [text];
     const cut = text.lastIndexOf(' ', maxChars);
     const head = (cut > 3 ? text.slice(0, cut) : text.slice(0, maxChars)).trim();
     let tail = (cut > 3 ? text.slice(cut) : text.slice(maxChars)).trim();
@@ -223,6 +230,8 @@
     }
 
     connectedCallback() {
+      this._observeGlass();
+      if (this.hasAttribute('managed')) { this.setAttribute('tabindex', '0'); return; }
       const scene = SCENES[this.getAttribute('scene')] || null;
       let items = scene ? scene.items : DEFAULT_ITEMS;
       try {
@@ -244,6 +253,13 @@
       if (this._speed === 0) this.setAttribute('still', '');
       this._build();
       this._setActive(Math.min(this._prefer, items.length - 1), false);
+      if (this.hasAttribute('instant')) {
+        this._hold = false;
+        this._entranceT = 1;
+        this._applyEntrance(1);
+        if (this._qtext) this._qtext.textContent = this._query;
+        return;
+      }
       if (this.hasAttribute('demo')) {
         this._speed = 0;
         this._noHint = true;
@@ -252,21 +268,279 @@
         this.style.pointerEvents = 'none';
         return;
       }
-      const io = new IntersectionObserver((es) => {
-        if (es.some((e) => e.isIntersecting)) { this._enter(); io.disconnect(); }
+      this._io = new IntersectionObserver((es) => {
+        this._visible = es.some((e) => e.isIntersecting);
+        cancelAnimationFrame(this._raf);
+        if (this._visible) {
+          if (!this._entered) { this._entered = true; this._enter(); }
+          else { this._last = performance.now(); this._raf = requestAnimationFrame(this._tick); }
+        }
       }, { threshold: 0.08, rootMargin: '0px 0px 18% 0px' });
-      io.observe(this);
+      this._io.observe(this);
     }
 
     disconnectedCallback() {
       cancelAnimationFrame(this._raf);
       clearTimeout(this._typeTimer);
+      if (this._io) this._io.disconnect();
+      cancelAnimationFrame(this._glassRAF);
+      this._glassObserver?.disconnect();
+      this._glassObserver = null;
+      document.removeEventListener('visibilitychange', this._glassVisibility);
+    }
+
+    setAppearance(appearance) {
+      this.setAttribute('appearance', appearance === 'dark' ? 'dark' : 'light');
+    }
+
+    setAmbientPaused(paused) {
+      this._ambientPaused = Boolean(paused);
+      this._syncGlassMotion();
+    }
+
+    _observeGlass() {
+      if (!this.hasAttribute('glass') || !GLASS || this._glassObserver) return;
+      this._glassVisible = false;
+      this._glassVisibility = () => this._syncGlassMotion();
+      document.addEventListener('visibilitychange', this._glassVisibility);
+      this._glassObserver = new IntersectionObserver((entries) => {
+        this._glassVisible = entries.some((entry) => entry.isIntersecting);
+        this._syncGlassMotion();
+      }, { threshold: .01 });
+      this._glassObserver.observe(this);
+    }
+
+    _syncGlassMotion() {
+      if (!this.hasAttribute('glass') || !GLASS) return;
+      cancelAnimationFrame(this._glassRAF);
+      this._glassRAF = null;
+      const running = Boolean(this._liquidPath) && GLASS.shouldAnimate({ connected: this.isConnected,
+        visible: this._glassVisible, hidden: document.hidden, reduced: this._reduced, paused: this._ambientPaused });
+      this.dataset.glassMotion = running ? 'running' : this._reduced ? 'reduced' : 'paused';
+      if (!running) { this._drawGlass(GLASS.resting); return; }
+      this._glassLast = 0;
+      const frame = (now) => {
+        if (now - this._glassLast >= GLASS.frameInterval) {
+          this._glassLast = now;
+          this._drawGlass(GLASS.sample(now / 1000));
+        }
+        this._glassRAF = requestAnimationFrame(frame);
+      };
+      this._glassRAF = requestAnimationFrame(frame);
+    }
+
+    _drawGlass(motion) {
+      if (!this._liquidPath) return;
+      this._liquidPath.setAttribute('d', GLASS.contour(HUB_RADIUS - RING_INSET, motion));
+      this.style.setProperty('--glass-energy', motion.energy.toFixed(3));
+      this._liquidSheen?.setAttribute('stroke-dashoffset', String(-motion.phase / (Math.PI * 2) * 100));
+    }
+
+    _setGlassGlow(color) {
+      if (!this.hasAttribute('glass')) return;
+      this.style.setProperty('--glass-glow', color);
+    }
+
+    // The scene controller owns timing. The renderer never navigates or sends a query.
+    setExample(items, { selected = 1, winding = 'spiral', pins = [], query = '',
+      search = false, showPlus = false, animate = false } = {}) {
+      if (!Array.isArray(items) || !items.length) return;
+      const focusedInput = this.shadowRoot.activeElement === this._qinput;
+      const selection = focusedInput ? [this._qinput.selectionStart, this._qinput.selectionEnd] : null;
+      this.stopMotion();
+      const previous = animate && !this._reduced
+        ? this.shadowRoot.querySelector('.stage')?.cloneNode(true) : null;
+      this._items = items.slice(0, 24);
+      this._pins = winding === 'spiral' ? pins.slice(0, 3) : [];
+      this._pinActive = null;
+      this._pinGroups = [];
+      this._showPlus = showPlus && winding === 'spiral';
+      this._winding = winding;
+      this._query = query;
+      this._speed = 0;
+      this._angle = 0;
+      this._noHint = true;
+      this._prefer = Math.max(0, Math.min(selected, this._items.length - 1));
+      this._active = -1;
+      this._hold = false;
+      this._entranceT = 1;
+      this.toggleAttribute('search', search || Boolean(query));
+      this.setAttribute('still', '');
+      this._build();
+      this._hold = false;
+      this._entranceT = 1;
+      this._applyEntrance(1);
+      this._setActive(this._prefer, false);
+      this._addPins();
+      this.setQueryText(query, search || Boolean(query));
+      this.setAttribute('aria-label', 'VortexFlow ' + winding + '. Arrow keys select, Enter opens.' + (this.hasAttribute('searchable') ? ' Type to search.' : ''));
+      if (previous) {
+        previous.classList.add('scene-ghost');
+        previous.setAttribute('aria-hidden', 'true');
+        previous.inert = true;
+        this.shadowRoot.append(previous);
+        this._ghost = previous;
+        const current = this.shadowRoot.querySelector('.stage');
+        this._motion = [
+          previous.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease-out', fill: 'forwards' }),
+          current.animate([{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'scale(1)' }],
+            { duration: 440, easing: 'cubic-bezier(.2,.75,.2,1)' })
+        ];
+        this._motion[0].finished.then(() => previous.remove()).catch(() => {});
+      }
+      if (focusedInput && this._qinput) {
+        this._qinput.focus({ preventScroll: true });
+        this._qinput.setSelectionRange(Math.min(query.length, selection[0]), Math.min(query.length, selection[1]));
+      }
+    }
+
+    _itemLabel(item) {
+      return item.kind === 'web' || item.kind === 'assistant'
+        ? item.meta + ': ' + item.title : item.title || item.label;
+    }
+
+    updateExampleItems(items) {
+      if (items.length !== this._items.length) return;
+      this._items = items;
+      this._wedgeEls.forEach((wedge, index) => wedge.setAttribute('aria-label', this._itemLabel(items[index])));
+      const selected = this._active;
+      this._active = -1;
+      if (this._pinActive == null) this._setActive(Math.max(0, selected), false);
+    }
+
+    stopMotion() {
+      cancelAnimationFrame(this._raf);
+      clearTimeout(this._typeTimer);
+      (this._motion || []).forEach((animation) => animation.cancel());
+      this._motion = [];
+      this._ghost?.remove();
+      this._ghost = null;
+    }
+
+    setReducedMotion(reduced) {
+      this._reduced = Boolean(reduced);
+      this.toggleAttribute('reduce-motion', this._reduced);
+      if (this._reduced) this.stopMotion();
+      this._syncGlassMotion();
+    }
+
+    setQueryText(query, visible = true) {
+      this._query = query;
+      this.toggleAttribute('search', visible);
+      if (this._qinput) {
+        this._qinput.value = query;
+        this._qinput.style.width = Math.min(34, Math.max(4, query.length || 22)) + 'ch';
+      }
+      if (this._qtext) this._qtext.textContent = query;
+    }
+
+    focusSearch() {
+      this.setQueryText(this._query || '', true);
+      this._qinput?.focus({ preventScroll: true });
+    }
+
+    selectExample(index, announce = true) {
+      if (Number.isFinite(index)) this._setActive(Math.max(0, Math.min(index, this._items.length - 1)), announce);
+    }
+
+    targetPoint(index, pin = false) {
+      const target = pin ? this._pinGroups?.[index] : this._wedgeEls?.[index]?.querySelector('.ico-wrap');
+      if (!target) return null;
+      const rect = target.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+
+    selectPin(index, announce = true) {
+      const pin = this._pins?.[index];
+      if (!pin) return;
+      this._pinActive = index;
+      this._wedgeEls.forEach((wedge) => { wedge.classList.remove('on'); wedge.setAttribute('aria-pressed', 'false'); });
+      this._pinGroups.forEach((group, i) => {
+        group.classList.toggle('on', i === index);
+        group.setAttribute('aria-pressed', String(i === index));
+      });
+      this._hubK.textContent = pin.kind || 'Pinned shortcut';
+      this._hubT.textContent = pin.title;
+      this._hubS.textContent = 'Click to open';
+      this._hubK.style.display = '';
+      this._hubS.style.display = '';
+      this.shadowRoot.querySelector('.hub-ring')?.setAttribute('stroke', '#eef5ef');
+      this._setGlassGlow('#d3f3e7');
+      if (this.hasAttribute('story') && !this.hasAttribute('glass')) this._hub.style.boxShadow = '0 0 28px 4px #f0fff03d, inset 0 0 18px #ffffff88';
+      if (this._coupling) this._coupling.setAttribute('d', '');
+      if (announce) {
+        this._sr.textContent = (pin.kind || 'Pinned shortcut') + ', ' + pin.title;
+        this.dispatchEvent(new CustomEvent('vortex-pin-select', { detail: pin, bubbles: true }));
+      }
+    }
+
+    activateSelection() {
+      if (this._pinActive != null) {
+        this.dispatchEvent(new CustomEvent('vortex-pin', { detail: this._pins[this._pinActive], bubbles: true }));
+      } else if (this._active >= 0) this._switch(this._active);
+    }
+
+    _intent(kind) {
+      this.dispatchEvent(new CustomEvent('vortex-interaction', { detail: { kind }, bubbles: true }));
+    }
+
+    _addPins() {
+      const ns = 'http://www.w3.org/2000/svg';
+      const make = (tag, attrs) => {
+        const el = document.createElementNS(ns, tag);
+        Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+        return el;
+      };
+      this._pinGroups = [];
+      (this._pins || []).forEach((pin, i) => {
+        const seat = seatOf(7 - i);
+        const outer = seat.inner - 8;
+        const [x, y] = pt((FIRST_RING + outer) / 2, seat.midA);
+        const group = make('g', { class: 'pin-seat', 'data-pin': i, role: 'button', tabindex: '0',
+          'aria-label': (pin.kind || 'Pinned shortcut') + ': ' + pin.title, 'aria-pressed': 'false' });
+        group.append(make('path', { class: 'pin-card', d: wedgePath(FIRST_RING, outer, seat.start, seat.end, 7) }));
+        if (pin.src) group.append(make('image', { href: pin.src, x: x - 17, y: y - 20, width: 34, height: 34 }));
+        else {
+          const keys = make('text', { x, y: y + 1, 'text-anchor': 'middle', 'font-size': 20, fill: '#254a37' });
+          keys.textContent = pin.label;
+          group.append(keys);
+        }
+        const label = make('text', { x, y: y + 30, 'text-anchor': 'middle', 'font-size': 12, fill: '#32342e' });
+        label.textContent = pin.shortLabel || pin.title;
+        group.append(label);
+        const [badgeX, badgeY] = pt(outer - 12, seat.end - .11);
+        group.append(make('circle', { cx: badgeX, cy: badgeY, r: 8, fill: '#fff', stroke: '#cbd2c8' }));
+        group.append(make('image', { href: '/img/ui/pin.svg', x: badgeX - 5, y: badgeY - 5, width: 10, height: 10 }));
+        group.addEventListener('pointerenter', () => this.selectPin(i));
+        group.addEventListener('focus', () => { this._intent('keyboard'); this.selectPin(i); });
+        group.addEventListener('click', (event) => { event.stopPropagation(); this._intent('click'); this.selectPin(i); this.activateSelection(); });
+        group.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); this._intent('keyboard'); this.selectPin(i); this.activateSelection(); }
+        });
+        this._pinGroups.push(group);
+        this._orbit.append(group);
+      });
+      if (this._showPlus && this._pins.length < 3) {
+        const seat = seatOf(7 - this._pins.length);
+        const [x, y] = pt((FIRST_RING + seat.inner - 8) / 2, seat.midA);
+        const plus = make('g', { class: 'pin-plus', role: 'button', tabindex: '0', 'aria-label': 'Add a shortcut to this demo' });
+        plus.append(make('circle', { cx: x, cy: y, r: 40, fill: 'transparent' }));
+        plus.append(make('circle', { cx: x, cy: y, r: 16, fill: 'rgba(255,255,255,.12)', stroke: '#d5dfd7', 'stroke-dasharray': '3 3' }));
+        plus.append(make('path', { d: 'M' + (x - 6) + ' ' + y + 'h12M' + x + ' ' + (y - 6) + 'v12', stroke: '#e0e8e1', 'stroke-width': 1.5 }));
+        const add = () => { this._intent('pin'); this.dispatchEvent(new CustomEvent('vortex-add-pin', { bubbles: true })); };
+        plus.addEventListener('click', add);
+        plus.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); add(); }
+        });
+        this._orbit.append(plus);
+      }
     }
 
     _build() {
       const items = this._items;
       const N = items.length;
-      const seats = Array.from({ length: N }, (_, i) => seatOf(i));
+      const glassMode = this.hasAttribute('glass') && Boolean(GLASS);
+      const seats = Array.from({ length: N }, (_, i) => seatOf(i, this._winding));
       this._geo = seats;
       this._aim = (seats[Math.min(this._prefer, N - 1)] || seats[0]).midA * R2D + this._angle;
 
@@ -278,7 +552,8 @@
       const wellPct = (((HUB_RADIUS - RING_INSET - 10) * 2) / panel) * 100;
 
       const box = contentSize();
-      const nameH = TITLE_PX * 2 + 4;
+      const labelSize = this.hasAttribute('story') && N <= 6 && matchMedia('(max-width: 600px)').matches ? 18 : TITLE_PX;
+      const nameH = labelSize * 2 + 4;
       const iconSide = Math.min(ARTWORK, Math.max(24, box.height - nameH - 1));
 
       let defs = `
@@ -290,6 +565,8 @@
           <feGaussianBlur in="SourceGraphic" stdDeviation="1.1" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
+        <filter id="vx-liquid-shoulder" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
+        <filter id="vx-liquid-halo" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="11"/></filter>
         <linearGradient id="vx-preview-g" x1="18" y1="14" x2="46" y2="50" gradientUnits="userSpaceOnUse">
           <stop stop-color="#7ae0ff"/><stop offset=".35" stop-color="#7b5cff"/>
           <stop offset=".7" stop-color="#ff5ad5"/><stop offset="1" stop-color="#ffb24a"/>
@@ -320,26 +597,28 @@
           <path d="M14 56c2-12 10-18 18-18s16 6 18 18" fill="#3a3a38"/>
         </symbol>
         <symbol id="vx-search" viewBox="0 0 64 64">
-          <circle cx="29" cy="29" r="13.5" fill="none" stroke="#1c1c1e" stroke-width="3.6"/>
-          <path d="M39 39l14 14" fill="none" stroke="#1c1c1e" stroke-width="3.6" stroke-linecap="round"/>
+          <circle cx="29" cy="29" r="13.5" fill="none" stroke="currentColor" stroke-width="3.6"/>
+          <path d="M39 39l14 14" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/>
         </symbol>
         <symbol id="vx-open" viewBox="0 0 64 64">
-          <rect x="12" y="12" width="40" height="40" rx="9" fill="none" stroke="#1c1c1e" stroke-width="3.2"/>
-          <path d="M28 24h12v12M26 38l14-14" fill="none" stroke="#1c1c1e" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="12" y="12" width="40" height="40" rx="9" fill="none" stroke="currentColor" stroke-width="3.2"/>
+          <path d="M28 24h12v12M26 38l14-14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
         </symbol>
         <symbol id="vx-grok" viewBox="0 0 64 64">
           <rect width="64" height="64" rx="12" fill="#111"/>
           <path d="M18 44c10-22 26-28 32-16" fill="none" stroke="#f3f3f3" stroke-width="5" stroke-linecap="round"/>
           <ellipse cx="30" cy="34" rx="11" ry="13" transform="rotate(-34 30 34)" fill="none" stroke="#f3f3f3" stroke-width="4"/>
         </symbol>`;
+      if (glassMode) defs += `<path id="vx-liquid-contour" d="${GLASS.contour(HUB_RADIUS - RING_INSET, GLASS.resting)}" pathLength="100"/>`;
 
       const wedges = [];
       for (let k = 0; k < N; k++) {
         const it = items[k];
         const s = seats[k];
+        const glassPalette = glassMode ? GLASS.palette(it.fill) : null;
         const d = wedgePath(s.inner, s.outer, s.start, s.end, CORNER);
         const innerHL = arcPath(s.inner + 2, s.start, s.end, CORNER, 1);
-        const outerHL = arcPath(s.outer - 1.6, s.end, s.start, CORNER, 1);
+        const outerHL = arcPath(s.outer - 1.6, s.end, s.start, CORNER, 0);
 
         defs += `<radialGradient id="vxg${k}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="${f3(s.outer)}" fr="${f3(s.inner)}">
           <stop offset="0" stop-color="#fff" stop-opacity=".42"/>
@@ -352,8 +631,8 @@
         const ic = iconSide;
         const icX = s.cx - ic / 2;
         const icY = s.cy - box.height / 2 + 2;
-        const lines = wrapLabel(it.label, box.width - 6, TITLE_PX);
-        const lblY = icY + ic + 3.5 + TITLE_PX;
+        const lines = wrapLabel(it.label, box.width - 6, labelSize);
+        const lblY = icY + ic + 3.5 + labelSize;
         const rx = ic * 0.22;
 
         let iconEl;
@@ -381,16 +660,17 @@
         const [clx, cly] = pt(closeR, closeA);
         s.clx = clx; s.cly = cly;
 
-        const t1 = `<text class="lbl" x="${f3(s.cx)}" y="${f3(lblY)}" font-size="${TITLE_PX}">${esc(lines[0])}</text>`;
+        const t1 = `<text class="lbl" x="${f3(s.cx)}" y="${f3(lblY)}" font-size="${labelSize}">${esc(lines[0])}</text>`;
         const t2 = lines[1]
-          ? `<text class="lbl" x="${f3(s.cx)}" y="${f3(lblY + TITLE_PX + 2)}" font-size="${TITLE_PX}">${esc(lines[1])}</text>`
+          ? `<text class="lbl" x="${f3(s.cx)}" y="${f3(lblY + labelSize + 2)}" font-size="${labelSize}">${esc(lines[1])}</text>`
           : '';
 
         wedges.push(`
-      <g class="wedge" data-i="${k}" style="--fill:${it.fill || '#ececec'};--sel:${it.sel || SEL_FILL}">
+      <g class="wedge" data-i="${k}" role="button" tabindex="-1" aria-label="${esc(this._itemLabel(it))}" style="--fill:${it.fill || '#ececec'};--sel:${it.sel || SEL_FILL}${glassPalette ? ';--glass-dark:' + glassPalette.dark + ';--glass-selected-dark:' + glassPalette.selectedDark + ';--glass-rim:' + glassPalette.rim : ''}">
         <path class="card" d="${d}"/>
         <path class="sel" d="${d}"/>
         <path class="glass" d="${d}" fill="url(#vxg${k})"/>
+        ${glassMode ? `<path class="glass-bevel" d="${d}"/>` : ''}
         <path class="rim-in" d="${innerHL}"/>
         <path class="rim-out" d="${outerHL}"/>
         <g class="content" data-i="${k}">
@@ -416,7 +696,7 @@
     -webkit-user-select: none; user-select: none; touch-action: pan-y; outline: none;
     overflow: visible;
   }
-  :host(:focus-visible) .ring { box-shadow: 0 0 0 3px rgba(47,181,134,.35), 0 0 22px 6px rgba(47,181,134,.4); }
+  :host(:focus-visible) { outline: 3px solid #126d79; outline-offset: 4px; border-radius: 12px; }
   .stage { position: absolute; inset: 0; overflow: visible; }
   .stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; display: block; }
   .wedge { cursor: pointer; isolation: isolate; }
@@ -539,6 +819,10 @@
     animation: vxc 1s steps(1) infinite;
   }
   .qcaret.idle { animation: vxc 1.1s steps(1) infinite; }
+  :host([instant]) .qcaret { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
   @keyframes vxc { 50% { opacity: 0; } }
   @media (hover: none) { .hint .m1 { display: none; } }
   @media (hover: hover) { .hint .m2 { display: none; } }
@@ -547,14 +831,105 @@
     .hub .k, .hub .s { display: none; }
     .hub .t { -webkit-line-clamp: 2; font-size: 1em; max-width: 70%; }
   }
+
+  .scene-ghost { pointer-events: none !important; z-index: 12; }
+  .qinput { display: none; }
+  .pin-seat { cursor: pointer; }
+  .pin-card { fill: #f4f4ed; stroke: rgba(255,255,255,.7); stroke-width: 1.2; filter: drop-shadow(0 5px 9px #0002); transition: fill .2s; }
+  .pin-seat.on .pin-card, .pin-seat:focus .pin-card { fill: #fff; stroke: #d3f3d7; stroke-width: 3; }
+  .pin-plus { cursor: pointer; }
+  :host([story]) .hub { background: rgba(250,250,245,.78); backdrop-filter: blur(22px); box-shadow: 0 0 28px 4px rgba(188,255,221,.3), inset 0 0 18px #fff8; font-size: clamp(12px,2.45cqi,17px); }
+  :host([story]) .hub .k { color: #404a42; font-size: .72em; }
+  :host([story]) .hub .s { color: #495549; font-size: .65em; }
+  :host([story]) .hub .k, :host([story]) .hub .t, :host([story]) .hub .s { max-width: 84%; }
+  :host([story]) .halo { background: none; box-shadow: 0 0 44px 14px rgba(184,243,212,.18); }
+  :host([story][search]) { --lift: 0%; }
+  :host([story]) .qtext { display: none; }
+  :host([story]) .qpill { pointer-events: auto; top: 2%; max-width: calc(100% - 30px); padding: 11px 16px; gap: 9px; }
+  :host([story]) .qinput { display: block; border: 0; outline: 0; background: none; min-width: 0; max-width: 34ch; color: #232722; font: inherit; padding: 0; }
+  :host([story]) .qpill:focus-within { outline: 2px solid #8bd1bd; outline-offset: 4px; }
+  :host([story]) .qcaret { display: none; }
+  :host([story]) .close { display: none !important; }
+  :host([story][reduce-motion]) *, :host([story][reduce-motion]) *::before { animation: none !important; transition: none !important; }
+  /* The same optical hierarchy as the Mac widget: translucent body, colored
+     shoulder, fine white bevel. Icons and captions remain independent of motion. */
+  :host([glass]) { --glass-ink: #222729; --glass-secondary: #485151; --glass-energy: .55; --glass-glow: #bcebdc; --glass-ambient: color-mix(in srgb, var(--glass-glow) 62%, white); }
+  :host([glass]) .wedge .card { fill-opacity: .68; stroke: #ffffffcc; stroke-width: 1.1; filter: drop-shadow(0 8px 10px #17242129); }
+  :host([glass]) .wedge .sel { fill-opacity: .70; }
+  :host([glass]) .wedge .glass { mix-blend-mode: screen; opacity: .65; }
+  :host([glass]) .glass-bevel { fill: none; stroke: #ffffffde; stroke-width: 1.4; pointer-events: none; }
+  :host([glass]) .wedge .rim-in { stroke: var(--glass-rim, #e6f6ef); stroke-width: 6; filter: blur(2.6px); opacity: .45; }
+  :host([glass]) .wedge .rim-out { stroke: #ffffffb3; stroke-width: 3.4; filter: blur(1.8px); }
+  :host([glass]) .wedge.on .rim-in { stroke: var(--glass-ambient); stroke-width: 9; filter: blur(3px); opacity: .65; }
+  :host([glass]) .wedge .lbl { fill: var(--glass-ink); stroke: none; font-weight: 530; }
+  :host([glass]) .ico-wrap { color: var(--glass-ink); }
+  :host([glass]) .hub { background: #eae8e4cc; border: none; box-shadow: none; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+  :host([glass]) .hub .t { color: var(--glass-ink); text-shadow: none; font-weight: 620; }
+  :host([glass]) .hub .k, :host([glass]) .hub .s { color: var(--glass-secondary); text-shadow: none; }
+  :host([glass]) .hub.pulse { animation: none; }
+  :host([glass]) .halo, :host([glass]) .hub-ring { display: none; }
+  .liquid-hub { pointer-events: none; fill: none; }
+  .liquid-hub use { stroke: var(--glass-ambient); }
+  .liquid-hub .liquid-halo { stroke-width: 22; opacity: calc(.22 + var(--glass-energy) * .2); filter: url(#vx-liquid-halo); }
+  .liquid-hub .liquid-shoulder { stroke-width: 10; opacity: calc(.26 + var(--glass-energy) * .22); filter: url(#vx-liquid-shoulder); }
+  .liquid-hub .liquid-core { stroke-width: 2.8; opacity: .9; filter: url(#vx-ring); }
+  .liquid-hub .liquid-crest { stroke: #fff; stroke-width: 1; opacity: .82; }
+  .liquid-hub .liquid-sheen { stroke: #fff; stroke-width: 2; stroke-dasharray: 14 86; opacity: .62; filter: url(#vx-ring); }
+  :host([glass]) .pin-card { fill: #f1f4ede0; stroke: #ffffffc7; stroke-width: 1.3; }
+  :host([glass]) .pin-seat text { fill: var(--glass-ink); }
+  :host([glass]) .qpill { background: #fafbf6e8; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid #fff9; }
+  :host([glass]) .qpill svg { stroke: currentColor; }
+  :host([glass][appearance="dark"]) { --glass-ink: #f4f7f5; --glass-secondary: #d0ddd7; --glass-ambient: var(--glass-glow); }
+  :host([glass][appearance="dark"]) .wedge .card { fill: var(--glass-dark, #19221f); fill-opacity: .82; stroke: #ffffff2e; filter: drop-shadow(0 8px 12px #0006); }
+  :host([glass][appearance="dark"]) .wedge .sel { fill: var(--glass-selected-dark, #224c46); fill-opacity: .75; }
+  :host([glass][appearance="dark"]) .wedge .glass { opacity: .70; }
+  :host([glass][appearance="dark"]) .glass-bevel { stroke: var(--glass-rim, #e6f6ef); opacity: .38; stroke-width: .85; }
+  :host([glass][appearance="dark"]) .wedge .rim-in { stroke-width: 9; filter: blur(4.2px); opacity: .85; }
+  :host([glass][appearance="dark"]) .wedge .rim-out { stroke: var(--glass-rim, #e6f6ef); stroke-width: 5; filter: blur(3px); opacity: .60; }
+  :host([glass][appearance="dark"]) .wedge.on .rim-in { stroke-width: 12; opacity: 1; }
+  :host([glass][appearance="dark"]) .hub { background: #080d0bbb; box-shadow: inset 0 0 24px #b8ddcd08; }
+  :host([glass][appearance="dark"]) .liquid-crest { opacity: .38; }
+  :host([glass][appearance="dark"]) .pin-card { fill: #1b2925dd; stroke: #d9f1e44d; }
+  :host([glass][appearance="dark"]) .pin-seat.on .pin-card { fill: #2b4e42; stroke: #c3edda; }
+  :host([glass][appearance="dark"]) .qpill { background: #17231ee8; color: #f0f5f1; border-color: #c4ddce4d; }
+  :host([glass][appearance="dark"]) .qinput { color: #f0f5f1; }
+  :host([glass][appearance="dark"]) .qinput::placeholder { color: #c5d2cb; }
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    :host([glass]) .wedge .card, :host([glass]) .wedge .sel, :host([glass]) .pin-card { fill-opacity: 1; }
+    :host([glass]) .hub, :host([glass]) .qpill { background: #f1f2ee; backdrop-filter: none; -webkit-backdrop-filter: none; }
+    :host([glass][appearance="dark"]) .hub, :host([glass][appearance="dark"]) .qpill { background: #101914; }
+  }
+  :host([glass][reduce-motion]) *, :host([glass][reduce-motion]) *::before { animation: none !important; transition: none !important; }
+  @container (max-width: 420px) {
+    :host([story]) .hub { font-size: 12px; }
+    :host([glass]:not([search])) .hub { font-size: clamp(8px,3cqi,10px); }
+    :host([glass]:not([search])) .hub .t { max-width: 94%; overflow-wrap: normal; }
+    :host([glass][search]) .stage { --lift: -8%; }
+    :host([glass][search]) .qpill { top: 8%; }
+    :host([story][search]) .hub { font-size: 14px; }
+    :host([story][search]) .hub .k { display: block; font-size: 10px; }
+    :host([story][search]) .hub .t { max-width: 94%; font-size: 13px; overflow-wrap: normal; -webkit-line-clamp: 3; }
+    :host([story]) .qpill { font-size: 14px; padding: 10px 12px; }
+  }
+  @container (max-width: 300px) {
+    :host([story][search]) .hub .t { font-size: 11.5px; }
+  }
+
 </style>
 <div class="stage" part="stage">
   <div class="halo"></div>
-  <svg viewBox="-${f3(half)} -${f3(half)} ${f3(panel)} ${f3(panel)}" aria-hidden="true">
+  <svg viewBox="-${f3(half)} -${f3(half)} ${f3(panel)} ${f3(panel)}" role="group" aria-label="Window and shortcut cards">
     <defs>${defs}</defs>
     <g class="orbit">${wedgeMarkup}<g class="coupling"><path d=""/></g></g>
     <circle class="hub-ring" r="${f3(HUB_RADIUS - RING_INSET)}" fill="none" stroke="#c8fff4" stroke-width="9" opacity=".4" filter="url(#vx-glow)"/>
     <circle class="hub-ring" r="${f3(HUB_RADIUS - RING_INSET)}" fill="none" stroke="#f4fffe" stroke-width="1.7" opacity=".95" filter="url(#vx-ring)"/>
+    ${glassMode ? `<g class="liquid-hub" aria-hidden="true">
+      <use class="liquid-halo" href="#vx-liquid-contour"/>
+      <use class="liquid-shoulder" href="#vx-liquid-contour"/>
+      <use class="liquid-core" href="#vx-liquid-contour"/>
+      <use class="liquid-crest" href="#vx-liquid-contour"/>
+      <use class="liquid-sheen" href="#vx-liquid-contour"/>
+    </g>` : ''}
   </svg>
   <div class="ring"></div>
   <div class="hub">
@@ -562,8 +937,9 @@
     <div class="t">—</div>
     <div class="s">—</div>
   </div>
-  <div class="qpill" aria-hidden="true">
+  <div class="qpill">
     <svg viewBox="0 0 16 16" fill="none" stroke="#201e1d" stroke-width="1.55" stroke-linecap="round" aria-hidden="true"><circle cx="6.7" cy="6.7" r="4.35"/><path d="M10 10.1L14.15 14.2"/></svg>
+    <input class="qinput" type="text" aria-label="Search the example spiral" maxlength="100" autocomplete="off" spellcheck="false" placeholder="Search windows or tabs">
     <span class="qtext"></span>
     <span class="qcaret"></span>
   </div>
@@ -578,14 +954,17 @@
       this._contentEls = [...this.shadowRoot.querySelectorAll('.content')];
       this._uprightEls = [...this.shadowRoot.querySelectorAll('.upright')];
       this._hub = this.shadowRoot.querySelector('.hub');
+      this._liquidPath = this.shadowRoot.querySelector('#vx-liquid-contour');
+      this._liquidSheen = this.shadowRoot.querySelector('.liquid-sheen');
       this._hubK = this.shadowRoot.querySelector('.hub .k');
       this._hubT = this.shadowRoot.querySelector('.hub .t');
       this._hubS = this.shadowRoot.querySelector('.hub .s');
       this._coupling = this.shadowRoot.querySelector('.coupling path');
       this._qtext = this.shadowRoot.querySelector('.qtext');
+      this._qinput = this.shadowRoot.querySelector('.qinput');
       this._qcaret = this.shadowRoot.querySelector('.qcaret');
       this._sr = this.shadowRoot.querySelector('.sr');
-      if (this._query) {
+      if (this._query && !this.hasAttribute('managed')) {
         this._hold = true;
         this._entranceT = 0;
         this._applyEntrance(0);
@@ -608,6 +987,7 @@
       cancelAnimationFrame(this._raf);
       this._raf = requestAnimationFrame(this._tick);
       this._drawCoupling();
+      this._syncGlassMotion();
     }
 
     playScene(name) {
@@ -654,10 +1034,40 @@
       this._wedgeEls.forEach((w) => {
         const i = +w.dataset.i;
         w.addEventListener('pointerenter', () => this._setActive(i));
-        w.addEventListener('click', () => this._switch(i));
+        w.addEventListener('click', () => { this._intent('click'); this.focus({ preventScroll: true }); this._switch(i); });
+      });
+      stage.addEventListener('pointermove', (event) => {
+        const last = this._pointer;
+        this._pointer = { x: event.clientX, y: event.clientY };
+        if (!last || Math.abs(last.x - event.clientX) + Math.abs(last.y - event.clientY) > 2) this._intent('hover');
+      });
+      this._qinput?.addEventListener('input', () => {
+        this._intent('typing');
+        this.dispatchEvent(new CustomEvent('vortex-query', { detail: this._qinput.value, bubbles: true }));
       });
       if (this._hostBound) return;
       this._hostBound = true;
+      this.addEventListener('focusin', () => this._intent('focus'));
+      this.addEventListener('keydown', (event) => {
+        if (!this.hasAttribute('searchable')) return;
+        const input = event.composedPath()[0] === this._qinput;
+        if (input) {
+          if (event.key === 'Enter') { event.preventDefault(); event.stopImmediatePropagation(); this._intent('keyboard'); this.activateSelection(); }
+          else if (event.key === 'ArrowDown') { event.preventDefault(); event.stopImmediatePropagation(); this.focus({ preventScroll: true }); }
+          else if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); this._intent('keyboard'); this.dispatchEvent(new CustomEvent('vortex-query', { detail: '', bubbles: true })); this.focus({ preventScroll: true }); }
+          else event.stopImmediatePropagation();
+          return;
+        }
+        this._intent('keyboard');
+        if (event.key.length === 1 && event.key !== ' ' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          this.dispatchEvent(new CustomEvent('vortex-query', { detail: (this._query || '') + event.key, bubbles: true }));
+          this.focusSearch();
+        } else if (event.key === 'Backspace') {
+          event.preventDefault(); event.stopImmediatePropagation();
+          this.dispatchEvent(new CustomEvent('vortex-query', { detail: (this._query || '').slice(0, -1), bubbles: true }));
+        }
+      });
       stage.addEventListener('pointerenter', () => { this._inside = true; });
       stage.addEventListener('pointerleave', () => { this._inside = false; });
 
@@ -691,7 +1101,7 @@
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { this._step(1); e.preventDefault(); }
         else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { this._step(-1); e.preventDefault(); }
         else if (e.key === 'Enter' || e.key === ' ') {
-          if (this._active >= 0) this._switch(this._active);
+          this.activateSelection();
           e.preventDefault();
         }
       });
@@ -715,17 +1125,24 @@
     }
 
     _step(dir) {
-      const n = this._items.length;
-      this._setActive(((this._active < 0 ? 0 : this._active) + dir + n) % n);
+      const windows = this._items.length;
+      const count = windows + (this._pins || []).length;
+      const current = this._pinActive != null ? windows + this._pinActive : Math.max(0, this._active);
+      const next = (current + dir + count) % count;
+      if (next < windows) this._setActive(next);
+      else this.selectPin(next - windows);
     }
 
     _setActive(i, announce = true) {
-      if (i < 0 || i === this._active) return;
+      if (i < 0 || i >= this._items.length || (i === this._active && this._pinActive == null)) return;
+      this._pinActive = null;
+      (this._pinGroups || []).forEach((group) => { group.classList.remove('on'); group.setAttribute('aria-pressed', 'false'); });
       this._active = i;
       const it = this._items[i];
       this._wedgeEls.forEach((w) => {
         const on = +w.dataset.i === i;
         w.classList.toggle('on', on);
+        w.setAttribute('aria-pressed', String(on));
       });
       this._hubK.textContent = it.meta || '';
       this._hubT.textContent = (it.title || it.label).replace(/…$/, '');
@@ -733,9 +1150,13 @@
       this._hubK.style.display = this._hubK.textContent ? '' : 'none';
       this._hubS.style.display = this._hubS.textContent ? '' : 'none';
       this._glow = it.glow || MINT;
+      this._setGlassGlow(it.glow || (GLASS ? GLASS.palette(it.fill).glow : MINT));
+      this.shadowRoot.querySelector('.hub-ring')?.setAttribute('stroke', this._glow);
+      if (this.hasAttribute('story') && !this.hasAttribute('glass')) this._hub.style.boxShadow = '0 0 28px 4px ' + this._glow + '4d, inset 0 0 18px #ffffff88';
       if (this._coupling) this._coupling.parentElement.style.setProperty('--glow', this._glow);
       this._drawCoupling();
-      if (announce && this._sr) this._sr.textContent = `${it.label}${it.sub ? ', ' + it.sub : ''}`;
+      if (announce) this.dispatchEvent(new CustomEvent('vortex-select', { detail: it, bubbles: true }));
+      if (announce && this._sr) this._sr.textContent = (it.title || it.label) + ', ' + (it.meta || it.label);
     }
 
     _drawCoupling() {
@@ -754,6 +1175,9 @@
     }
 
     _enter() {
+      cancelAnimationFrame(this._raf);
+      this._last = performance.now();
+      this._raf = requestAnimationFrame(this._tick);
       if (this._reduced) {
         this._hold = false;
         this._entranceT = 1;
@@ -845,7 +1269,10 @@
         const cx = +c.dataset.cx, cy = +c.dataset.cy;
         c.setAttribute('transform', `translate(${f3(cx)} ${f3(cy)}) rotate(${f3(-this._angle)})`);
       }
-      this._raf = requestAnimationFrame(this._tick);
+      // Static examples settle instead of spending a frame on every idle refresh.
+      if ((this._speed || (!this._hold && this._entranceT < 1)) && this._visible !== false) {
+        this._raf = requestAnimationFrame(this._tick);
+      }
     }
   }
 

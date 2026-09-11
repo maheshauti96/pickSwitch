@@ -10,8 +10,9 @@ import Foundation
 ///    element returns an error rather than a value.
 /// 2. Messaging timeouts are set explicitly. The default AX timeout is 6 seconds;
 ///    a single unresponsive application would blow the 50 ms enumeration budget
-///    (Requirement 1.2) and hang the overlay. `AXBridge.applyMessagingTimeout`
-///    caps it hard.
+///    (Requirement 1.2) and hang the overlay. Apple applies a timeout only to the
+///    exact AX object passed in, so child elements returned by an attribute read are
+///    configured here as well as their application object.
 enum AXBridge {
 
     /// Ceiling for any single AX round trip.
@@ -25,10 +26,9 @@ enum AXBridge {
     /// open" box immediately after switching.
     ///
     /// A slow switcher is a much smaller problem than a switcher that claims there is
-    /// nothing to switch to. Enumeration runs the applications in parallel, so the
-    /// typical case stays in single-digit milliseconds regardless of this ceiling; it
-    /// only bites when an application is genuinely wedged, and then it is bounding a
-    /// stall rather than defining normal behaviour.
+    /// nothing to switch to. Enumeration runs the applications in parallel and stops
+    /// waiting at its own shorter presentation deadline. This per-message ceiling bounds
+    /// how long a worker can remain inside AX after that deadline.
     static let messagingTimeout: Float = 0.25
 
     static func applyMessagingTimeout(_ element: AXUIElement, seconds: Float = messagingTimeout) {
@@ -53,14 +53,24 @@ enum AXBridge {
     }
 
     static func elements(_ element: AXUIElement, _ attribute: String) -> [AXUIElement]? {
-        copyAttribute(element, attribute) as? [AXUIElement]
+        guard let elements = copyAttribute(element, attribute) as? [AXUIElement] else {
+            return nil
+        }
+        // `AXUIElementSetMessagingTimeout` is object-specific. A timeout set on the
+        // application does not carry into the window, group or button objects it returns.
+        for child in elements {
+            applyMessagingTimeout(child)
+        }
+        return elements
     }
 
     static func element(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         guard let value = copyAttribute(element, attribute) else { return nil }
         guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
         // swiftlint:disable:next force_cast
-        return (value as! AXUIElement)
+        let child = value as! AXUIElement
+        applyMessagingTimeout(child)
+        return child
     }
 
     /// A conditional cast from `CFTypeRef` to `AXValue` always succeeds at compile
@@ -160,6 +170,9 @@ enum AXBridge {
 
     static func windowID(for element: AXUIElement) -> CGWindowID? {
         guard let function = getWindowFunction else { return nil }
+        // Observer callbacks can hand us an element that did not pass through
+        // `elements` or `element` above.
+        applyMessagingTimeout(element)
         var identifier = CGWindowID(0)
         guard function(element, &identifier) == .success, identifier != 0 else { return nil }
         return identifier

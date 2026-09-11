@@ -514,182 +514,92 @@ struct OverlayRenderingTests {
         #expect(Set(subject.entries.map(\.windowID)).count == 6)
     }
 
-    // MARK: - The card, not the wallpaper
+    // MARK: - Glass and caption contrast
 
-    /// A wedge's colour has to be the wedge's own.
-    ///
-    /// This is the test that was missing, and its absence let a real defect ship. The wedges draw
-    /// no opaque plate, so whatever the frosted substrate transmits *is* the card — and every
-    /// previous calibration of the glass was done by rendering over flat black or flat cream, which
-    /// is not a condition any user is in. Over a genuine desktop the same constants measured a Dark
-    /// Mode card at luminance 106–119 against the reference's 55 with its chroma cut from 0.34 to
-    /// 0.20, and a Light Mode card over a *dark* desktop at luminance 68, where its near-black label
-    /// clears only 1.70:1.
-    ///
-    /// So this renders the same overlay over the darkest and the brightest desktop it can be given
-    /// and requires three things of every wedge: that it lands near the reference's own body, that
-    /// the wallpaper cannot move it far, and that its label stays legible either way.
-    @Test("A wedge's colour and contrast survive any wallpaper", arguments: [OverlayLayoutStyle.spiral, .circular])
+    /// The body intentionally transmits the desktop. Contrast is measured at
+    /// the caption, not at an unrelated clear patch near the rim.
+    @Test("Glass transmits the desktop while labels stay legible", arguments: [OverlayLayoutStyle.spiral, .circular])
     func wedgeColourSurvivesTheWallpaper(style: OverlayLayoutStyle) throws {
-        /// Measured off the references: their card bodies, sampled clear of the icon.
-        ///
-        /// Re-measured per card rather than as one figure for the whole ring, which is what the
-        /// previous 55 was. Averaging an annulus folds in every card's rim light and both of its
-        /// arcs, and those run four to seven times the body — so the "body" it reported was mostly
-        /// edge. Card by card, the dark reference's bodies are 19 (ChatGPT), 21 (Cursor), 27 (Grok
-        /// Bot), 29 (Finder), 38 (Slack), 40 (Chrome), 41 (Claude) and 74 (Brave, its most vivid),
-        /// median 27. The light reference's are 230–247, median 240.
-        ///
-        /// The tolerance stays wide on purpose, and the spread above is why: these fixtures use
-        /// fully saturated solid icons, which is the top of that range rather than the middle, and a
-        /// hue's own luminance varies by more than a factor of two at fixed saturation.
-        let reference: [ColorScheme: (luminance: Double, saturation: Double)] = [
-            .dark: (27, 0.34),
-            .light: (240, 0.06),
-        ]
+        for scheme in [ColorScheme.dark, .light] {
+            let palette = OverlayPalette.forScheme(scheme)
+            let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
+            let subject = OverlayState()
+            subject.availableContentWidth = 1400
+            subject.availableContentHeight = 860
+            subject.layoutStyle = style
+            subject.load(entries: (0..<12).map { Fixture.entry(id: CGWindowID(4_100 + $0), app: "Glass", zOrder: $0) }, selectedIndex: 0)
+            let geometry = try #require(subject.layout.radial)
+            let size = subject.layout.panelSize
+            let text = try #require(NSColor(palette.text).usingColorSpace(.sRGB))
+            for selected in [false, true] {
+                for hue in [0.0, 1.0 / 3, 2.0 / 3] {
+                    let seat = geometry.seat(at: 2)
+                    let tint = IconTint(hue: hue, vividness: 1)
+                    // Two blank lines retain real caption geometry without ink
+                    // contaminating the pixels sampled beneath the glyphs.
+                    let entry = Fixture.entry(id: 4_101, app: "  \n  ")
+                    var bodies: [Double] = []
+                    for desktop in [Color.black, .white] {
+                        let hosting = NSHostingView(rootView: ZStack {
+                            desktop
+                            WindowWedgeView(entry: entry, displayIcon: nil, seat: seat,
+                                centre: subject.layout.radialCentre, panelSize: size,
+                                isSelected: selected, isHovered: false, badgeCount: nil,
+                                reduceMotion: true, metrics: subject.cardMetrics.scaled(by: subject.layout.radialScale),
+                                tint: tint)
+                        }
+                        .environment(\.colorScheme, scheme)
+                        .environment(\.overlayPalette, palette)
+                        .frame(width: size.width, height: size.height))
+                        hosting.appearance = NSAppearance(named: appearance)
+                        hosting.frame = CGRect(origin: .zero, size: size)
+                        hosting.layoutSubtreeIfNeeded()
+                        let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+                        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                        let sx = Double(rep.pixelsWide) / size.width
+                        let sy = Double(rep.pixelsHigh) / size.height
+                        func pixel(_ point: CGPoint) throws -> NSColor {
+                            try #require(rep.colorAt(x: Int(point.x * sx), y: Int(point.y * sy))?.usingColorSpace(.sRGB))
+                        }
+                        // Clear of the icon and text; body should change with the
+                        // wallpaper while caption protection remains local.
+                        let angle = seat.startAngle + (seat.endAngle - seat.startAngle) * 0.18
+                        let radius = seat.innerRadius + (seat.outerRadius - seat.innerRadius) * 0.55
+                        let centre = subject.layout.radialCentre
+                        let body = try pixel(CGPoint(x: centre.x + radius * cos(angle), y: centre.y + radius * sin(angle)))
+                        bodies.append(0.2126 * body.redComponent + 0.7152 * body.greenComponent + 0.0722 * body.blueComponent)
 
-        for (appearance, scheme) in [
-            (NSAppearance.Name.darkAqua, ColorScheme.dark),
-            (.aqua, .light),
-        ] {
-            var sampledByDesktop: [String: [(luminance: Double, saturation: Double)]] = [:]
-
-            for (desktopName, desktop) in [
-                ("black", Color.black),
-                ("white", Color.white),
-            ] {
-                // Built here rather than through the shared fixture, which supplies icon-less
-                // entries and so caches "this application has no hue" against its names for the
-                // rest of the session — a sampled hue is keyed by application, because an icon
-                // does not change while the app runs.
-                let subject = OverlayState()
-                subject.availableContentWidth = 1400
-                subject.availableContentHeight = 860
-                subject.layoutStyle = style
-                subject.load(
-                    entries: (0..<12).map { index in
-                        WindowEntry(
-                            windowID: CGWindowID(4_100 + index),
-                            processID: pid_t(index + 1),
-                            // Strongly coloured, so any loss of chroma is the compositing rather
-                            // than a fixture that was grey to begin with.
-                            applicationName: "Hued \(index)",
-                            applicationIcon: Self.solidIcon(
-                                NSColor(
-                                    hue: CGFloat(index) / 12,
-                                    saturation: 1,
-                                    brightness: 1,
-                                    alpha: 1
-                                )
-                            ),
-                            title: "Window \(index)",
-                            frame: CGRect(x: 100, y: 100, width: 800, height: 600),
-                            isMinimized: false,
-                            zOrder: index,
-                            axElement: nil
-                        )
-                    },
-                    selectedIndex: 0
-                )
-
-                let size = subject.layout.panelSize
-                let hosting = NSHostingView(rootView: ZStack {
-                    desktop
-                    OverlayView(state: subject, hoveredIndex: nil)
-                }.frame(width: size.width, height: size.height))
-                hosting.appearance = NSAppearance(named: appearance)
-                hosting.frame = CGRect(origin: .zero, size: size)
-                hosting.layoutSubtreeIfNeeded()
-                let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
-                hosting.cacheDisplay(in: hosting.bounds, to: rep)
-
-                let geometry = try #require(subject.layout.radial)
-                let centre = subject.layout.radialCentre
-                let scaleX = Double(rep.pixelsWide) / Double(size.width)
-                let scaleY = Double(rep.pixelsHigh) / Double(size.height)
-
-                var sampled: [(luminance: Double, saturation: Double)] = []
-                // Skips seat 0, which is the selection and deliberately a stronger colour.
-                for offset in 1..<min(8, geometry.seats) {
-                    let seat = geometry.seat(at: offset)
-                    // Off the mid-angle and mid-depth, so the sample is body rather than the
-                    // content box, either rim light, or the icon.
-                    let angle = seat.startAngle + (seat.endAngle - seat.startAngle) * 0.14
-                    let radius = seat.innerRadius
-                        + (seat.outerRadius - seat.innerRadius) * 0.55
-                    let colour = try #require(
-                        rep.colorAt(
-                            x: Int(Double(centre.x + radius * CGFloat(cos(angle))) * scaleX),
-                            y: Int(Double(centre.y + radius * CGFloat(sin(angle))) * scaleY)
-                        )?.usingColorSpace(.sRGB)
-                    )
-                    let red = Double(colour.redComponent) * 255
-                    let green = Double(colour.greenComponent) * 255
-                    let blue = Double(colour.blueComponent) * 255
-                    let peak = max(red, green, blue)
-                    sampled.append((
-                        luminance: 0.2126 * red + 0.7152 * green + 0.0722 * blue,
-                        saturation: peak == 0 ? 0 : (peak - min(red, green, blue)) / peak
-                    ))
+                        let metrics = subject.cardMetrics.scaled(by: subject.layout.radialScale)
+                        let captionY = seat.contentFrame.maxY - (metrics.titleFontSize * 2 + 4) / 2
+                        for fraction in [-0.35, 0.0, 0.35] {
+                            let background = try pixel(CGPoint(
+                                x: seat.contentFrame.midX + seat.contentFrame.width * fraction, y: captionY))
+                            let ratio = Self.rgbContrast(text: text, background: background)
+                            #expect(ratio >= 4.5,
+                                "\(style) \(scheme) selected=\(selected) hue=\(hue), caption \(fraction): \(ratio):1")
+                        }
+                    }
+                    #expect(abs(bodies[0] - bodies[1]) > 0.05, "Glass body became opaque")
+                    #expect(abs(bodies[0] - bodies[1]) < 0.50, "Glass lost its own tint/contrast floor")
                 }
-                try #require(!sampled.isEmpty)
-                sampledByDesktop[desktopName] = sampled
-
-                let target = try #require(reference[scheme])
-                for (offset, sample) in sampled.enumerated() {
-                    // Near the reference's own body. Generous, because a hue's own luminance
-                    // varies; tight enough that "the wallpaper won" fails.
-                    #expect(
-                        abs(sample.luminance - target.luminance) <= 45,
-                        """
-                        \(style) \(scheme) over \(desktopName): seat \(offset + 1) body luminance \
-                        \(Int(sample.luminance)) against the reference's \(Int(target.luminance))
-                        """
-                    )
-                    // The label has to be readable on it, which is what failed at 1.70:1.
-                    let text = try #require(
-                        NSColor(OverlayPalette.forScheme(scheme).text).usingColorSpace(.sRGB)
-                    )
-                    let ratio = Self.contrast(
-                        text: text,
-                        againstLuminanceOf255: sample.luminance
-                    )
-                    #expect(
-                        ratio >= 4.5,
-                        """
-                        \(style) \(scheme) over \(desktopName): seat \(offset + 1) label is \
-                        \(String(format: "%.2f", ratio)):1 on a body of \(Int(sample.luminance))
-                        """
-                    )
-                }
-
-                if scheme == .dark {
-                    // Dark cards are stained glass in the references. Chroma is the whole point of
-                    // the tint, and diluting it is what made the live overlay look untinted.
-                    let weakest = sampled.map(\.saturation).min() ?? 0
-                    #expect(
-                        weakest >= 0.18,
-                        "\(style) dark over \(desktopName): weakest body chroma is \(weakest)"
-                    )
-                }
-            }
-
-            // And the wallpaper barely moves it. This is the property that makes a card's colour
-            // an identity rather than a coincidence: the same window is the same colour on any
-            // desktop, which is what lets a ring of Chrome windows be told apart by hue at all.
-            let onBlack = try #require(sampledByDesktop["black"])
-            let onWhite = try #require(sampledByDesktop["white"])
-            for (offset, pair) in zip(onBlack, onWhite).enumerated() {
-                #expect(
-                    abs(pair.0.luminance - pair.1.luminance) <= 30,
-                    """
-                    \(style) \(scheme): seat \(offset + 1) moved \
-                    \(Int(abs(pair.0.luminance - pair.1.luminance))) luminance between a black \
-                    and a white desktop
-                    """
-                )
             }
         }
+    }
+
+    private static func rgbContrast(text: NSColor, background: NSColor) -> Double {
+        func luminance(_ colour: NSColor) -> Double {
+            func linear(_ channel: Double) -> Double {
+                channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(colour.redComponent) + 0.7152 * linear(colour.greenComponent)
+                + 0.0722 * linear(colour.blueComponent)
+        }
+        let alpha = text.alphaComponent
+        let composed = NSColor(srgbRed: text.redComponent * alpha + background.redComponent * (1 - alpha),
+            green: text.greenComponent * alpha + background.greenComponent * (1 - alpha),
+            blue: text.blueComponent * alpha + background.blueComponent * (1 - alpha), alpha: 1)
+        let first = luminance(composed), second = luminance(background)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 
     /// A dark wedge is a slab of glass lit on both arcs, brighter on the one facing the hub.

@@ -15,7 +15,7 @@ struct BrandImageTests {
         #expect(image?.isTemplate == false)
     }
 
-    @Test("The window mark is a ring on a clear field, not a plated squircle")
+    @Test("The window mark is a spiral on a clear field, not a plated squircle")
     func markHasTransparentField() {
         guard let image = BrandImage.mark(),
               let tiff = image.tiffRepresentation,
@@ -63,7 +63,7 @@ struct BrandImageTests {
         #expect(normal?.size == warning?.size)
     }
 
-    @Test("The menu bar icon is a ring on a clear field, not a plated squircle")
+    @Test("The menu bar icon is a spiral on a clear field, not a plated squircle")
     func menuBarMarkHasTransparentField() {
         guard let image = BrandImage.menuBarMark(),
               let tiff = image.tiffRepresentation,
@@ -83,6 +83,37 @@ struct BrandImageTests {
             alpha(at: CGPoint(x: maxX / 2, y: maxY / 2), in: representation) < 0.05,
             "the hub should stay hollow"
         )
+    }
+
+    @Test("The approved spiral keeps teal, mint and violet without the old coral segment")
+    func approvedPaletteIsPresent() {
+        guard let image = BrandImage.mark(), let tiff = image.tiffRepresentation,
+              let representation = NSBitmapImageRep(data: tiff) else {
+            Issue.record("colour mark did not load")
+            return
+        }
+        var teal = 0, mint = 0, violet = 0, coral = 0
+        for y in stride(from: 0, to: representation.pixelsHigh, by: 3) {
+            for x in stride(from: 0, to: representation.pixelsWide, by: 3) {
+                guard let c = representation.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+                      c.alphaComponent > 0.9 else { continue }
+                let (r, g, b) = (c.redComponent, c.greenComponent, c.blueComponent)
+                if r < 0.3 && g > 0.4 && b > 0.5 && b > g - 0.1 { teal += 1 }
+                if r < 0.4 && g > 0.5 && g > b + 0.1 { mint += 1 }
+                if r > 0.3 && b > 0.65 && b > g + 0.15 { violet += 1 }
+                if r > 0.65 && g < 0.7 && b < 0.5 { coral += 1 }
+            }
+        }
+        #expect(teal > 20)
+        #expect(mint > 20)
+        #expect(violet > 20)
+        #expect(coral == 0)
+    }
+
+    @Test("Menu bar artwork includes all three native display scales")
+    func menuBarScalesArePresent() {
+        let widths = Set(BrandImage.menuBarMark()?.representations.map(\.pixelsWide) ?? [])
+        #expect(widths.isSuperset(of: [18, 36, 54]))
     }
 
     private func alpha(at point: CGPoint, in representation: NSBitmapImageRep) -> CGFloat {

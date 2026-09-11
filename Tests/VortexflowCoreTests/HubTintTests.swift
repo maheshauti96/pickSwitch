@@ -119,7 +119,10 @@ struct HubTintTests {
         }
         return (
             try pixel(
-                radius: geometry.hubRadius - HubChrome.ringInset,
+                // The new light rim has a white optical crest. Its tint is in
+                // the adjacent shoulder, not in that achromatic centerline.
+                radius: geometry.hubRadius - HubChrome.ringInset
+                    + (appearance == .aqua ? HubChrome.ringGlowThickness * 0.55 : 0),
                 angle: state.radialRingAngle + .pi
             ),
             try pixel(radius: 0, angle: 0),
@@ -416,7 +419,7 @@ struct HubTintTests {
     /// as hue alone.
     @Test("Increase Contrast drops both the hue and the watermark")
     func increaseContrastDropsTheDecoration() throws {
-        let resting = try Self.ringAndCentre(iconColour: nil, appearance: .darkAqua)
+        let resting = try Self.ringAndCentre(iconColour: nil, appearance: .darkAqua, increaseContrast: true)
         let plain = try Self.ringAndCentre(
             iconColour: .systemRed,
             appearance: .darkAqua,
