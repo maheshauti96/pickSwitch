@@ -60,7 +60,39 @@ html:has(.showcase-page) { scroll-behavior: auto; scroll-padding-top: 76px; }
 .spiral-revision[data-appearance="dark"] .layout-card[aria-pressed="true"] { background: #355b48; border-color: #94c7ac; }
 .spiral-revision[data-appearance="dark"] .layout-selection { background: #1d3027ed; color: #edf7ef; }
 .spiral-revision[data-appearance="dark"] .layout-pin-legend button { background: #263d30; color: #edf7ef; border-color: #9cbda65c; }
-#hero-spiral { position: absolute; width: min(91%,680px); left: 50%; top: 50%; transform: translate(-50%,-50%); transition: width .65s cubic-bezier(.2,.75,.2,1), transform .65s cubic-bezier(.2,.75,.2,1); }
+#hero-spiral { position: absolute; width: min(91%,680px); left: 50%; top: 50%; transform: translate(-50%,-50%); transition: width .65s cubic-bezier(.2,.75,.2,1), transform .65s cubic-bezier(.2,.75,.2,1), opacity .45s ease; }
+/* While the story plays the spiral is a picture: hovering does not hijack it, a click takes control. */
+.spiral-stage[data-playing="true"] #hero-spiral { pointer-events: none; }
+.spiral-stage[data-scene="open"] #hero-spiral { opacity: 0; transform: translate(-50%,-50%) scale(.86); transition-duration: .2s, .2s, .2s; }
+.story-trigger { position: absolute; left: 50%; top: 50%; z-index: 7; transform: translate(-50%,-50%); pointer-events: none; opacity: 0; transition: opacity .35s ease, transform .35s ease; }
+.story-trigger.is-visible { opacity: 1; }
+.story-trigger.is-leaving { opacity: 0; transform: translate(-50%,-50%) scale(1.08); }
+.story-trigger > div { display: none; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+.story-trigger[data-mode="mouse"] .trigger-mouse, .story-trigger[data-mode="keys"] .trigger-keys { display: flex; }
+.trigger-label { font-size: 13px; line-height: 1.5; color: #b7c9bc; }
+.trigger-label strong { display: block; font-size: 18px; font-weight: 600; letter-spacing: -.01em; color: #f1f6f0; margin-bottom: 3px; }
+.mouse-body { position: relative; display: block; width: 58px; height: 90px; border: 2px solid #b9cfc0; border-radius: 29px; background: #ffffff0c; box-shadow: 0 12px 34px #0007; transition: transform .15s ease; }
+.mouse-body::before { content: ""; position: absolute; left: 50%; top: 0; width: 2px; height: 38px; background: #b9cfc066; transform: translateX(-50%); }
+.mouse-body::after { content: ""; position: absolute; left: 0; right: 0; top: 37px; height: 2px; background: #b9cfc066; }
+.mouse-wheel { position: absolute; left: 50%; top: 11px; width: 9px; height: 20px; border-radius: 5px; background: #9fb8a6; transform: translateX(-50%); transition: background .15s, box-shadow .15s; }
+.trigger-ring { position: absolute; left: 50%; top: 21px; width: 30px; height: 30px; margin-left: -15px; border: 2px solid #8ef0bf; border-radius: 50%; opacity: 0; }
+.story-trigger.is-pressed .mouse-body { transform: scale(.96); }
+.story-trigger.is-pressed .mouse-wheel { background: #8ef0bf; box-shadow: 0 0 0 4px #8ef0bf3d, 0 0 20px #8ef0bf; }
+.story-trigger.is-pressed .trigger-ring { animation: pointer-click .6s ease-out; }
+.trigger-keys .keys { display: flex; gap: 9px; }
+.trigger-keys kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 56px; height: 56px; padding: 0 16px; font: 600 17px/1 ui-sans-serif, -apple-system, system-ui, sans-serif; color: #edf5ef; background: linear-gradient(#ffffff1f, #ffffff0a); border: 1px solid #c8dcd05c; border-bottom-width: 3px; border-radius: 10px; box-shadow: 0 10px 26px #0006; transition: transform .13s ease, border-bottom-width .13s ease, background .13s ease, border-color .13s ease; }
+.story-trigger.is-pressed kbd { transform: translateY(2px); border-bottom-width: 1px; background: #8ef0bf2b; border-color: #8ef0bf; }
+.story-trigger.is-pressed kbd:nth-child(2) { transition-delay: .07s; }
+.story-trigger.is-pressed kbd:nth-child(3) { transition-delay: .14s; }
+.spiral-revision[data-appearance="light"] .trigger-label { color: #4d6255; }
+.spiral-revision[data-appearance="light"] .trigger-label strong { color: #1f3428; }
+.spiral-revision[data-appearance="light"] .mouse-body { border-color: #5f7d6b; background: #ffffff8c; box-shadow: 0 12px 30px #1e2e2430; }
+.spiral-revision[data-appearance="light"] .mouse-body::before, .spiral-revision[data-appearance="light"] .mouse-body::after { background: #5f7d6b55; }
+.spiral-revision[data-appearance="light"] .mouse-wheel { background: #7f9b8a; }
+.spiral-revision[data-appearance="light"] .story-trigger.is-pressed .mouse-wheel { background: #2f9a68; box-shadow: 0 0 0 4px #2f9a6833, 0 0 16px #2f9a6888; }
+.spiral-revision[data-appearance="light"] .trigger-ring { border-color: #2f9a68; }
+.spiral-revision[data-appearance="light"] .trigger-keys kbd { color: #1f3428; background: linear-gradient(#ffffffee, #f1f3ea); border-color: #6f8d7a66; box-shadow: 0 10px 24px #1e2e2426; }
+.spiral-revision[data-appearance="light"] .story-trigger.is-pressed kbd { background: #d8f2e3; border-color: #2f9a68; }
 .spiral-stage[data-scene="search"] #hero-spiral, .spiral-stage[data-scene="web"] #hero-spiral { width: min(91%,620px); }
 .spiral-stage[data-scene="pins"] #hero-spiral { transform: translate(-49%,-45%) scale(1.12); }
 .ghost-pointer { position: absolute; width: 31px; height: 33px; z-index: 8; left: 18%; top: 80%; pointer-events: none; opacity: 0; transition: left .7s cubic-bezier(.3,.1,.2,1), top .7s cubic-bezier(.3,.1,.2,1), opacity .2s; filter: drop-shadow(0 3px 4px #0005); }
@@ -330,6 +362,15 @@ html:has(.showcase-page) { scroll-behavior: auto; scroll-padding-top: 76px; }
   .spiral-stage[data-scene="pins"] #hero-spiral { transform: translate(-48%,-43%) scale(1.22); }
   .demo-badge { top: 13px; left: 14px; font-size: 9px; }
   .ghost-pointer, .ghost-pointer img { width: 24px; height: 25px; }
+  .story-trigger > div { gap: 14px; }
+  .trigger-label { font-size: 11px; }
+  .trigger-label strong { font-size: 14px; }
+  .mouse-body { width: 40px; height: 62px; border-radius: 20px; }
+  .mouse-body::before { height: 26px; }
+  .mouse-body::after { top: 25px; }
+  .mouse-wheel { top: 7px; height: 14px; }
+  .trigger-ring { top: 14px; }
+  .trigger-keys kbd { min-width: 40px; height: 40px; padding: 0 10px; font-size: 13px; }
   .story-caption { padding-top: 14px; gap: 10px; }
   .story-caption > div:first-child { max-width: 57%; }
   .story-caption strong { font-size: 13px; line-height: 1.45; }

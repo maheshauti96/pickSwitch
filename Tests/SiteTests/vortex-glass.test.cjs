@@ -72,7 +72,8 @@ test('all four showcase widgets opt into glass, loaded before the component', ()
   assert.match(html, /aria-label="Demo appearance"/);
   assert.match(html, /data-appearance-choice="light"/);
   assert.match(html, /data-appearance-choice="dark"/);
-  assert.match(html, /No payment or trial starts today/);
+  assert.match(html, /Free\. Open source\. Forever\./);
+  assert.doesNotMatch(html, /\$5|seven days free|Join the waitlist|formsubmit/i);
 });
 
 test('the static page and showcase keep valid local assets and metadata', () => {
@@ -82,5 +83,22 @@ test('the static page and showcase keep valid local assets and metadata', () => 
   for (const match of scenes.matchAll(/src: '(\/img\/[^']+)'/g)) assets.add(match[1]);
   for (const asset of assets) assert.ok(fs.existsSync(path.join(root, 'site', asset)), asset);
   const metadata = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
-  assert.equal(JSON.parse(metadata)['@graph'].length, 2);
+  const graph = JSON.parse(metadata)['@graph'];
+  assert.equal(graph.length, 3);
+  const app = graph.find((node) => node['@type'] === 'SoftwareApplication');
+  assert.equal(app.isAccessibleForFree, true);
+  assert.equal(app.offers.price, '0');
+  assert.match(graph.find((node) => node['@type'] === 'SoftwareSourceCode').codeRepository, /github\.com\//);
+});
+
+test('the hero story opens the overlay itself and keeps looping', () => {
+  const html = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
+  const scenes = fs.readFileSync(path.join(root, 'site/js/showcase.js'), 'utf8');
+  assert.match(html, /id="story-trigger"[^>]*\bhidden\b/);
+  assert.match(html, /<kbd>⌃<\/kbd><kbd>⌥<\/kbd><kbd>space<\/kbd>/);
+  assert.match(scenes, /closedScene\(loops % 2 \? 'keys' : 'mouse'\)/);
+  assert.match(scenes, /event\.detail\.kind !== 'hover'\) pause\('manual'\)/);
+  assert.doesNotMatch(scenes, /completed/);
+  const widget = fs.readFileSync(path.join(root, 'site/js/vortex-spiral.js'), 'utf8');
+  assert.match(widget, /^\s+playEntrance\(\) \{/m);
 });

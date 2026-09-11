@@ -56,13 +56,13 @@
       }
       ]
       }</script>
-    <link rel="stylesheet" href="/css/showcase.css?v=4">
+    <link rel="stylesheet" href="/css/showcase.css?v=5">
     <script src="/js/site.js?v=18" defer>
     </script>
     <script src="/js/vortex-glass.js?v=1" defer></script>
-    <script src="/js/vortex-spiral.js?v=19" defer>
+    <script src="/js/vortex-spiral.js?v=20" defer>
     </script>
-    <script src="/js/showcase.js?v=4" defer>
+    <script src="/js/showcase.js?v=5" defer>
     </script>
   </head>
   <body class="showcase-page spiral-revision" data-appearance="dark">
@@ -102,6 +102,10 @@
                 <button type="button" data-appearance-choice="dark" aria-pressed="true">Dark</button>
               </div>
               <vortex-spiral id="hero-spiral" glass appearance="dark" managed story searchable instant static nohint></vortex-spiral>
+              <div id="story-trigger" class="story-trigger" data-mode="mouse" aria-hidden="true" hidden>
+                <div class="trigger-mouse"><span class="mouse-body"><i class="mouse-wheel"></i><i class="trigger-ring"></i></span><span class="trigger-label"><strong>Middle click</strong>or any button you choose</span></div>
+                <div class="trigger-keys"><span class="keys"><kbd>⌃</kbd><kbd>⌥</kbd><kbd>space</kbd></span><span class="trigger-label"><strong>Or a shortcut</strong>tap to browse · hold to switch</span></div>
+              </div>
               <div id="story-pointer" class="ghost-pointer" aria-hidden="true"><img src="/img/ui/pointer.svg" width="30" height="30" alt=""><span></span></div>
               <div id="story-receipt" class="story-receipt" role="status" hidden><img id="receipt-icon" src="/img/logos/chrome.png" width="26" height="26" alt=""><div><strong id="receipt-title"></strong><span>In this demo</span></div></div>
             </div>
@@ -112,7 +116,7 @@
             <div class="story-chapters" role="group" aria-label="Demo chapters">
               <button type="button" data-chapter="windows" aria-pressed="true">Windows</button><button type="button" data-chapter="search" aria-pressed="false">Find a tab</button><button type="button" data-chapter="web" aria-pressed="false">Search &amp; ask</button><button type="button" data-chapter="pins" aria-pressed="false">Pinned favorites</button>
             </div>
-            <div class="demo-preferences"><p id="story-instruction" class="demo-instruction">Click a card, use arrow keys and Enter, or type to find it.</p><label class="motion-choice"><input id="story-reduced" type="checkbox"> Reduced motion</label></div>
+            <div class="demo-preferences"><p id="story-instruction" class="demo-instruction">Click the spiral to take control — then pick a card, use arrow keys and Enter, or type to find it.</p><label class="motion-choice"><input id="story-reduced" type="checkbox"> Reduced motion</label></div>
           </figure>
         </div>
       </div>

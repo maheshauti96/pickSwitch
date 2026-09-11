@@ -1018,6 +1018,17 @@
       return new Promise((res) => { setTimeout(res, typeMs); });
     }
 
+    /** Replay the wedge entrance on the current example, as if the overlay had just opened. */
+    playEntrance() {
+      if (this._reduced || !this._wedgeEls) return;
+      this._hold = false;
+      this._entranceT = 0;
+      this._applyEntrance(0);
+      cancelAnimationFrame(this._raf);
+      this._last = performance.now();
+      this._raf = requestAnimationFrame(this._tick);
+    }
+
     hideSpiral() {
       this.classList.remove('is-shown');
       this.style.opacity = '0';

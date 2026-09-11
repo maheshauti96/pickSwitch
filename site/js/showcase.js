@@ -46,7 +46,6 @@
   let clockStart = 0;
   let timer = 0;
   let playing = false;
-  let completed = false;
   let userPaused = false;
   let takeover = false;
   let visible = false;
@@ -65,10 +64,11 @@
   }));
 
   const chapterCopy = {
-    windows: ['01 / Your windows', 'Everything open. One place to choose.'],
-    search: ['02 / Find a tab', 'A few letters. The right tab.'],
-    web: ['03 / Search & ask', 'Keep going, even when it isn’t open.'],
-    pins: ['04 / Your favorites', 'Your everyday shortcuts, in the seam.']
+    open: ['01 / One press', 'A mouse button or a shortcut. Everything opens at the pointer.'],
+    windows: ['02 / Your windows', 'Everything open. One place to choose.'],
+    search: ['03 / Find a tab', 'A few letters. The right tab.'],
+    web: ['04 / Search & ask', 'Keep going, even when it isn’t open.'],
+    pins: ['05 / Your favorites', 'Your everyday shortcuts, in the seam.']
   };
 
   function setCaption(name, message) {
@@ -143,6 +143,41 @@
     pointer.style.transitionDuration = '0s';
   }
 
+  // The activation beat: the overlay is closed, a mouse button or shortcut is pressed, the spiral opens.
+  const trigger = $('#story-trigger');
+  let triggerTimer = 0;
+  function showTrigger(mode) {
+    clearTimeout(triggerTimer);
+    trigger.dataset.mode = mode;
+    trigger.classList.remove('is-pressed', 'is-leaving', 'is-visible');
+    trigger.hidden = false;
+    requestAnimationFrame(() => trigger.classList.add('is-visible'));
+  }
+  function hideTrigger(immediate = false) {
+    clearTimeout(triggerTimer);
+    trigger.classList.remove('is-visible');
+    if (immediate) { trigger.hidden = true; trigger.classList.remove('is-leaving', 'is-pressed'); return; }
+    trigger.classList.add('is-leaving');
+    triggerTimer = setTimeout(() => { trigger.hidden = true; trigger.classList.remove('is-leaving', 'is-pressed'); }, 380);
+  }
+  function closedScene(mode) {
+    signature = '';
+    fullWindowScene(false);
+    setCaption('open');
+    showTrigger(mode);
+  }
+  function openSpiral() {
+    hideTrigger();
+    setCaption('windows');
+    spiral.playEntrance();
+  }
+  // Leaving the closed beat by any route (pause, chapter jump, reduced motion) must show the spiral.
+  function settleOpenScene() {
+    if (stage.dataset.scene !== 'open') return;
+    hideTrigger(true);
+    setCaption('windows');
+  }
+
   function moveTo(index, pin = false) {
     if (reduced) return;
     const target = spiral.targetPoint(index, pin);
@@ -179,13 +214,36 @@
     if (reason === 'manual' || reason === 'button' || reason === 'reduced') userPaused = true;
     if (reason === 'manual') takeover = true;
     hidePointer();
+    settleOpenScene();
     spiral.stopMotion();
     if (reason === 'button') all('vortex-spiral').forEach((widget) => widget.setAmbientPaused(true));
     play.setAttribute('aria-pressed', 'false');
-    play.textContent = completed ? 'Play' : takeover ? 'Play story' : 'Resume';
+    play.textContent = takeover ? 'Play story' : 'Resume';
     stage.dataset.playing = 'false';
-    if (reason === 'manual') $('#story-instruction').textContent = 'You’re in control. Resume the story whenever you like.';
+    if (reason === 'manual') {
+      $('#story-instruction').textContent = 'You’re in control: pick a card, use arrow keys and Enter, or type. The story resumes on its own after a while.';
+      armIdleResume();
+    } else clearTimeout(idleTimer);
   }
+
+  // After the visitor takes over, the story comes back once they have been idle for a while,
+  // never while the pointer rests on the demo or the widget has keyboard focus.
+  const IDLE_RESUME_MS = 30000;
+  let idleTimer = 0;
+  let pointerInside = false;
+  function armIdleResume() {
+    clearTimeout(idleTimer);
+    if (!takeover) return;
+    idleTimer = setTimeout(() => {
+      const focused = spiral.contains(document.activeElement) || spiral.shadowRoot?.activeElement;
+      if (!takeover || playing || pointerInside || focused || !visible || document.hidden || reduced) { armIdleResume(); return; }
+      run(true);
+    }, IDLE_RESUME_MS);
+  }
+  stage.addEventListener('pointerenter', () => { pointerInside = true; });
+  stage.addEventListener('pointerleave', () => { pointerInside = false; armIdleResume(); });
+  stage.addEventListener('pointermove', () => armIdleResume(), { passive: true });
+  stage.addEventListener('keydown', () => armIdleResume());
 
   const frames = [];
   const at = (time, run) => frames.push({ time, run });
@@ -199,56 +257,65 @@
       if (!reduced) searchScene(phrase.slice(0, index + 1));
     }));
   }
+  // The story loops; each pass opens the overlay a different way.
+  let loops = 0;
+  const OPEN = 1700;
   at(0, () => {
-    signature = '';
-    fullWindowScene(false);
+    hidePointer();
     pointer.style.left = '15%'; pointer.style.top = '80%';
-    $('#story-instruction').textContent = 'Click a card, use arrow keys and Enter, or type to find it.';
+    closedScene(loops % 2 ? 'keys' : 'mouse');
+    $('#story-instruction').textContent = 'Click the spiral to take control — then pick a card, use arrow keys and Enter, or type to find it.';
   });
-  at(1200, () => moveTo(1));
-  at(2000, () => spiral.selectExample(1, false));
-  at(3150, () => { pointerClick(); showReceipt(WINDOWS[1]); });
-  at(4550, () => { receipt.hidden = true; hidePointer(); });
-  typePhrase(4800, 'snowfl');
-  at(6500, () => moveTo(0));
-  at(7350, () => spiral.selectExample(0, false));
-  at(8500, () => { pointerClick(); showReceipt(displayedItems[0]); });
-  at(10100, () => { receipt.hidden = true; hidePointer(); });
-  typePhrase(10400, 'how to start a project');
-  at(13700, () => moveTo(2));
-  at(14500, () => spiral.selectExample(2, false));
-  at(15700, () => { pointerClick(); showReceipt(displayedItems[2]); });
-  at(17300, () => { hidePointer(); pinsScene(); });
-  at(18400, () => moveTo(0, true));
-  at(19200, () => spiral.selectPin(0, false));
-  at(20500, () => { pointerClick(); showReceipt(PINS[0], true); });
-  at(22300, () => { receipt.hidden = true; moveTo(1, true); });
-  at(23100, () => spiral.selectPin(1, false));
-  at(24200, () => { pointerClick(); showReceipt(PINS[1], true); });
-  at(26100, () => {
+  at(1000, () => trigger.classList.add('is-pressed'));
+  at(1450, () => openSpiral());
+  at(OPEN + 1200, () => moveTo(1));
+  at(OPEN + 2000, () => spiral.selectExample(1, false));
+  at(OPEN + 3150, () => { pointerClick(); showReceipt(WINDOWS[1]); });
+  at(OPEN + 4550, () => { receipt.hidden = true; hidePointer(); });
+  typePhrase(OPEN + 4800, 'snowfl');
+  at(OPEN + 6500, () => moveTo(0));
+  at(OPEN + 7350, () => spiral.selectExample(0, false));
+  at(OPEN + 8500, () => { pointerClick(); showReceipt(displayedItems[0]); });
+  at(OPEN + 10100, () => { receipt.hidden = true; hidePointer(); });
+  typePhrase(OPEN + 10400, 'how to start a project');
+  at(OPEN + 13700, () => moveTo(2));
+  at(OPEN + 14500, () => spiral.selectExample(2, false));
+  at(OPEN + 15700, () => { pointerClick(); showReceipt(displayedItems[2]); });
+  at(OPEN + 17300, () => { hidePointer(); pinsScene(); });
+  at(OPEN + 18400, () => moveTo(0, true));
+  at(OPEN + 19200, () => spiral.selectPin(0, false));
+  at(OPEN + 20500, () => { pointerClick(); showReceipt(PINS[0], true); });
+  at(OPEN + 22300, () => { receipt.hidden = true; moveTo(1, true); });
+  at(OPEN + 23100, () => spiral.selectPin(1, false));
+  at(OPEN + 24200, () => { pointerClick(); showReceipt(PINS[1], true); });
+  at(OPEN + 26100, () => {
     hidePointer(); receipt.hidden = true;
     setCaption('pins', 'A little less hunting. A lot more flow.');
   });
   frames.sort((a, b) => a.time - b.time);
-  const duration = 27500;
+  const duration = OPEN + 28600;
 
   function tick() {
     if (!playing) return;
-    const time = elapsed + performance.now() - clockStart;
+    let time = elapsed + performance.now() - clockStart;
     while (nextFrame < frames.length && frames[nextFrame].time <= time) {
       frames[nextFrame].run();
       nextFrame += 1;
     }
     stage.dataset.progress = String(Math.min(100, Math.round(time / duration * 100)));
-    if (time >= duration) { completed = true; pause('complete'); return; }
+    if (time >= duration) {
+      loops += 1;
+      elapsed = 0; nextFrame = 0; clockStart = performance.now(); time = 0;
+    }
     timer = setTimeout(tick, 70);
   }
 
   function run(restart = false) {
     if (!booted || playing) return;
     clearTimeout(timer);
-    if (restart || completed || takeover) {
-      elapsed = 0; nextFrame = 0; completed = false;
+    clearTimeout(idleTimer);
+    if (restart || takeover) {
+      elapsed = 0; nextFrame = 0;
     }
     userPaused = false;
     takeover = false;
@@ -263,6 +330,7 @@
 
   function jump(name) {
     pause('manual');
+    hideTrigger(true);
     signature = '';
     if (name === 'search') { manualSearch = true; searchScene('snowfl'); }
     else if (name === 'web') { manualSearch = true; searchScene('how to start a project'); }
@@ -271,12 +339,19 @@
   }
 
   all('[data-chapter]').forEach((button) => button.addEventListener('click', () => jump(button.dataset.chapter)));
-  play.addEventListener('click', () => { if (playing) pause('button'); else run(completed); });
+  play.addEventListener('click', () => { if (playing) pause('button'); else run(false); });
   $('#story-replay').addEventListener('click', () => { pause('button'); run(true); });
   $('#story-search').addEventListener('click', () => {
     pause('manual'); manualSearch = true; spiral.focusSearch();
   });
-  spiral.addEventListener('vortex-interaction', () => { if (playing) pause('manual'); });
+  // Hovering is not a decision. A click on the stage, a key, or focus is; those hand the demo over.
+  spiral.addEventListener('vortex-interaction', (event) => {
+    if (playing && event.detail.kind !== 'hover') pause('manual');
+  });
+  stage.addEventListener('click', (event) => {
+    if (!playing || event.target.closest('.glass-appearance')) return;
+    pause('manual');
+  });
   spiral.addEventListener('vortex-query', (event) => {
     pause('manual'); manualSearch = true; searchScene(event.detail);
   });
@@ -298,11 +373,11 @@
   new IntersectionObserver((entries) => {
     visible = entries.some((entry) => entry.isIntersecting);
     if (!visible && playing) pause('offscreen');
-    else if (visible && booted && !userPaused && !completed && !document.hidden && !reduced) run(false);
+    else if (visible && booted && !userPaused && !document.hidden && !reduced) run(false);
   }, { threshold: .22 }).observe(stage);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && playing) pause('hidden');
-    else if (!document.hidden && visible && !userPaused && !completed && !reduced) run(false);
+    else if (!document.hidden && visible && !userPaused && !reduced) run(false);
   });
 
   function applyReduced(value) {
