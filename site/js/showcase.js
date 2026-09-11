@@ -1,4 +1,4 @@
-/* Timed visual storytelling. Every action stays inside this example; commerce is upcoming. */
+/* Timed visual storytelling. Every action stays inside this example. */
 (function () {
   'use strict';
   const root = document.querySelector('.spiral-revision');
@@ -500,13 +500,6 @@
   });
 
 
-  // Purchase/trial controls intentionally remain disabled until the next phase.
-  // Replace their data-commerce-action wiring only when real checkout/download URLs exist.
-  all('[data-notify-interest]').forEach((link) => link.addEventListener('click', () => {
-    $('#notify-copy').textContent = link.dataset.notifyInterest === 'trial'
-      ? 'We’ll email you when the seven-day free trial is ready to download.'
-      : 'We’ll email you when the $5 purchase is available.';
-  }));
   all('a[href="#layouts"]').forEach((link) => link.addEventListener('click', () => { $('#layouts').open = true; }));
   customElements.whenDefined('vortex-spiral').then(() => {
     setAppearance(root.dataset.appearance || 'dark');

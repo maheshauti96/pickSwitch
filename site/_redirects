@@ -1,2 +1,7 @@
+# The waitlist confirmation page, from before the app was released. Anyone arriving
+# from an old email lands on the download instead.
+/thanks/    /download/    301
+/thanks     /download/    301
+
 # Cloudflare Pages: serve the custom 404 for unknown routes.
 /*    /404.html   404

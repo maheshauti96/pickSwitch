@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VortexFlow vs Cmd-Tab, Dory, AltTab, and the rest</title>
-  <meta name="description" content="VortexFlow is a spiral of windows at the cursor, for heavy macOS users. Join the waitlist.">
+  <meta name="description" content="VortexFlow is a spiral of windows at the cursor, for heavy macOS users. Free and open source under MIT.">
   <link rel="canonical" href="https://vortexflow.io/compare/">
   <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
   <link rel="icon" href="/img/favicon-32.png?v=3" type="image/png" sizes="32x32">
@@ -12,33 +12,60 @@
   <meta name="theme-color" content="#f6f4f1">
   <meta property="og:site_name" content="VortexFlow">
   <meta property="og:title" content="VortexFlow vs Cmd-Tab, Dory, AltTab, and the rest">
-  <meta property="og:description" content="VortexFlow is a spiral of windows at the cursor, for heavy macOS users. Join the waitlist.">
+  <meta property="og:description" content="VortexFlow is a spiral of windows at the cursor, for heavy macOS users. Free and open source under MIT.">
   <meta property="og:url" content="https://vortexflow.io/compare/">
   <meta property="og:type" content="website">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:title" content="VortexFlow vs Cmd-Tab, Dory, AltTab, and the rest">
-  <meta name="twitter:description" content="VortexFlow is a spiral of windows at the cursor, for heavy macOS users. Join the waitlist.">
+  <meta name="twitter:description" content="VortexFlow is a spiral of windows at the cursor, for heavy macOS users. Free and open source under MIT.">
   <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=3">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=3">
-  <link rel="stylesheet" href="/css/site.css?v=17">
+  <link rel="stylesheet" href="/css/site.css?v=18">
 </head>
 <body>
   <header class="nav">
     <a class="brand" href="/" aria-label="VortexFlow home">
-      <img src="/img/lockup.svg?v=3" alt="VortexFlow">
+      <img src="/img/lockup.svg" alt="VortexFlow">
     </a>
     <nav class="nav-links">
       <a href="/blog/">Blog</a>
       <a href="/privacy/">Privacy</a>
+      <a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">GitHub</a>
     </nav>
-    <a class="btn btn-download" href="/#waitlist">Join the waitlist</a>
+    <a class="btn btn-download" href="/download/">Download</a>
   </header>
   <main class="page">
     <p class="eyebrow">Compare</p>
     <h1>The empty gap is the cursor.</h1>
     <p class="lead">Window switchers for Mac are a crowded shelf. Almost all of them replace Cmd-Tab, and most of them are for everyone. VortexFlow is not. It is a spiral around the pointer for people who already have too many windows.</p>
+
+    <h2>At a glance</h2>
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col" class="us">VortexFlow</th>
+            <th scope="col">AltTab</th>
+            <th scope="col">DockDoor</th>
+            <th scope="col">Contexts / Witch</th>
+            <th scope="col">Cmd-Tab</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Price</th><td class="us yes">Free</td><td class="yes">Free (Pro paid)</td><td class="yes">Free</td><td class="no">Paid</td><td class="yes">Built in</td></tr>
+          <tr><th scope="row">Open source</th><td class="us yes">Yes · MIT</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+          <tr><th scope="row">Switches windows, not apps</th><td class="us yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">Apps only</td></tr>
+          <tr><th scope="row">Opens at the pointer, from a mouse button</th><td class="us yes">Yes · any button</td><td class="no">Keyboard</td><td class="no">Dock hover</td><td class="no">Keyboard</td><td class="no">Keyboard</td></tr>
+          <tr><th scope="row">Browser tabs as cards, searchable</th><td class="us yes">Yes · host and path</td><td class="no">—</td><td class="no">—</td><td class="no">Witch, some apps</td><td class="no">—</td></tr>
+          <tr><th scope="row">Same-app windows told apart by site icon</th><td class="us yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+          <tr><th scope="row">Also works from a shortcut</th><td class="us yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="compare-note">Based on each product’s public documentation in September 2026. Things change; check the vendor’s site before deciding, and <a href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">tell us</a> if a cell is wrong.</p>
 
     <h2>Cmd-Tab, Cmd-`, Mission Control</h2>
     <p>Cmd-Tab switches applications, not windows. Five Chrome windows are still one Chrome. Cmd-` cycles windows of the current app in the current Space, and skips fullscreen. Mission Control shows everything as stamps. None of them start from the pointer.</p>
@@ -58,10 +85,13 @@
     <h2>Witch, Contexts, Hop, Raycast, WOS</h2>
     <p>Witch is explicit: “⌘-Tab Everything.” Contexts collects usage metrics. Hop is a visual Alt-Tab. Raycast’s window switcher is a text list. WOS reinvents Cmd-Tab for tabs-as-first-class. All keyboard-first. None of them are a spiral of every window and tab at the cursor that also works from a shortcut.</p>
 
-    <h2>What VortexFlow will not claim</h2>
-    <p>We are not the only window switcher, the only search, or the only private one. We are the spiral at the cursor, for any mouse and any keyboard, with extra-button detection, favicon compositing so same-app windows don’t look the same, tab search by host and path including other Spaces, and a web/assistant fallback when nothing local matches.</p>
+    <h2>Price, and who can read the code</h2>
+    <p>Most of the shelf above is paid, closed, or both — and a window switcher is exactly the kind of tool that sees everything on your screen. AltTab and DockDoor are open source. So is VortexFlow: MIT-licensed, no paid tier, no account, and the <a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">whole source on GitHub</a>. If the comparison you actually care about is “what does this thing do with my windows,” that is the one you can settle yourself.</p>
 
-    <p><a class="btn btn-primary" href="/#waitlist">Join the waitlist</a></p>
+    <h2>What VortexFlow will not claim</h2>
+    <p>We are not the only window switcher, the only search, the only private one, or the only open one. We are the spiral at the cursor, for any mouse and any keyboard, with extra-button detection, favicon compositing so same-app windows don’t look the same, tab search by host and path including other Spaces, and a web/assistant fallback when nothing local matches.</p>
+
+    <p><a class="btn btn-primary" href="/download/">Download VortexFlow</a> <a class="btn btn-ghost" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">View on GitHub</a></p>
   </main>
   <footer class="footer">
     <div class="footer-inner">
@@ -74,6 +104,6 @@
       </nav>
     </div>
   </footer>
-  <script src="/js/site.js?v=17"></script>
+  <script src="/js/site.js?v=18"></script>
 </body>
 </html>

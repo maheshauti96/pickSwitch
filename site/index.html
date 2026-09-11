@@ -3,26 +3,26 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VortexFlow — find the right window, stay in your flow</title>
-    <meta name="description" content="Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Join the preview waitlist.">
+    <title>VortexFlow — find the right window, stay in your flow. Free and open source for macOS.</title>
+    <meta name="description" content="Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Free, open source under MIT, no account, no telemetry.">
     <link rel="canonical" href="https://vortexflow.io/">
     <meta property="og:site_name" content="VortexFlow">
     <meta property="og:title" content="Find the right window. Stay in your flow.">
-    <meta property="og:description" content="Switch windows, find browser tabs, and open your favorites. Join the preview waitlist.">
+    <meta property="og:description" content="Switch windows, find browser tabs, and open your favorites. Free and open source for macOS.">
     <meta property="og:url" content="https://vortexflow.io/">
     <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=3">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:type" content="website">
     <meta name="twitter:title" content="VortexFlow — find the right window, stay in your flow">
-    <meta name="twitter:description" content="Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Join the preview waitlist.">
+    <meta name="twitter:description" content="Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Free and open source under MIT.">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=3">
     <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
     <link rel="icon" href="/img/favicon-32.png?v=3" type="image/png" sizes="32x32">
     <link rel="apple-touch-icon" href="/img/apple-touch.png?v=3">
     <meta name="theme-color" content="#f6f4f1">
-    <link rel="stylesheet" href="/css/site.css?v=17">
+    <link rel="stylesheet" href="/css/site.css?v=18">
     <script type="application/ld+json">{
       "@context": "https://schema.org",
       "@graph": [
@@ -37,18 +37,32 @@
       "operatingSystem": "macOS 15",
       "applicationCategory": "UtilitiesApplication",
       "url": "https://vortexflow.io/",
-      "description": "Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Join the preview waitlist.",
+      "downloadUrl": "https://github.com/maheshauti96/VortexFlow/releases/latest",
+      "installUrl": "https://vortexflow.io/download/",
+      "softwareVersion": "1.0.0",
+      "license": "https://opensource.org/license/mit",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock" },
+      "description": "Switch Mac windows, find browser tabs, and open pinned favorites from your mouse or keyboard. Free and open source under the MIT license.",
       "image": "https://vortexflow.io/img/og-image.png?v=3"
+      },
+      {
+      "@type": "SoftwareSourceCode",
+      "name": "VortexFlow",
+      "codeRepository": "https://github.com/maheshauti96/VortexFlow",
+      "programmingLanguage": "Swift",
+      "license": "https://opensource.org/license/mit",
+      "runtimePlatform": "macOS"
       }
       ]
       }</script>
-    <link rel="stylesheet" href="/css/showcase.css?v=3">
-    <script src="/js/site.js?v=17" defer>
+    <link rel="stylesheet" href="/css/showcase.css?v=4">
+    <script src="/js/site.js?v=18" defer>
     </script>
     <script src="/js/vortex-glass.js?v=1" defer></script>
     <script src="/js/vortex-spiral.js?v=19" defer>
     </script>
-    <script src="/js/showcase.js?v=3" defer>
+    <script src="/js/showcase.js?v=4" defer>
     </script>
   </head>
   <body class="showcase-page spiral-revision" data-appearance="dark">
@@ -56,12 +70,12 @@
   <nav id="nav" class="nav" aria-label="Primary">
     <div class="wrap nav-in">
       <a class="mark" href="#top"><img src="/img/mark.svg?v=3" width="26" height="26" alt=""><span>VortexFlow</span></a>
-      <div class="desktop-links"><a href="#product-demo">The spiral</a><a href="#features">Inside VortexFlow</a><a href="#pricing">Pricing</a></div>
-      <a class="btn btn-primary nav-cta" href="#waitlist">Get notified</a>
+      <div class="desktop-links"><a href="#product-demo">The spiral</a><a href="#features">Inside VortexFlow</a><a href="#open-source">Open source</a><a class="nav-github" href="https://github.com/maheshauti96/VortexFlow" rel="noopener"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub<span class="btn-count" data-stars></span></a></div>
+      <a class="btn btn-primary nav-cta" href="/download/">Download</a>
       <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
     </div>
     <div id="mobile-menu" class="mobile-menu" hidden>
-      <a href="#product-demo">See the spiral</a><a href="#features">Pins &amp; window actions</a><a href="#layouts">Five layouts</a><a href="#pricing">$5 &amp; seven days free</a><a href="#privacy">Privacy &amp; questions</a>
+      <a href="#product-demo">See the spiral</a><a href="#features">Pins &amp; window actions</a><a href="#layouts">Five layouts</a><a href="#open-source">Free &amp; open source</a><a href="#privacy">Privacy &amp; questions</a><a href="#contribute">Contribute</a><a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">GitHub ↗</a>
     </div>
   </nav>
   <main id="main">
@@ -72,11 +86,11 @@
           <h1 id="hero-h">Find the right window.<br> <span>Stay in your flow.</span></h1>
           <p class="hero-lede">Windows, tabs, and favorites.<br> Together at your cursor or key.</p>
           <div class="hero-actions">
-            <a class="btn btn-primary btn-lg" href="#pricing">Get VortexFlow · $5</a>
-            <a class="trial-link" href="#pricing">Try seven days free <span aria-hidden="true">↗</span></a>
+            <a class="btn btn-primary btn-lg" href="https://github.com/maheshauti96/VortexFlow/releases/latest" data-download rel="noopener"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.25 1a.75.75 0 0 1 1.5 0v7.19l2.22-2.22a.75.75 0 1 1 1.06 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 1 1 1.06-1.06l2.22 2.22V1ZM2.5 11.75a.75.75 0 0 0-1.5 0v1.5A1.75 1.75 0 0 0 2.75 15h10.5A1.75 1.75 0 0 0 15 13.25v-1.5a.75.75 0 0 0-1.5 0v1.5a.25.25 0 0 1-.25.25H2.75a.25.25 0 0 1-.25-.25v-1.5Z"/></svg>Download for macOS</a>
+            <a class="hero-link" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">View the source on GitHub <span aria-hidden="true">↗</span></a>
           </div>
-          <p class="availability"><span class="coming-soon">Coming soon</span> Purchase and trial downloads</p>
-          <div class="hero-facts"><span>Mouse or keyboard</span><span>macOS 15+</span><span>Local window data</span></div>
+          <p class="availability"><span class="coming-soon">Free · MIT</span> Open source · <span data-release-tag>v1.0.0</span> · <a href="/download/">Install notes</a><span data-download-version hidden></span></p>
+          <div class="hero-facts"><span>Mouse or keyboard</span><span>macOS 15+</span><span>Apple silicon &amp; Intel</span><span>No account, no telemetry</span></div>
         </div>
         <div class="hero-demo-column">
           <span id="spiral" class="legacy-anchor"></span><span id="live-spiral" class="legacy-anchor"></span>
@@ -154,56 +168,74 @@
       </div>
     </section>
 
-    <section id="pricing" class="pricing-section" aria-labelledby="pricing-h" data-commerce-state="upcoming" data-price="5" data-currency="USD" data-trial-days="7">
+    <section id="open-source" class="pricing-section" aria-labelledby="pricing-h">
+      <span id="pricing" class="legacy-anchor"></span><span id="download" class="legacy-anchor"></span>
       <div class="wrap">
-        <header class="pricing-heading"><p class="overline">A little app. A simple choice.</p><h2 id="pricing-h">Try it. Make it yours.</h2><p>Purchase and trial downloads are coming soon.</p></header>
+        <header class="pricing-heading"><p class="overline">A little app. Yours to read.</p><h2 id="pricing-h">Free. Open source. Forever.</h2><p>MIT-licensed, native Swift, no third-party dependencies. Download the build or compile it yourself — it is the same code either way.</p></header>
         <div class="offer-grid">
-          <article class="offer trial-offer"><span class="offer-label">FREE TRIAL</span><div class="offer-price">7 <span>days</span></div><p>A week to find your flow.</p><button type="button" class="future-action" data-commerce-action="trial" disabled>Trial download · coming soon</button><a href="#waitlist" data-notify-interest="trial">Notify me when I can try it ↗</a></article>
-          <article class="offer purchase-offer"><span class="offer-label">VORTEXFLOW</span><div class="offer-price">$5</div><p>All your windows, within reach.</p><button type="button" class="future-action" data-commerce-action="purchase" disabled>Purchase · coming soon</button><a href="#waitlist" data-notify-interest="purchase">Notify me when I can buy it ↗</a></article>
+          <article class="offer download-offer"><span class="offer-label">DOWNLOAD</span><div class="offer-price">Free</div><p>One disk image. No account, no trial clock, no license key.</p><a class="btn btn-primary btn-lg offer-cta" href="https://github.com/maheshauti96/VortexFlow/releases/latest" data-download rel="noopener">Download for macOS</a><a href="/download/">Install notes and Gatekeeper ↗</a><span class="offer-meta">macOS 15 or later · Apple silicon &amp; Intel · about 2 MB</span></article>
+          <article class="offer source-offer"><span class="offer-label">SOURCE</span><div class="offer-price">MIT</div><p>Read it, fork it, fix the one thing that annoys you.</p><a class="btn btn-primary btn-lg offer-cta" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">View on GitHub<span class="btn-count" data-stars></span></a><a href="/download/#source">Build from source in one command ↗</a><span class="offer-meta">Swift Package Manager · Xcode command-line tools · nothing else</span></article>
         </div>
-        <p class="offer-note">No payment or trial starts today. Leave your email and we’ll let you know when it’s ready.</p>
+        <ul class="oss-stats" aria-label="Project facts">
+          <li><strong>0</strong><span>third-party dependencies</span></li>
+          <li><strong>780<small>+</small></strong><span>automated tests</span></li>
+          <li><strong>0<small> bytes</small></strong><span>sent anywhere by the app</span></li>
+          <li><strong>1</strong><span>kind of network request: a site’s icon, never for a private window</span></li>
+        </ul>
+        <p class="offer-note">Signed, not notarized: macOS will say the developer cannot be verified the first time. Open Anyway, once — <a href="/download/#gatekeeper">here is why</a>.</p>
       </div>
     </section>
 
     <section id="privacy" class="privacy-section">
       <div class="wrap privacy-grid">
-        <div><p class="overline">Your workspace stays yours.</p><h2>On your Mac.<br> Under your control.</h2><p>Window titles and previews stay local.</p><a class="text-link" href="/privacy/">Privacy, plainly explained ↗</a></div>
+        <div><p class="overline">Your workspace stays yours.</p><h2>On your Mac.<br> Under your control.</h2><p>Window titles and previews stay local. No account, no analytics, no telemetry — and because the code is open, that is a fact you can check rather than a policy you have to trust.</p><a class="text-link" href="/privacy/">Privacy, plainly explained ↗</a><br><a class="text-link" href="https://github.com/maheshauti96/VortexFlow/blob/main/Sources/VortexflowCore/Core/BrowserFaviconService.swift" rel="noopener">The one network request, in source ↗</a></div>
         <div id="faq" class="compact-faq">
           <details><summary>How do mouse and keyboard activation work?</summary><p>Tap to leave the switcher open, or hold and release to switch. Choose a mouse button or keyboard shortcut in Settings. The previous window is preselected, using per-window recency.</p></details>
           <details><summary>What can I pin?</summary><p>Links, apps, and keyboard shortcuts can be pinned into the spiral and reordered by dragging. Separately, you can choose running apps to always show first; their windows retain recency ordering.</p></details>
           <details><summary>Which windows and tabs can I find?</summary><p>Search by title, app, site, or URL path. Supported tab providers include Chrome, Safari, Edge, Brave, Arc, Comet, Chromium, and Apple Terminal. If windows and tabs do not match, installed applications can appear. Web and assistant actions open their provider sites.</p></details>
           <details><summary>What permissions do I need?</summary><p>Grant only the permissions for the features you want. Icon View needs no Screen Recording. Strip, Grid, and List can show window previews; Spiral and Circular use icons. <a href="/permissions/">Permission guide.</a></p></details>
           <details><summary>What about private windows and screen sharing?</summary><p>Private windows use the browser’s icon; their site icon is not fetched. You can opt the overlay out of screenshots, but behavior depends on macOS and the recording app. Check your setup before sharing.</p></details>
-          <details><summary>Can I buy it or start the trial now?</summary><p>Not yet. The planned purchase price is $5, with a seven-day free trial. Checkout and downloadable trial builds are coming next. Joining the notification list does not create an account or start the trial. <a href="/terms/">Full terms.</a></p></details>
+          <details><summary>Is it really free?</summary><p>Yes. VortexFlow is open source under the <a href="/license/">MIT license</a>. There is no paid tier, no trial, no license key, and no account. Download the build or compile it yourself — either way it is the same code.</p></details>
+          <details><summary>Why does macOS say the developer can’t be verified?</summary><p>The app is signed but not notarized, because notarization needs a paid Apple Developer account. Open System Settings → Privacy &amp; Security and choose Open Anyway. You do it once. Or build from source and the question never comes up. <a href="/download/#gatekeeper">Step by step.</a></p></details>
+          <details><summary>Where should I download it from?</summary><p>Only from this site or from <a href="https://github.com/maheshauti96/VortexFlow/releases" rel="noopener">GitHub Releases</a>. VortexFlow asks for Accessibility, Input Monitoring, and Screen Recording — exactly the permissions a tampered copy would love to have. Every release lists SHA-256 digests for its assets.</p></details>
+          <details><summary>How can I help?</summary><p>Use it on a real desk and report what breaks, especially mice and browsers we have not seen. Pull requests are welcome; the codebase is plain Swift with a large test suite. <a href="#contribute">Where to start.</a></p></details>
         </div>
       </div>
     </section>
 
-    <section id="waitlist" class="waitlist-section" aria-labelledby="waitlist-h">
-      <div class="wrap waitlist-grid">
-        <div><p class="overline">Be there for the first click.</p><h2 id="waitlist-h">Your next flow<br> starts here.</h2><p id="notify-copy">We’ll email you when VortexFlow is ready to buy or try.</p><span class="waitlist-meta">macOS 15+ · $5 purchase · Seven days free to try</span></div>
-        <div><form id="waitlist-form" class="waitlist" action="https://formsubmit.co/maheshauti00@gmail.com" method="POST">
-              <input type="hidden" name="_next" value="https://vortexflow.io/thanks/">
-              <input type="hidden" name="_subject" value="VortexFlow waitlist">
-              <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
-              <div class="waitlist-fields">
-                <label>
-                  <span>Email</span>
-                  <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" aria-describedby="signup-privacy">
-                </label>
-                <label>
-                  <span>Name <em>(optional)</em>
-                  </span>
-                  <input type="text" name="name" autocomplete="name" placeholder="Your name">
-                </label>
-              </div>
-              <button type="submit" class="btn btn-primary btn-lg">Notify me at launch</button>
-              <p id="signup-privacy" class="signup-privacy">We’ll use your email for launch updates. This form is handled by FormSubmit. <a href="/privacy/">Read our privacy policy.</a>
-              </p>
-            </form></div>
+    <section id="contribute" class="contribute-section" aria-labelledby="contribute-h">
+      <span id="waitlist" class="legacy-anchor"></span>
+      <div class="wrap contribute-grid">
+        <div>
+          <p class="overline">Built in the open.</p>
+          <h2 id="contribute-h">Your next flow<br> starts here.</h2>
+          <p>A window switcher lives in the most private part of your Mac. You should be able to see exactly what it does there — and change it. Every claim on this page is a function you can open; start with <code>SwitcherController.swift</code>.</p>
+          <span class="contribute-meta">Plain Swift and AppKit · 780+ tests · Issues and pull requests welcome</span>
+          <div class="contribute-links"><a class="btn btn-ghost" href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">Open an issue</a><a class="btn btn-ghost" href="https://github.com/maheshauti96/VortexFlow/releases" rel="noopener">Release notes</a></div>
+          <div data-contributors-wrap hidden>
+            <p class="contrib-label">People who made it</p>
+            <ul class="contributors" data-contributors aria-label="Contributors"></ul>
+          </div>
+        </div>
+        <div class="contribute-card">
+          <pre class="code"><span class="cm"># macOS 15+, Xcode command-line tools</span>
+git clone https://github.com/maheshauti96/VortexFlow.git
+cd VortexFlow
+Scripts/build-app.sh --install
+
+<span class="cm"># run the tests</span>
+swift test</pre>
+          <h3>Help wanted</h3>
+          <ul class="wants">
+            <li>Tab search for Firefox, Vivaldi, Opera, and Zen — Chrome, Safari, Edge, Brave, Arc, Comet, and Chromium are covered.</li>
+            <li>A Homebrew cask, so <code>brew install --cask vortexflow</code> works.</li>
+            <li>Notarization, so the first launch stops needing Open Anyway.</li>
+            <li>Mice we have never seen: if Detect Button misses one of yours, that is a bug report we want.</li>
+          </ul>
+        </div>
       </div>
     </section>
   </main>
-  <footer class="flow-footer"><div class="wrap"><a class="mark" href="#top"><img src="/img/mark.svg?v=3" width="24" height="24" alt=""><span>VortexFlow</span></a><p>A little less friction between you and your work.</p><nav aria-label="Footer"><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/privacy/">Privacy</a><a href="/permissions/">Permissions</a><a href="/terms/">Terms</a></nav><span>© 2026 VortexFlow</span></div></footer>
+  <footer class="flow-footer"><div class="wrap"><a class="mark" href="#top"><img src="/img/mark.svg?v=3" width="24" height="24" alt=""><span>VortexFlow</span></a><p>A little less friction between you and your work.</p><nav aria-label="Footer"><a href="/download/">Download</a><a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">GitHub</a><a href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">Issues</a><a href="https://github.com/maheshauti96/VortexFlow/releases" rel="noopener">Releases</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/privacy/">Privacy</a><a href="/permissions/">Permissions</a><a href="/license/">License</a><a href="/terms/">Terms</a></nav><span>© 2026 VortexFlow contributors · MIT License</span></div></footer>
 </body>
 </html>
