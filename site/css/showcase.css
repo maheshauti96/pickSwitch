@@ -450,8 +450,52 @@ html:has(.showcase-page) { scroll-behavior: auto; scroll-padding-top: 76px; }
   .showcase-page *, .showcase-page *::before, .showcase-page *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 
+/* Reviews: five cards, three over two. */
+.reviews-section { padding: 74px 0 64px; }
+.reviews-heading { text-align: center; margin-bottom: 36px; }
+.reviews-heading h2 { max-width: none; }
+.reviews { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, 1fr); gap: 18px; }
+.review {
+  grid-column: span 2;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 22px;
+  padding: 26px 26px 22px;
+  border-radius: 14px;
+  background: #f8f9f2;
+  border: 1px solid #d0d8c5;
+}
+.review:nth-child(4) { grid-column: 2 / span 2; }
+.review:nth-child(5) { grid-column: 4 / span 2; }
+.review blockquote { margin: 0; }
+.review blockquote p { margin: 0; font-size: 17px; line-height: 1.5; letter-spacing: -.01em; color: #263a2d; text-wrap: pretty; }
+.review blockquote p::before { content: "\201C"; color: #6b9278; }
+.review blockquote p::after { content: "\201D"; color: #6b9278; }
+.review footer { display: flex; align-items: center; gap: 12px; padding: 0; }
+.review-avatar { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: #dfe7d8; color: #2f4a3a; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.review footer strong { display: block; font-size: 14px; color: #223b2c; }
+.review footer div > span { display: block; font-size: 12.5px; color: #5d6b53; }
+.reviews-more { text-align: center; margin-top: 30px; font-size: 14px; }
+.reviews-more a { color: #365e4b; font-weight: 600; }
+@media (max-width: 900px) {
+  .reviews { grid-template-columns: repeat(2, 1fr); }
+  .review, .review:nth-child(4) { grid-column: auto; }
+  .review:nth-child(5) { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .reviews-section { padding: 56px 0 48px; }
+  .reviews { grid-template-columns: 1fr; }
+  .review:nth-child(5) { grid-column: auto; }
+  .review blockquote p { font-size: 16px; }
+  .reviews-heading h2 br { display: none; }
+}
+
 /* Dark theme for the page chrome. The demo stages already carry their own dark variants
    via body[data-appearance], which follows html[data-theme]. */
+html[data-theme="dark"] .review { background: #171d1a; border-color: #2c3a33; }
+html[data-theme="dark"] .review blockquote p { color: #dfe7e0; }
+html[data-theme="dark"] .review-avatar { background: #22392d; color: #b9e3c9; }
+html[data-theme="dark"] .review footer strong { color: #e6efe7; }
+html[data-theme="dark"] .review footer div > span { color: #93a097; }
+html[data-theme="dark"] .reviews-more a { color: #9fd3b8; }
 html[data-theme="dark"] .showcase-page .nav { background: rgba(15, 20, 18, 0.92); }
 html[data-theme="dark"] .showcase-page .btn-primary { background: #1c8aa6; box-shadow: 0 7px 18px #0006; }
 html[data-theme="dark"] .showcase-page .btn-primary:hover { background: #22a0bf; }

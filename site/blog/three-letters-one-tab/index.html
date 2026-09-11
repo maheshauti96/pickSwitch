@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Three letters, one tab. — VortexFlow</title>
+  <meta name="description" content="What happens when you type into the spiral: plain substring matching, a small ranking that puts the site and app first, most-recent ties, and a fallback that never leaves the overlay.">
+  <link rel="canonical" href="https://vortexflow.io/blog/three-letters-one-tab/">
+  <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
+  <link rel="icon" href="/img/favicon-32.png?v=3" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/img/apple-touch.png?v=3">
+  <meta name="theme-color" content="#f6f4f1">
+  <meta property="og:site_name" content="VortexFlow">
+  <meta property="og:title" content="Three letters, one tab. — VortexFlow">
+  <meta property="og:description" content="What happens when you type into the spiral: plain substring matching, a small ranking that puts the site and app first, most-recent ties, and a fallback that never leaves the overlay.">
+  <meta property="og:url" content="https://vortexflow.io/blog/three-letters-one-tab/">
+  <meta property="og:type" content="article">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:title" content="Three letters, one tab. — VortexFlow">
+  <meta name="twitter:description" content="What happens when you type into the spiral: plain substring matching, a small ranking that puts the site and app first, most-recent ties, and a fallback that never leaves the overlay.">
+  <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta name="color-scheme" content="light dark">
+  <script>(function(){var t="light";try{var s=localStorage.getItem("vf-theme");t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
+  <link rel="stylesheet" href="/css/site.css?v=20">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Three letters, one tab.",
+    "description": "What happens when you type into the spiral: plain substring matching, a small ranking that puts the site and app first, most-recent ties, and a fallback that never leaves the overlay.",
+    "url": "https://vortexflow.io/blog/three-letters-one-tab/",
+    "datePublished": "2026-09-07",
+    "dateModified": "2026-09-07",
+    "image": "https://vortexflow.io/img/og-image.png?v=3",
+    "mainEntityOfPage": "https://vortexflow.io/blog/three-letters-one-tab/",
+    "author": {
+      "@type": "Organization",
+      "name": "VortexFlow"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "VortexFlow",
+      "url": "https://vortexflow.io/",
+      "logo": "https://vortexflow.io/img/mark.svg?v=3"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/" aria-label="VortexFlow home">
+      <img src="/img/mark.svg?v=3" width="24" height="24" alt=""><span>VortexFlow</span>
+    </a>
+    <nav class="nav-links"><a href="/blog/">Blog</a><a href="/case-studies/">Case studies</a></nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to the dark theme" title="Switch to the dark theme"><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g></svg></button>
+    <a class="btn btn-download" href="/download/">Download</a>
+  </header>
+  <main class="page prose">
+    <p class="eyebrow"><a href="/blog/">Blog</a> · Search</p>
+    <h1>Three letters, one tab.</h1>
+    <p class="byline">7 September 2026</p>
+
+    <p>Open the spiral, type <code>saf</code>, press Return. You are in Safari. The rule that got you there is small enough to describe in one post, and small enough that you can predict it, which is the point.</p>
+    <h2>Substring, not fuzzy</h2>
+    <p>Fuzzy matching is a good tool for a large corpus and a half-remembered target. A desk is neither. There are a couple of dozen windows, and you are typing to narrow something you can mostly see already. Fuzzy matching in that setting produces surprises: <code>gh</code> lighting up “Ni<em>gh</em>tly build” because the letters happen to appear in order. So VortexFlow matches plain substrings, case-insensitive and accent-insensitive. <code>resume</code> finds “Résumé.” Nothing matches that does not visibly contain what you typed.</p>
+    <p>Predictability is what lets someone type two letters and commit without looking.</p>
+    <h2>The ranking, in full</h2>
+    <p>Every window, tab, and installed app gets a score for your query, or no score at all. Higher wins. This is the whole list:</p>
+    <ol>
+      <li>The site’s host, or the app’s name, <em>begins</em> with what you typed. <code>grok</code> is the tab on grok.com even when the page title is a question you asked it.</li>
+      <li>The window title begins with it.</li>
+      <li>The host or app name contains it somewhere.</li>
+      <li>The title contains it; or a word in the title starts with it, so <code>env</code> finds <code>.env.local</code> and <code>board</code> finds “Scrum Board”; or the URL path contains it, so <code>workday</code> finds <code>/workday-task-board/</code> on a desktop you are not looking at.</li>
+    </ol>
+    <p>The path, not the whole address. Query strings and <code>https</code> would match every tab. And ties keep their incoming order, which is most-recently-used — so the ranking never reorders what you would have expected to see anyway. Two Chromes both matching <code>doc</code> stay in the order you last touched them.</p>
+    <p>An installed app that is not running matches only on its real name. Otherwise typing <code>open</code> would offer everything on the machine.</p>
+    <h2>Where the tabs come from</h2>
+    <p>Chrome, Safari, Edge, Brave, Arc, Comet, Chromium — and Apple Terminal, whose tabs carry the name of the host you are shelled into, which is why <code>prod-db</code> is a thing you can type. Firefox, Vivaldi, Opera and Zen are on the <a href="/#contribute">help-wanted list</a>.</p>
+    <h2>When nothing matches</h2>
+    <p>A miss is not a dead end. If no window or tab matches, installed applications appear by name: type <code>figma</code> when Figma is closed and Return opens it. If nothing on the Mac matches at all, the same spiral offers to search the web, open the first result, or hand the words to ChatGPT, Claude or Grok as a prompt. Something that looks like an address — <code>grok.com</code> — is treated as a place to go; something that looks like a phrase is treated as a query. Guessing wrong in that direction costs you a click; guessing wrong the other way would load a page you never asked for, so the test is conservative.</p>
+    <p>You never put the overlay down. That is the design goal, and the ranking exists to serve it. The file is <a href="https://github.com/maheshauti96/VortexFlow/blob/main/Sources/VortexflowCore/Models/WindowSearch.swift" rel="noopener"><code>WindowSearch.swift</code></a>. It is shorter than this post.</p>
+    <p><a class="btn btn-primary" href="/download/">Download VortexFlow</a> <a class="btn btn-ghost" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">View on GitHub</a></p>
+    <p><a href="/blog/the-button-you-already-have/">Next: The button you already have. →</a></p>
+  </main>
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>© 2026 VortexFlow</div>
+      <nav>
+        <a href="/blog/">Blog</a>
+        <a href="/case-studies/">Case studies</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="/js/site.js?v=19"></script>
+</body>
+</html>

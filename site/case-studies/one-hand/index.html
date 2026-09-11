@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A thumb instead of a chord. — VortexFlow</title>
+  <meta name="description" content="An iOS developer managing RSI: a trackball button in place of a keyboard chord, hold-to-switch for the common case, the scroll ring to walk cards, and Reduce Motion honored.">
+  <link rel="canonical" href="https://vortexflow.io/case-studies/one-hand/">
+  <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
+  <link rel="icon" href="/img/favicon-32.png?v=3" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/img/apple-touch.png?v=3">
+  <meta name="theme-color" content="#f6f4f1">
+  <meta property="og:site_name" content="VortexFlow">
+  <meta property="og:title" content="A thumb instead of a chord. — VortexFlow">
+  <meta property="og:description" content="An iOS developer managing RSI: a trackball button in place of a keyboard chord, hold-to-switch for the common case, the scroll ring to walk cards, and Reduce Motion honored.">
+  <meta property="og:url" content="https://vortexflow.io/case-studies/one-hand/">
+  <meta property="og:type" content="article">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:title" content="A thumb instead of a chord. — VortexFlow">
+  <meta name="twitter:description" content="An iOS developer managing RSI: a trackball button in place of a keyboard chord, hold-to-switch for the common case, the scroll ring to walk cards, and Reduce Motion honored.">
+  <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta name="color-scheme" content="light dark">
+  <script>(function(){var t="light";try{var s=localStorage.getItem("vf-theme");t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
+  <link rel="stylesheet" href="/css/site.css?v=20">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "A thumb instead of a chord.",
+    "description": "An iOS developer managing RSI: a trackball button in place of a keyboard chord, hold-to-switch for the common case, the scroll ring to walk cards, and Reduce Motion honored.",
+    "url": "https://vortexflow.io/case-studies/one-hand/",
+    "datePublished": "2026-09-11",
+    "dateModified": "2026-09-11",
+    "image": "https://vortexflow.io/img/og-image.png?v=3",
+    "mainEntityOfPage": "https://vortexflow.io/case-studies/one-hand/",
+    "author": {
+      "@type": "Organization",
+      "name": "VortexFlow"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "VortexFlow",
+      "url": "https://vortexflow.io/",
+      "logo": "https://vortexflow.io/img/mark.svg?v=3"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/" aria-label="VortexFlow home">
+      <img src="/img/mark.svg?v=3" width="24" height="24" alt=""><span>VortexFlow</span>
+    </a>
+    <nav class="nav-links"><a href="/case-studies/">Case studies</a><a href="/blog/">Blog</a></nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to the dark theme" title="Switch to the dark theme"><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g></svg></button>
+    <a class="btn btn-download" href="/download/">Download</a>
+  </header>
+  <main class="page prose">
+    <p class="eyebrow"><a href="/case-studies/">Case study</a> · Accessibility</p>
+    <h1>A thumb instead of a chord.</h1>
+    <p class="lead">An iOS developer with a repetitive strain injury cannot afford Cmd-Tab a few hundred times a day. A trackball button, hold to switch, and Reduce Motion turned the switcher into something her hands can do.</p>
+    <p class="byline">11 September 2026</p>
+
+    <h2>The desk</h2>
+    <p>Mei ships an iOS app with a team of three. Xcode, the Simulator, Safari with the Apple docs, Slack, Terminal, Linear. She uses a Kensington trackball and a split keyboard because of a strain injury in her right hand that flares when she chords — thumb and pinky at once, the exact shape of Cmd-Tab. She had counted one afternoon: roughly three hundred switches. Each one a chord, and half of them followed by Cmd-` when Cmd-Tab landed on the app rather than the window.</p>
+    <h2>The problem</h2>
+    <p>Every switcher she tried was a keyboard switcher first. Alt-Tab clones moved the chord around; they did not remove it. Mouse-driven options meant traveling to the Dock or a hot corner, which is its own kind of repetitive. She wanted the switch to be one relaxed press, and she wanted the common case — go back to the window I was just in — to need nothing else.</p>
+    <h2>What changed</h2>
+    <p>The spiral lives on one of the trackball’s four buttons, under her thumb. Hold, release: previous window. That is the whole gesture for most of the three hundred. It is one press, no chord, and the hand that presses it is the hand already on the ball.</p>
+    <p>When she needs a different window, she taps instead and rolls the scroll ring; the selection walks the cards one at a time, and the hub names each one as it passes. Return or a second press commits. When both hands are on the keyboard she uses ⌃⌥Tab, chosen because on her split board Control and Option sit under one thumb. Typing two letters of a window name is cheaper than any chord she used to make.</p>
+    <p>She has macOS Reduce Motion on, and VortexFlow honors it: the spiral appears and leaves without the entrance animation, which she finds easier to track. She also turned the layout to Strip so the cards run in a line under the pointer rather than curling, which suits how she scans.</p>
+    <h2>The setup</h2>
+    <dl class="setup"><div><dt>Trigger</dt><dd>Top-left button on a Kensington Expert trackball, found with Detect Button. ⌃⌥Tab as the keyboard trigger.</dd></div><div><dt>Layout</dt><dd>Strip, icons only. Selection walked with the scroll ring.</dd></div><div><dt>Motion</dt><dd>System Reduce Motion on; the overlay skips its entrance and exit animation.</dd></div><div><dt>Pins</dt><dd>Simulator (app) · Apple Developer docs (link) · a pinned ⌘R shortcut for Xcode’s Run</dd></div></dl>
+    <h2>What it did not fix</h2>
+    <p>The injury. Physical therapy is doing that. What VortexFlow removed is one chord repeated a few hundred times a day, which her therapist noticed before she did.</p>
+    <p class="micro composite-note">A composite: the desk, the windows and the setup are drawn from how people actually use VortexFlow, but the person is a stand-in and nothing here is a testimonial. If this is your desk, <a href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">tell us what we got wrong</a>.</p>
+    <p><a class="btn btn-primary" href="/download/">Download VortexFlow</a> <a class="btn btn-ghost" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">View on GitHub</a></p>
+    <p><a href="/case-studies/">All case studies →</a></p>
+  </main>
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>© 2026 VortexFlow</div>
+      <nav>
+        <a href="/case-studies/">Case studies</a>
+        <a href="/blog/">Blog</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="/js/site.js?v=19"></script>
+</body>
+</html>
