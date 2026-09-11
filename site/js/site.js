@@ -1,3 +1,45 @@
+// Light and dark themes. The inline script in <head> applies html[data-theme] before first
+// paint; this keeps it in sync afterwards: the toggle, the system setting, and the demo.
+const THEME_KEY = "vf-theme";
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+const systemTheme = () => (darkQuery.matches ? "dark" : "light");
+function storedTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    return saved === "light" || saved === "dark" ? saved : null;
+  } catch { return null; }
+}
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const meta = document.querySelector('meta[name="theme-color"]:not([media])');
+  if (meta) meta.content = theme === "dark" ? "#0f1412" : "#f6f4f1";
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(theme === "dark"));
+    const label = theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  });
+  document.dispatchEvent(new CustomEvent("vf-theme", { detail: { theme } }));
+}
+function setTheme(theme) {
+  // Choosing what the system already shows means "follow the system" from here on.
+  try {
+    if (theme === systemTheme()) localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, theme);
+  } catch { /* private mode: the choice lasts for this page only */ }
+  applyTheme(theme);
+}
+function bindTheme() {
+  applyTheme(storedTheme() || document.documentElement.dataset.theme || systemTheme());
+  darkQuery.addEventListener("change", () => { if (!storedTheme()) applyTheme(systemTheme()); });
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
+  });
+  window.VortexTheme = { set: setTheme, get: () => document.documentElement.dataset.theme };
+}
+
 function bindNav() {
   const nav = document.querySelector("#nav, .nav");
   if (!nav) return;
@@ -134,6 +176,7 @@ function bindContributors() {
     .catch(() => {});
 }
 
+bindTheme();
 bindNav();
 bindReveals();
 bindDownload();

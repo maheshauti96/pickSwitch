@@ -449,3 +449,60 @@ html:has(.showcase-page) { scroll-behavior: auto; scroll-padding-top: 76px; }
 @media (prefers-reduced-motion: reduce) {
   .showcase-page *, .showcase-page *::before, .showcase-page *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Dark theme for the page chrome. The demo stages already carry their own dark variants
+   via body[data-appearance], which follows html[data-theme]. */
+html[data-theme="dark"] .showcase-page .nav { background: rgba(15, 20, 18, 0.92); }
+html[data-theme="dark"] .showcase-page .btn-primary { background: #1c8aa6; box-shadow: 0 7px 18px #0006; }
+html[data-theme="dark"] .showcase-page .btn-primary:hover { background: #22a0bf; }
+html[data-theme="dark"] .mobile-menu { box-shadow: 0 16px 30px #0006; }
+html[data-theme="dark"] .overline { color: #8fb8a0; }
+html[data-theme="dark"] .hero-copy h1 span { color: #8fcbab; }
+html[data-theme="dark"] .hero-link, html[data-theme="dark"] .availability a { color: #9fd3b8; }
+html[data-theme="dark"] .coming-soon { border-color: #3a5546; color: #b6d7c2; background: #1a2a21; }
+html[data-theme="dark"] .spiral-stage { box-shadow: 0 25px 65px #0008; }
+html[data-theme="dark"] .story-caption strong { color: #dfe7e0; }
+html[data-theme="dark"] .story-controls button { color: #9fd3b8; }
+html[data-theme="dark"] .story-controls button:hover { background: #1c2722; }
+html[data-theme="dark"] .story-chapters button { color: #93a097; }
+html[data-theme="dark"] .story-chapters button[aria-pressed="true"] { color: #b9e3c9; border-bottom-color: #6b9278; }
+html[data-theme="dark"] .demo-instruction, html[data-theme="dark"] .motion-choice { color: #93a097; }
+html[data-theme="dark"] .visual-foot p { color: #93a097; }
+html[data-theme="dark"] .visual-foot button { color: #9fd3b8; }
+html[data-theme="dark"] .quiet-facts { color: #97a39a; }
+html[data-theme="dark"] .layout-drawer > summary { color: #d5e2d8; }
+html[data-theme="dark"] .layout-drawer summary small { color: #93a097; }
+html[data-theme="dark"] .disclosure-copy { border-color: #3a4a40; }
+html[data-theme="dark"] .layout-tabs button { border-color: #3a4a40; color: #cfdcd2; }
+html[data-theme="dark"] .layout-tabs button[aria-selected="true"] { background: #3f7a5c; border-color: #3f7a5c; color: #fff; }
+html[data-theme="dark"] .layout-description { color: #a9b6ac; }
+html[data-theme="dark"] .preview-toggle { color: #cfdcd2; }
+html[data-theme="dark"] .preview-toggle span { color: #93a097; }
+html[data-theme="dark"] .layout-preview { border-color: #2a3630; }
+html[data-theme="dark"] .pricing-section { background: #141b17; }
+html[data-theme="dark"] .offer { background: #1a2320; border-color: #2c3a33; }
+html[data-theme="dark"] .offer-label { color: #9fb8a6; }
+html[data-theme="dark"] .offer-price { color: #e6efe7; }
+html[data-theme="dark"] .offer > a { color: #9fd3b8; }
+html[data-theme="dark"] .offer-meta { border-top-color: #2c3a33; color: #93a097; }
+html[data-theme="dark"] .source-offer { background: #22392d; border-color: #2c4a3a; }
+html[data-theme="dark"] .source-offer .offer-meta { border-top-color: #3a5546; }
+html[data-theme="dark"] .oss-stats { border-top-color: #2c3a33; }
+html[data-theme="dark"] .oss-stats strong { color: #e6efe7; }
+html[data-theme="dark"] .oss-stats span, html[data-theme="dark"] .offer-note { color: #97a39a; }
+html[data-theme="dark"] .offer-note a { color: #9fd3b8; }
+html[data-theme="dark"] .privacy-section { background: #182b21; }
+html[data-theme="dark"] .contribute-card { background: #171d1a; border-color: #2c3a33; }
+html[data-theme="dark"] .contribute-card h3 { color: #e6efe7; }
+html[data-theme="dark"] .contribute-card .wants li { color: #b7c3b9; }
+html[data-theme="dark"] .contribute-card .wants li::before { color: #8fcbab; }
+html[data-theme="dark"] .contribute-card code, html[data-theme="dark"] .contribute-grid > div > p:not(.overline) code { background: #223029; color: #cfe6d6; }
+html[data-theme="dark"] .contrib-label { color: #8fb8a0; }
+html[data-theme="dark"] .contribute-card .code { background: #0a0d0c; }
+html[data-theme="dark"] .contribute-links .btn-ghost { color: var(--ink); }
+/* The theme toggle sits between the links and the Download button. */
+.showcase-page .nav-in .theme-toggle { width: 36px; height: 36px; }
+@media (max-width: 800px) {
+  .showcase-page .nav-in .theme-toggle { margin-left: auto; width: 34px; height: 34px; }
+  .showcase-page .nav-cta { margin-left: 0; }
+}

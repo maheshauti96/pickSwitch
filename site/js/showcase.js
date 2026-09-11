@@ -59,9 +59,16 @@
       button.setAttribute('aria-pressed', String(button.dataset.appearanceChoice === appearance));
     });
   }
+  // The demo wears the page's theme. Its Light/Dark control is the same switch as the one in
+  // the nav, so there is one appearance to reason about, not two.
+  const pageTheme = () => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
   all('[data-appearance-choice]').forEach((button) => button.addEventListener('click', () => {
-    setAppearance(button.dataset.appearanceChoice);
+    if (window.VortexTheme) window.VortexTheme.set(button.dataset.appearanceChoice);
+    else setAppearance(button.dataset.appearanceChoice);
   }));
+  document.addEventListener('vf-theme', (event) => {
+    if (root.dataset.appearance !== event.detail.theme) setAppearance(event.detail.theme);
+  });
 
   const chapterCopy = {
     open: ['01 / One press', 'A mouse button or a shortcut. Everything opens at the pointer.'],
@@ -577,7 +584,7 @@
 
   all('a[href="#layouts"]').forEach((link) => link.addEventListener('click', () => { $('#layouts').open = true; }));
   customElements.whenDefined('vortex-spiral').then(() => {
-    setAppearance(root.dataset.appearance || 'dark');
+    setAppearance(pageTheme());
     applyReduced(reduced);
     fullWindowScene(false);
     resetPins();

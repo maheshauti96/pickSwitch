@@ -15,7 +15,57 @@
   --wrap: 1120px;
   --gutter: 24px;
   --nav-h: 64px;
+  color-scheme: light;
 }
+/* Dark theme. html[data-theme] is set before first paint by the inline script in <head>:
+   a saved choice wins, otherwise the system's prefers-color-scheme. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0f1412;
+  --paper-2: #171d1a;
+  --ink: #eef2ee;
+  --ink-2: rgba(238, 242, 238, 0.74);
+  --ink-3: #97a39a;
+  --hair: rgba(238, 242, 238, 0.1);
+  --hair-2: rgba(238, 242, 238, 0.2);
+  --brand: #5cc8e4;
+  --brand-fill: #1c8aa6;
+  --brand-live: #7bd3ea;
+  --card: #171d1a;
+  --win-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+html[data-theme="dark"] code, html[data-theme="dark"] kbd { background: rgba(238, 242, 238, 0.1); }
+html[data-theme="dark"] :focus-visible { outline-color: rgba(238, 242, 238, 0.75); }
+html[data-theme="dark"] .btn-primary:hover, html[data-theme="dark"] .btn-download:hover { background: #22a0bf; }
+html[data-theme="dark"] .btn-primary, html[data-theme="dark"] .btn-download { box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+html[data-theme="dark"] .btn-ghost:hover { border-color: rgba(238, 242, 238, 0.45); background: rgba(255, 255, 255, 0.06); }
+html[data-theme="dark"] .nav.is-stuck, html[data-theme="dark"] body:has(.page) .nav { background: rgba(15, 20, 18, 0.9); }
+html[data-theme="dark"] .q summary::after { border-color: rgba(238, 242, 238, 0.5); }
+html[data-theme="dark"] .compare .yes { color: #5fd3a5; }
+html[data-theme="dark"] .compare th.us, html[data-theme="dark"] .compare td.us { background: rgba(92, 200, 228, 0.08); }
+html[data-theme="dark"] .code { background: #0a0d0c; border: 1px solid var(--hair); }
+
+/* Theme toggle: moon in the light theme, sun in the dark one. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--hair-2);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.theme-toggle:hover { background: var(--paper-2); border-color: var(--ink-3); }
+.theme-toggle svg { width: 17px; height: 17px; display: block; }
+.theme-toggle .ico-sun { display: none; }
+html[data-theme="dark"] .theme-toggle .ico-sun { display: block; }
+html[data-theme="dark"] .theme-toggle .ico-moon { display: none; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; scroll-padding-top: 80px; }

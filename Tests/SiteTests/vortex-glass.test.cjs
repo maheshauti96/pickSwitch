@@ -91,6 +91,31 @@ test('the static page and showcase keep valid local assets and metadata', () => 
   assert.match(graph.find((node) => node['@type'] === 'SoftwareSourceCode').codeRepository, /github\.com\//);
 });
 
+test('every page applies the theme before first paint and the demo follows it', () => {
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === 'img' ? [] : walk(full);
+    return entry.name.endsWith('.html') ? [full] : [];
+  });
+  const pages = walk(path.join(root, 'site'));
+  assert.ok(pages.length >= 12);
+  for (const page of pages) {
+    const html = fs.readFileSync(page, 'utf8');
+    const boot = html.indexOf('localStorage.getItem("vf-theme")');
+    assert.ok(boot > 0, page);
+    assert.ok(boot < html.indexOf('/css/site.css'), 'theme script must precede the stylesheet: ' + page);
+    assert.match(html, /<meta name="color-scheme" content="light dark">/, page);
+    if (html.includes('class="nav')) assert.match(html, /data-theme-toggle/, page);
+  }
+  const home = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
+  assert.doesNotMatch(home, /<body[^>]*data-appearance=/);
+  assert.match(home, /document\.body\.dataset\.appearance=document\.documentElement\.dataset\.theme/);
+  const scenes = fs.readFileSync(path.join(root, 'site/js/showcase.js'), 'utf8');
+  assert.match(scenes, /addEventListener\('vf-theme'/);
+  const css = fs.readFileSync(path.join(root, 'site/css/site.css'), 'utf8');
+  assert.match(css, /html\[data-theme="dark"\] \{\s*color-scheme: dark;/);
+});
+
 test('the hero story opens the overlay itself and keeps looping', () => {
   const html = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
   const scenes = fs.readFileSync(path.join(root, 'site/js/showcase.js'), 'utf8');
