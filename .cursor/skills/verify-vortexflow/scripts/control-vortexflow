@@ -153,6 +153,7 @@ control-vortexflow — isolated VortexFlow verification
   fetch [path]          GET a path from the run's server (default /)
   screenshot <path> <out.png>
   download-page         Drive /download/ and write $ART_DIR/download-*
+  home-windows          Open the Windows chapter and write $ART_DIR/home-windows.*
   home-spiral           Drive the home spiral search and write $ART_DIR/home-*
   native-probe          Run build/Vortexflow.app --probe (exits, no overlay)
   native-preview        Open the isolated visual-preview bundle
@@ -174,6 +175,9 @@ case "$cmd" in
     ;;
   download-page)
     node "$DRIVE" download-page "$(url)/download/" "$ART_DIR"
+    ;;
+  home-windows)
+    node "$DRIVE" home-windows "$(url)/" "$ART_DIR"
     ;;
   home-spiral)
     node "$DRIVE" home-spiral "$(url)/" "$ART_DIR"

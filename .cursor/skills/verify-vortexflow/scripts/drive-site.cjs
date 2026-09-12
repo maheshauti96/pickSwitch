@@ -217,6 +217,32 @@ const cmds = {
     console.log(path.join(outDir, 'download.json'));
   },
 
+  async 'home-windows'(pageUrl, outDir) {
+    if (!pageUrl || !outDir) die('usage: drive-site.cjs home-windows URL OUTDIR');
+    fs.mkdirSync(outDir, { recursive: true });
+    const report = await withChrome(pageUrl, async (cdp) => {
+      await evalJson(
+        cdp,
+        `document.querySelector('[data-chapter="windows"]').click(); true`
+      );
+      await delay(700);
+      await screenshot(cdp, path.join(outDir, 'home-windows.png'));
+      return evalJson(
+        cdp,
+        `(() => {
+          const root = document.querySelector('#hero-spiral').shadowRoot;
+          const chrome = [...root.querySelectorAll('.wedge')].map((w) => ({
+            label: w.getAttribute('aria-label'),
+            hrefs: [...w.querySelectorAll('image')].map((i) => i.getAttribute('href'))
+          })).filter((w) => (w.hrefs || []).some((h) => h && h.includes('chrome.png')));
+          return { chrome };
+        })()`
+      );
+    });
+    fs.writeFileSync(path.join(outDir, 'home-windows.json'), JSON.stringify(report, null, 2));
+    console.log(path.join(outDir, 'home-windows.json'));
+  },
+
   async 'home-spiral'(pageUrl, outDir) {
     if (!pageUrl || !outDir) die('usage: drive-site.cjs home-spiral URL OUTDIR');
     fs.mkdirSync(outDir, { recursive: true });
@@ -271,7 +297,7 @@ const cmds = {
 const [cmd, ...args] = process.argv.slice(2);
 if (!cmd || !cmds[cmd]) {
   die(
-    'usage: drive-site.cjs screenshot|eval|download-page|home-spiral ...'
+    'usage: drive-site.cjs screenshot|eval|download-page|home-windows|home-spiral ...'
   );
 }
 cmds[cmd](...args).catch((err) => die(err.stack || String(err)));

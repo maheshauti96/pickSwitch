@@ -641,17 +641,36 @@
         } else {
           const href = it.src || (it.domain ? fav(it.domain) : '');
           const letter = (it.label || '?')[0].toUpperCase();
-          iconEl = `
+          const plate = `
             <rect class="ico-plate" x="${f3(icX)}" y="${f3(icY)}" width="${f3(ic)}" height="${f3(ic)}" rx="${f3(rx)}" fill="#fff"/>
-            <text x="${f3(s.cx)}" y="${f3(icY + ic / 2)}" font-size="${f3(ic * 0.46)}" fill="${it.fill || '#98a0ad'}" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(letter)}</text>
+            <text x="${f3(s.cx)}" y="${f3(icY + ic / 2)}" font-size="${f3(ic * 0.46)}" fill="${it.fill || '#98a0ad'}" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(letter)}</text>`;
+          if (it.site && href) {
+            const back = ic * 0.66;
+            const front = ic * 0.64;
+            const bx = icX + ic - back;
+            const by = icY;
+            const fx = icX;
+            const fy = icY + ic - front;
+            const brx = back * 0.22;
+            const frx = front * 0.22;
+            defs += `<clipPath id="vxs${k}"><rect x="${f3(bx)}" y="${f3(by)}" width="${f3(back)}" height="${f3(back)}" rx="${f3(brx)}"/></clipPath>
+            <clipPath id="vxf${k}"><rect x="${f3(fx)}" y="${f3(fy)}" width="${f3(front)}" height="${f3(front)}" rx="${f3(frx)}"/></clipPath>`;
+            iconEl = `${plate}
+            <rect x="${f3(bx)}" y="${f3(by)}" width="${f3(back)}" height="${f3(back)}" rx="${f3(brx)}" fill="#f0f0f0"/>
+            <image class="ico" href="${esc(it.site)}" x="${f3(bx)}" y="${f3(by)}" width="${f3(back)}" height="${f3(back)}" clip-path="url(#vxs${k})" preserveAspectRatio="xMidYMid slice"/>
+            <rect x="${f3(fx)}" y="${f3(fy)}" width="${f3(front)}" height="${f3(front)}" rx="${f3(frx)}" fill="#fff"/>
+            <image class="ico" href="${esc(href)}" x="${f3(fx)}" y="${f3(fy)}" width="${f3(front)}" height="${f3(front)}" clip-path="url(#vxf${k})" preserveAspectRatio="xMidYMid slice"/>`;
+          } else {
+            iconEl = `${plate}
             ${href ? `<image class="ico" href="${esc(href)}" x="${f3(icX)}" y="${f3(icY)}" width="${f3(ic)}" height="${f3(ic)}" clip-path="url(#vxc${k})" preserveAspectRatio="xMidYMid slice"/>` : ''}`;
-          defs += `<clipPath id="vxc${k}"><rect x="${f3(icX)}" y="${f3(icY)}" width="${f3(ic)}" height="${f3(ic)}" rx="${f3(rx)}"/></clipPath>`;
-          if (it.badge && BADGE_SRC[it.badge]) {
-            const b = ic * 0.5;
-            const bx = icX - b * 0.12;
-            const by = icY + ic - b * 0.72;
-            iconEl += `<circle cx="${f3(bx + b / 2)}" cy="${f3(by + b / 2)}" r="${f3(b / 2 + 1.1)}" fill="#fff"/>
-            <image href="${BADGE_SRC[it.badge]}" x="${f3(bx)}" y="${f3(by)}" width="${f3(b)}" height="${f3(b)}" preserveAspectRatio="xMidYMid slice"/>`;
+            defs += `<clipPath id="vxc${k}"><rect x="${f3(icX)}" y="${f3(icY)}" width="${f3(ic)}" height="${f3(ic)}" rx="${f3(rx)}"/></clipPath>`;
+            if (it.badge && BADGE_SRC[it.badge]) {
+              const b = ic * 0.5;
+              const bx = icX - b * 0.12;
+              const by = icY + ic - b * 0.72;
+              iconEl += `<circle cx="${f3(bx + b / 2)}" cy="${f3(by + b / 2)}" r="${f3(b / 2 + 1.1)}" fill="#fff"/>
+              <image href="${BADGE_SRC[it.badge]}" x="${f3(bx)}" y="${f3(by)}" width="${f3(b)}" height="${f3(b)}" preserveAspectRatio="xMidYMid slice"/>`;
+            }
           }
         }
 

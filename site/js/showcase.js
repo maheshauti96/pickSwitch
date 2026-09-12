@@ -6,8 +6,8 @@
   const $ = (selector) => root.querySelector(selector);
   const all = (selector) => [...root.querySelectorAll(selector)];
   const WINDOWS = [
-    { id: 'research', src: '/img/logos/chrome.png', label: 'Chrome', title: 'Research notes', meta: 'Chrome', sub: 'Current window', fill: '#eaf6f2', body: 'Interview notes from Tuesday. Three quotes still untagged.', detail: 'Notes · References' },
-    { id: 'brief', src: '/img/logos/chrome.png', label: 'Chrome', title: 'Release brief', meta: 'Chrome', sub: 'Previous window', fill: '#e7f4e8', body: 'Ship Friday. Checklist is on page 2.', detail: 'Launch plan · Ready for review' },
+    { id: 'research', src: '/img/logos/chrome.png', site: '/img/logos/notes.png', label: 'Chrome', title: 'Research notes', meta: 'Chrome', sub: 'Current window', fill: '#eaf6f2', body: 'Interview notes from Tuesday. Three quotes still untagged.', detail: 'Notes · References' },
+    { id: 'brief', src: '/img/logos/chrome.png', site: '/img/logos/notion.png', label: 'Chrome', title: 'Release brief', meta: 'Chrome', sub: 'Previous window', fill: '#e7f4e8', body: 'Ship Friday. Checklist is on page 2.', detail: 'Launch plan · Ready for review' },
     { id: 'slack', src: '/img/logos/slack.png', label: 'Slack', title: 'Launch notes', meta: 'Slack', sub: 'Current display', fill: '#f8e9ef', body: '12 unread. Friday ship is in this thread.', detail: 'Team updates · #launch-notes' },
     { id: 'safari', src: '/img/logos/safari-native.png', label: 'Safari', title: 'Reading list', meta: 'Safari', sub: 'Another Space', fill: '#ebf2fb', body: 'MDN. Window management. Fitts 1954.', detail: 'Saved for later' },
     { id: 'notes', src: '/img/logos/notes.png', label: 'Notes', title: 'Ideas for later', meta: 'Notes', sub: 'Current display', fill: '#f8f3df', body: 'Questions for Thursday review.', detail: 'Design review' },
@@ -29,6 +29,26 @@
     { id: 'keys', title: 'Find in page', shortLabel: '⌘ F', kind: 'Keyboard shortcut', label: '⌘ F' }
   ];
   const LAYOUT_WINDOWS = WINDOWS.slice(0, 8);
+  function windowIcon(item) {
+    if (!item.site) {
+      const icon = document.createElement('img');
+      icon.src = item.src;
+      icon.alt = '';
+      return icon;
+    }
+    const wrap = document.createElement('span');
+    wrap.className = 'window-icon';
+    const site = document.createElement('img');
+    site.className = 'window-icon-site';
+    site.src = item.site;
+    site.alt = '';
+    const app = document.createElement('img');
+    app.className = 'window-icon-app';
+    app.src = item.src;
+    app.alt = '';
+    wrap.append(site, app);
+    return wrap;
+  }
   const stage = $('#story-stage');
   const spiral = $('#hero-spiral');
   const pointer = $('#story-pointer');
@@ -209,7 +229,7 @@
         ? item.meta + ' is ready'
         : item.kind === 'app' ? 'Launched ' + item.title : 'Brought forward: ' + item.title;
     $('#receipt-title').textContent = title;
-    $('#receipt-icon').src = item.src || '/img/mark.svg?v=3';
+    $('#receipt-icon').src = item.site || item.src || '/img/mark.svg?v=3';
     receipt.hidden = false;
   }
 
@@ -497,8 +517,7 @@
     const preview = $('#list-selected-preview');
     if (!preview) return;
     preview.replaceChildren();
-    const icon = document.createElement('img');
-    icon.src = layoutSelected.src; icon.alt = '';
+    const icon = windowIcon(layoutSelected);
     const title = document.createElement('strong');
     title.textContent = layoutSelected.title;
     const detail = document.createElement('p');
@@ -532,7 +551,7 @@
         button.type = 'button'; button.className = 'layout-card'; button.dataset.window = item.id;
         button.setAttribute('aria-label', item.title + ', ' + item.meta);
         button.setAttribute('aria-pressed', String(item.id === layoutSelected.id));
-        const icon = document.createElement('img'); icon.src = item.src; icon.alt = '';
+        const icon = windowIcon(item);
         const title = document.createElement('strong'); title.textContent = item.title;
         const app = document.createElement('span'); app.textContent = item.label;
         const preview = document.createElement('div'); preview.className = 'mini-preview'; preview.setAttribute('aria-hidden', 'true');
