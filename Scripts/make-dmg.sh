@@ -12,17 +12,16 @@
 #   Scripts/make-dmg.sh                  # build, then package
 #   Scripts/make-dmg.sh --skip-build     # package whatever is already in build/
 #
-# IMPORTANT — this image is signed but NOT notarized.
-#
-# Notarization needs a paid Apple Developer account, and without it Gatekeeper
-# refuses a downloaded copy outright: "VortexFlow cannot be opened because the
-# developer cannot be verified." That wording suggests the app is broken rather
-# than unregistered, so anyone publishing this link has to tell people how to get
-# past it.
+# The image is signed with the same identity as the app when one exists.
+# Notarization runs when credentials are present (VORTEXFLOW_NOTARY_PROFILE, or
+# the App Store Connect API key triple). Scripts/notarize.sh submits the image
+# and staples the ticket. Without credentials the image stays signed but not
+# notarized, and Gatekeeper refuses a downloaded copy until the user approves it
+# in System Settings.
 #
 # On macOS 15 and later the route is System Settings -> Privacy & Security ->
-# Open Anyway, *after* an attempt to open has been refused. Control-clicking the
-# app and choosing Open used to work and no longer does — Apple removed that
+# Open Anyway, after an attempt to open has been refused. Control-clicking the
+# app and choosing Open used to work and no longer does. Apple removed that
 # bypass in Sequoia, which is at or below this app's minimum, so it is wrong for
 # every supported version. The README has the current steps.
 #
@@ -33,7 +32,7 @@ SKIP_BUILD=0
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--skip-build) SKIP_BUILD=1; shift ;;
-		-h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+		-h|--help) sed -n '2,27p' "$0"; exit 0 ;;
 		*) echo "unknown option: $1" >&2; exit 2 ;;
 	esac
 done
@@ -100,6 +99,22 @@ if [[ -n "$SIGN_IDENTITY" ]]; then
 	codesign --force --sign "$SIGN_IDENTITY" "$DMG_PATH" 2>&1 | sed 's/^/    /'
 fi
 
+# NotaryCredentials = Profile | APIKey | Missing. Missing skips notarization
+# rather than failing the packaging step. notarize.sh itself fails closed.
+HAS_NOTARY_CREDENTIALS=0
+if [[ -n "${VORTEXFLOW_NOTARY_PROFILE:-}" ]]; then
+	HAS_NOTARY_CREDENTIALS=1
+elif [[ -n "${APP_STORE_CONNECT_API_KEY_ID:-}" &&
+	-n "${APP_STORE_CONNECT_ISSUER_ID:-}" &&
+	-n "${APP_STORE_CONNECT_API_KEY_PATH:-}" ]]; then
+	HAS_NOTARY_CREDENTIALS=1
+fi
+
+if [[ "$HAS_NOTARY_CREDENTIALS" -eq 1 ]]; then
+	echo "==> Notarizing"
+	"$PROJECT_ROOT/Scripts/notarize.sh" "$DMG_PATH"
+fi
+
 echo "==> Verifying"
 # Mount it and check the app really is inside, because a DMG that builds cleanly and
 # contains nothing useful looks identical from out here.
@@ -134,7 +149,10 @@ echo "Built: ${DMG_PATH#$PROJECT_ROOT/}"
 stat -f %z "$DMG_PATH" | awk '{ printf "Size:   %.1f MB\n", $1 / 1048576 }'
 shasum -a 256 "$DMG_PATH" | awk '{ print "SHA256: " $1 }'
 
-cat <<-'NOTE'
+if xcrun stapler validate "$DMG_PATH" >/dev/null 2>&1; then
+	echo "Stapled: ${DMG_PATH#$PROJECT_ROOT/}"
+else
+	cat <<-'NOTE'
 
 	This image is signed but not notarized, so a downloaded copy is blocked on first
 	open with "the developer cannot be verified". People have to try opening it once,
@@ -142,5 +160,6 @@ cat <<-'NOTE'
 	and later, Control-clicking and choosing Open no longer bypasses this.
 
 	Notarizing instead, which removes the warning entirely, needs a paid Apple
-	Developer account.
+	Developer account and notarytool credentials. See Scripts/notarize.sh.
 NOTE
+fi

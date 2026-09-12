@@ -105,10 +105,12 @@ themselves.
 **The shortcut that opened it closes it.** Press again to dismiss without switching,
 including when a mouse extra button is remapped to that shortcut.
 
-**Local and private.** No accounts, no telemetry, no analytics, no network calls —
-except one, described plainly: to show the icon of a site open in your browser,
-VortexFlow fetches that icon from that site's own address, with no cookies and nothing
-identifying, and never for a private browsing window.
+**Local and private.** No accounts, no telemetry, no analytics. The app makes two
+kinds of network call. To show the icon of a site open in your browser, VortexFlow
+fetches that icon from that site's own address, with no cookies and nothing
+identifying, and never for a private browsing window. To see if a newer signed build
+exists, it reads `https://vortexflow.io/appcast.xml`. It downloads an update only if
+you agree.
 
 ---
 
@@ -286,6 +288,21 @@ To use your own identity instead:
 ```sh
 VORTEXFLOW_SIGN_IDENTITY="Developer ID Application: You (TEAMID)" Scripts/build-app.sh
 ```
+
+If you have a paid Apple Developer account, store notary credentials once:
+
+```sh
+xcrun notarytool store-credentials
+```
+
+Then set `VORTEXFLOW_NOTARY_PROFILE` to that profile name and run:
+
+```sh
+Scripts/make-dmg.sh
+```
+
+The disk image is notarized and stapled when those credentials are present. Without
+them the image is signed but not notarized, and the Gatekeeper steps above still apply.
 
 ### If VortexFlow will not appear in a privacy list
 

@@ -12,7 +12,8 @@ import PackageDescription
 // Layout:
 //   VortexflowCore  - every model, service and view. Internal access, so tests
 //                     reach it with `@testable import`.
-//   Vortexflow      - thin executable shell: main.swift + NSApplication bootstrap.
+//   Vortexflow      - thin executable shell: main.swift, NSApplication bootstrap,
+//                     and Sparkle. VortexflowCore does not import Sparkle.
 //
 // Swift 5 language mode is deliberate: the codebase talks to CGEventTap C
 // callbacks, AXUIElement (an untyped CFTypeRef world) and AppKit main-thread
@@ -83,6 +84,9 @@ let package = Package(
         .executable(name: "Vortexflow", targets: ["Vortexflow"]),
         .library(name: "VortexflowCore", targets: ["VortexflowCore"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.8.0"),
+    ],
     targets: [
         .target(
             name: "VortexflowCore",
@@ -94,9 +98,18 @@ let package = Package(
         ),
         .executableTarget(
             name: "Vortexflow",
-            dependencies: ["VortexflowCore"],
+            dependencies: [
+                "VortexflowCore",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             path: "Sources/Vortexflow",
-            swiftSettings: baseSwiftSettings
+            swiftSettings: baseSwiftSettings,
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-rpath",
+                    "-Xlinker", "@executable_path/../Frameworks",
+                ]),
+            ]
         ),
         .testTarget(
             name: "VortexflowCoreTests",

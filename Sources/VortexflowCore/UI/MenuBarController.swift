@@ -14,6 +14,9 @@ final class MenuBarController {
 
     var onOpenSettings: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
+    var onCheckForUpdates: (() -> Void)? {
+        didSet { statusItem.menu = buildMenu() }
+    }
     var onQuit: (() -> Void)?
     /// Called when the user picks a different overlay arrangement from the menu.
     var onLayoutStyleChanged: ((OverlayLayoutStyle) -> Void)?
@@ -185,6 +188,16 @@ final class MenuBarController {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        if onCheckForUpdates != nil {
+            let updates = NSMenuItem(
+                title: "Check for Updates…",
+                action: #selector(checkForUpdates),
+                keyEquivalent: ""
+            )
+            updates.target = self
+            menu.addItem(updates)
+        }
+
         menu.addItem(.separator())
 
         let version = NSMenuItem(title: "VortexFlow \(Self.versionString)", action: nil, keyEquivalent: "")
@@ -253,6 +266,10 @@ final class MenuBarController {
 
     @objc private func openSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func checkForUpdates() {
+        onCheckForUpdates?()
     }
 
     @objc private func selectViewMode(_ sender: NSMenuItem) {

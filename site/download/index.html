@@ -101,7 +101,7 @@
     <p>On macOS 15 and later, right-clicking the app and choosing Open no longer works as a shortcut for this; Apple removed that bypass. See <a href="https://support.apple.com/en-us/guide/mac-help/mh40616/mac" rel="noopener">Apple's own documentation</a>. If you would rather not click Open Anyway on something you did not compile, the section below is for you.</p>
 
     <h2 id="source">Build from source</h2>
-    <p>The repository is a Swift package with no third-party dependencies. You need macOS 15 or later and the Xcode command-line tools (<code>xcode-select --install</code>). The build script compiles the package, assembles the <code>.app</code> bundle, signs it, and with <code>--install</code> replaces the copy in Applications.</p>
+    <p>The repository is a Swift package. Sparkle is the one third-party dependency, used for updates. You need macOS 15 or later and the Xcode command-line tools (<code>xcode-select --install</code>). The build script compiles the package, assembles the <code>.app</code> bundle, signs it, and with <code>--install</code> replaces the copy in Applications.</p>
     <pre class="code"><span class="cm"># clone, build, install</span>
 git clone https://github.com/maheshauti96/VortexFlow.git
 cd VortexFlow

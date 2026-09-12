@@ -34,5 +34,13 @@
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>SUFeedURL</key>
+	<string>https://vortexflow.io/appcast.xml</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SUPublicEDKey</key>
+	<string>2fLknDcLaj7FIZ0CgVrRICSPXslNt9PU1jCwSitVJ5M=</string>
 </dict>
 </plist>

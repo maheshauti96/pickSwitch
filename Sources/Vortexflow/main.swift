@@ -30,13 +30,16 @@ MainActor.assumeIsolated {
 
     let application = NSApplication.shared
     let delegate = AppDelegate()
+    let updater = SparkleUpdateController()
+    delegate.onCheckForUpdates = { updater.checkForUpdates() }
     application.delegate = delegate
     // Requirement 11.1: no Dock icon, absent from Cmd-Tab. Also set via LSUIElement
     // in Info.plist so the bundled app behaves this way from the instant it launches.
     application.setActivationPolicy(.accessory)
 
     // NSApplication holds its delegate weakly, so this scope has to keep it alive.
-    withExtendedLifetime(delegate) {
+    // The updater is kept too: automatic checks need the controller after launch.
+    withExtendedLifetime((delegate, updater)) {
         application.run()
     }
 }
