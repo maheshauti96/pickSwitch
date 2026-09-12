@@ -3,28 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Download VortexFlow for macOS, free and open source</title>
-  <meta name="description" content="Download the latest VortexFlow disk image for macOS 15 or later, or build it from source in one command. Free and open source under the MIT license. No account, no telemetry.">
+  <title>Download VortexFlow, the macOS window switcher</title>
+  <meta name="description" content="Download the VortexFlow window switcher for macOS 15 or later, or build it from source in one command. Free and open source under MIT. No account, no telemetry.">
   <link rel="canonical" href="https://vortexflow.io/download/">
   <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
   <link rel="icon" href="/img/favicon-32.png?v=3" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="/img/apple-touch.png?v=3">
   <meta name="theme-color" content="#f6f4f1">
   <meta property="og:site_name" content="VortexFlow">
-  <meta property="og:title" content="Download VortexFlow for macOS, free and open source">
+  <meta property="og:title" content="Download VortexFlow, the macOS window switcher">
   <meta property="og:description" content="The latest disk image for macOS 15 or later, or build it from source in one command. MIT-licensed. No account, no telemetry.">
   <meta property="og:url" content="https://vortexflow.io/download/">
   <meta property="og:type" content="website">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta name="twitter:title" content="Download VortexFlow for macOS, free and open source">
+  <meta name="twitter:title" content="Download VortexFlow, the macOS window switcher">
   <meta name="twitter:description" content="The latest disk image for macOS 15 or later, or build it from source in one command. MIT-licensed. No account, no telemetry.">
   <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=4">
+  <meta property="og:image:alt" content="Find the right window. Don't leave the pointer.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=4">
   <meta name="color-scheme" content="light dark">
   <script>(function(){var t="light";try{var s=localStorage.getItem("vf-theme");t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
   <link rel="stylesheet" href="/css/site.css?v=20">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "Install VortexFlow on macOS",
+    "description": "Download the disk image, drag VortexFlow to Applications, and open it once through Gatekeeper.",
+    "totalTime": "PT3M",
+    "tool": { "@type": "HowToTool", "name": "macOS 15 or later" },
+    "step": [
+      {"@type": "HowToStep", "name": "Download", "text": "Download the latest VortexFlow disk image from GitHub Releases."},
+      {"@type": "HowToStep", "name": "Install", "text": "Open the disk image and drag VortexFlow to your Applications folder."},
+      {"@type": "HowToStep", "name": "Open Anyway", "text": "Open the app. macOS will refuse the first time. In System Settings, Privacy and Security, click Open Anyway next to VortexFlow."},
+      {"@type": "HowToStep", "name": "Grant permissions", "text": "Grant only the permissions for the features you want. Each one is optional. The app runs with any subset."},
+      {"@type": "HowToStep", "name": "Open the spiral", "text": "Press middle-click, or the keyboard shortcut. The spiral appears around the pointer."}
+    ]
+  }
+  </script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -36,8 +54,6 @@
       <a href="/blog/">Blog</a>
       <a href="/case-studies/">Case studies</a>
       <a href="/compare/">Compare</a>
-      <a href="/privacy/">Privacy</a>
-      <a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">GitHub</a>
     </nav>
     <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to the dark theme" title="Switch to the dark theme"><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g></svg></button>
     <a class="btn btn-download" href="https://github.com/maheshauti96/VortexFlow/releases/latest" data-download rel="noopener">Download</a>

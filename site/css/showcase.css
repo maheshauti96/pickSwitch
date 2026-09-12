@@ -12,7 +12,7 @@ html:has(.showcase-page) { scroll-behavior: auto; scroll-padding-top: 76px; }
 .showcase-page .nav-in { gap: 26px; }
 .showcase-page .mark { font-size: 18px; gap: 10px; }
 .showcase-page .mark img { width: 27px; height: 27px; }
-.desktop-links { display: flex; align-items: center; gap: 29px; margin-left: auto; }
+.desktop-links { display: flex; align-items: center; gap: 22px; margin-left: auto; }
 .desktop-links a { font-size: 14px; color: var(--ink-2); padding-block: 12px; }
 .showcase-page .nav-cta { min-height: 44px; font-size: 13px; box-shadow: none; }
 .showcase-page .btn-primary { background: #16738a; box-shadow: 0 7px 18px #126d8420; }
