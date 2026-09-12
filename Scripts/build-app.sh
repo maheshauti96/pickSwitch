@@ -122,6 +122,45 @@ if compgen -G "$CORE_BRAND/*.png" >/dev/null; then
 	cp "$CORE_BRAND"/*.png "$CONTENTS/Resources/"
 fi
 
+echo "==> Embedding Sparkle.framework"
+locate_sparkle_framework() {
+	local bin_path candidate
+	local -a candidates=()
+
+	candidates+=(
+		"$PROJECT_ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+	)
+	if bin_path="$(swift build "${BUILD_ARGS[@]}" --show-bin-path 2>/dev/null)"; then
+		candidates+=(
+			"$bin_path/Sparkle.framework"
+			"$bin_path/../Sparkle.framework"
+		)
+	fi
+	while IFS= read -r candidate; do
+		candidates+=("$candidate")
+	done < <(
+		find "$PROJECT_ROOT/.build" -type d -name Sparkle.framework \
+			! -path "*Intermediates.noindex*" 2>/dev/null | head -20 || true
+	)
+	for candidate in "${candidates[@]}"; do
+		if [[ -d "$candidate" && -f "$candidate/Sparkle" || -d "$candidate/Versions" ]]; then
+			echo "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+SPARKLE_FRAMEWORK="$(locate_sparkle_framework || true)"
+if [[ -z "$SPARKLE_FRAMEWORK" || ! -d "$SPARKLE_FRAMEWORK" ]]; then
+	echo "error: could not locate Sparkle.framework after swift build" >&2
+	exit 1
+fi
+echo "    from ${SPARKLE_FRAMEWORK#$PROJECT_ROOT/}"
+mkdir -p "$CONTENTS/Frameworks"
+# Preserve symlinks. A flattened copy breaks the versioned framework layout.
+ditto "$SPARKLE_FRAMEWORK" "$CONTENTS/Frameworks/Sparkle.framework"
+
 # Signing identity.
 #
 # macOS records privacy permissions against a code identity. An ad-hoc signature
@@ -135,9 +174,11 @@ fi
 #   2. a certificate named "Vortexflow Dev" (Scripts/create-signing-certificate.sh)
 #   3. ad-hoc, with a warning
 #
-# Hardened runtime is deliberately NOT enabled. It exists for notarized
-# distribution, buys a locally-built app nothing, and only adds another variable to
-# the permission story.
+# Signing mode is a sum type, chosen from the resolved identity:
+#   * Developer ID Application: hardened runtime (--options runtime) and Apple
+#     timestamp. Required for notarization.
+#   * Vortexflow Dev or ad-hoc: --timestamp=none, no hardened runtime. Sparkle
+#     fails to load under library validation when the signature is local or ad-hoc.
 SIGN_IDENTITY="${VORTEXFLOW_SIGN_IDENTITY:-}"
 DEFAULT_IDENTITY_NAME="Vortexflow Dev"
 
@@ -157,10 +198,58 @@ else
 	echo "==> Code signing as \"$SIGN_IDENTITY\""
 fi
 
-codesign --force --sign "$SIGN_IDENTITY" \
+# SigningMode = DeveloperID | Local
+codesign_item() {
+	local target="$1"
+	shift
+	if [[ "$SIGN_IDENTITY" == "Developer ID Application"* ]]; then
+		codesign --force --sign "$SIGN_IDENTITY" \
+			--options runtime \
+			--timestamp \
+			--generate-entitlement-der \
+			"$@" \
+			"$target"
+	else
+		codesign --force --sign "$SIGN_IDENTITY" \
+			--timestamp=none \
+			"$@" \
+			"$target"
+	fi
+}
+
+sign_sparkle_inside_out() {
+	local framework="$CONTENTS/Frameworks/Sparkle.framework"
+	local version_dir="$framework/Versions/B"
+	if [[ ! -d "$version_dir" ]]; then
+		version_dir="$framework/Versions/Current"
+	fi
+	if [[ ! -d "$version_dir" ]]; then
+		version_dir="$framework"
+	fi
+
+	local nested
+	for nested in \
+		"$version_dir/XPCServices/Downloader.xpc" \
+		"$version_dir/XPCServices/Installer.xpc" \
+		"$version_dir/Autoupdate" \
+		"$version_dir/Updater.app"
+	do
+		if [[ -e "$nested" ]]; then
+			echo "    signing ${nested#$CONTENTS/}"
+			codesign_item "$nested" --preserve-metadata=entitlements,identifier
+		fi
+	done
+
+	echo "    signing Frameworks/Sparkle.framework"
+	codesign_item "$framework" --preserve-metadata=entitlements,identifier
+}
+
+sign_sparkle_inside_out 2>&1 | sed 's/^/    /'
+
+echo "    signing $APP_NAME.app"
+codesign_item "$APP_BUNDLE" \
 	--entitlements "$PROJECT_ROOT/Resources/Vortexflow.entitlements" \
-	--timestamp=none \
-	"$APP_BUNDLE" 2>&1 | sed 's/^/    /'
+	2>&1 | sed 's/^/    /'
 
 echo "==> Verifying"
 if codesign --verify --deep --strict "$APP_BUNDLE" 2>/dev/null; then

@@ -121,6 +121,7 @@ struct OverlayStateTests {
     @Test("The scroll offset stays legal after a removal")
     func scrollOffsetStaysLegalAfterRemoval() {
         let subject = OverlayState()
+        subject.layoutStyle = .strip
         subject.availableContentWidth = 600
         subject.load(entries: Fixture.entries(count: 20), selectedIndex: 19)
         #expect(subject.scrollOffset > 0)

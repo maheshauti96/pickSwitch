@@ -70,12 +70,12 @@
 
     <p>A window switcher needs to see your windows, hear your mouse, and, if you want previews, look at your screen. Those are exactly the permissions a bad program would need. Asking you to trust us is not a serious answer to that. Asking you to read is. Here is the route.</p>
     <h2>1. Nothing to trust transitively</h2>
-    <p>Open <code>Package.swift</code>. There are no third-party dependencies. Every import is an Apple framework. Whatever this app does, it does in the source in front of you; there is no lockfile to audit and no package registry to compromise.</p>
-    <h2>2. Two files touch the network</h2>
-    <p>Search the tree for <code>URLSession</code>. You will find two places.</p>
+    <p>Open <code>Package.swift</code>. Sparkle is the one third-party dependency, pinned there, and imported only by the <code>Vortexflow</code> executable. Core and its tests stay on Apple frameworks. The Sparkle pin is in the lockfile in the same repository, so you can see which release it is.</p>
+    <h2>2. Network</h2>
+    <p>Search the tree for <code>URLSession</code>. You will find two places in Core.</p>
     <p><code>Core/BrowserFaviconService.swift</code> fetches a site's icon so a browser card can show the site rather than the browser. It requests only the origin root, <code>https://host/</code>, never the page you are on. Redirects that leave that origin are refused by a delegate written for the purpose. The session is ephemeral, so nothing is cached to disk. Private windows are skipped entirely; the rule is a test, not a comment.</p>
     <p><code>Models/WebSearch.swift</code> makes a request only when you choose <em>Open first result</em> for something the switcher could not find. It asks the search engine for the first hit and opens it. That request is the search you just asked for.</p>
-    <p>There is nothing else. No analytics, no crash reporter, no update check. New versions arrive when you visit <a href="https://github.com/maheshauti96/VortexFlow/releases" rel="noopener">Releases</a>, not when the app phones anyone.</p>
+    <p>There is no analytics SDK and no crash reporter. Sparkle reads <a href="https://vortexflow.io/appcast.xml">https://vortexflow.io/appcast.xml</a> to see if a newer signed build exists, and downloads the enclosure only if you agree. The menu item is Check for Updates. There is no Updates page in Settings.</p>
     <h2>3. Each permission, and the code that spends it</h2>
     <p><code>Core/PermissionsManager.swift</code> is where permissions are asked for. Then follow each one to where it is used:</p>
     <ul>
@@ -92,7 +92,7 @@ cd VortexFlow
 Scripts/build-app.sh --install</pre>
     <p>The build is signed but not notarized, so macOS asks once on first launch; your own build asks nothing. If you download instead, every release lists SHA-256 digests for its assets next to the files.</p>
     <h2>6. Watch it run</h2>
-    <p>Grant the permissions, open a few sites, and watch with Little Snitch or <code>nettop</code>. You should see an icon request the first time a new site appears in a card, and otherwise silence. If you ever see anything else, that is the most important issue you could file.</p>
+    <p>Grant the permissions, open a few sites, and watch with Little Snitch or <code>nettop</code>. You should see an icon request the first time a new site appears in a card, and a request to <code>vortexflow.io/appcast.xml</code> when Sparkle checks for a newer signed build. If you ever see anything else, that is the most important issue you could file.</p>
     <p>An afternoon. Probably less. Then you can decide whether to grant the permissions.</p>
     <p><a class="btn btn-primary" href="/download/">Download VortexFlow</a> <a class="btn btn-ghost" href="https://github.com/maheshauti96/VortexFlow" rel="noopener">View on GitHub</a></p>
     <p><a href="/blog/dont-leave-the-pointer/">Start over: Don't leave the pointer. →</a></p>

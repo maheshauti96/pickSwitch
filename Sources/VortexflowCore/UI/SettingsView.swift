@@ -372,7 +372,7 @@ struct SettingsView: View {
         }
 
         Section {
-            Text("VortexFlow runs entirely on this Mac. It makes no network connections and collects nothing.")
+            Text("VortexFlow does not collect telemetry. It talks to the network for site icons and to check https://vortexflow.io/appcast.xml for a newer signed build.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

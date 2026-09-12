@@ -17,6 +17,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
 
+    /// Wired from the executable so Core never imports Sparkle.
+    public var onCheckForUpdates: (() -> Void)?
+
     public override init() {
         super.init()
     }
@@ -44,6 +47,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
+        menuBar.onCheckForUpdates = onCheckForUpdates
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.onViewModeChanged = { [weak self] mode in
             guard let self else { return }

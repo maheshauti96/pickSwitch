@@ -9,3 +9,6 @@
 
 /css/*
   Cache-Control: public, max-age=86400
+
+/appcast.xml
+  Content-Type: application/xml; charset=utf-8

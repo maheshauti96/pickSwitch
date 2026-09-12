@@ -42,16 +42,16 @@
   </header>
   <main class="page">
     <p class="eyebrow">Privacy</p>
-    <h1>No account, no telemetry, no server.</h1>
+    <h1>No account, no telemetry.</h1>
     <p class="updated">Last updated: 12 September 2026</p>
-    <p class="lead">VortexFlow has no account, no analytics, and no telemetry. There is no server of ours for the app to talk to. The contents of your windows, your screenshots, and what you type into the overlay stay on your Mac, and because the <a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">source is public</a>, every sentence on this page is something you can check rather than something you have to take on trust.</p>
+    <p class="lead">VortexFlow has no account, no analytics, and no telemetry. There is no account or telemetry server. The contents of your windows, your screenshots, and what you type into the overlay stay on your Mac, and because the <a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">source is public</a>, every sentence on this page is something you can check rather than something you have to take on trust.</p>
 
     <h2>The short version</h2>
     <ul>
       <li>No account, no sign-in, nothing to register. The app has no notion of who you are.</li>
-      <li>No analytics, crash reporting, or usage data. Nothing is sent to us, because there is no "us" to send it to.</li>
+      <li>No analytics, crash reporting, or usage data. Nothing is sent to us as telemetry, because there is no telemetry server to send it to.</li>
       <li>Window titles, search queries, and thumbnails stay on your Mac and are never written to disk.</li>
-      <li>The one network request the app makes is for site icons, described below. Never for a private window.</li>
+      <li>The app talks to the network for site icons, described below, and to check <a href="https://vortexflow.io/appcast.xml">https://vortexflow.io/appcast.xml</a> for a newer signed build. Never for a private window. Never to profile you.</li>
     </ul>
 
     <h2>What the app stores</h2>
@@ -59,6 +59,9 @@
 
     <h2>The favicon network call</h2>
     <p>To show the icon of a site open in your browser, VortexFlow fetches that icon from that site's own address. The request is unauthenticated, uses a throwaway session, sends no cookies and nothing identifying, and refuses redirects to any other host. <strong>It is never made for an incognito or private-browsing window.</strong> If you deny the app network access, cards still work; they just will not show site icons. The code for this is <code>BrowserFaviconService.swift</code>.</p>
+
+    <h2>Update checks</h2>
+    <p>VortexFlow talks to <a href="https://vortexflow.io/appcast.xml">https://vortexflow.io/appcast.xml</a> to see if a newer signed build exists. That feed is a static file on this site. The app downloads the enclosure only if you agree. There is no account, no telemetry, and no system profiling in that check. Sparkle is the library that does it. The code lives in the <code>Vortexflow</code> executable, not in <code>VortexflowCore</code>.</p>
 
     <h2>Web and assistant search</h2>
     <p>If you type something the spiral cannot match and choose to search the web or send it to an assistant, the app opens that query in your default browser. It is your browser making the request, under your own accounts and settings; the app sends nothing itself and does not keep the query.</p>
