@@ -1,4 +1,4 @@
-# VortexFlow — approved spiral identity
+# VortexFlow. Approved spiral identity
 
 The user selected the first spiral concept and approved its teal, mint and violet refinement on 5 September 2026. The approved presentation is retained in `source/approved-spiral-color.png`.
 
@@ -27,7 +27,7 @@ The same command creates `Resources/AppIcon.icns` and the native `VortexflowMark
 
 For an already-installed certificate-signed local development build, `bash Scripts/refresh-installed-brand.sh --apply` refreshes only its five brand resources. It verifies that both architecture instruction fingerprints and the signing requirement remain unchanged, archives the original bundle as a ZIP in `build/brand-backups/`, and stops the utility for replacement. Reopen it after the update. This avoids accidentally installing an older executable from a website-only branch.
 
-The generator requires macOS's image services. In a restricted sandbox, `iconutil` can report “Invalid Iconset” even when all ten PNG sizes are correct; run the packaging command with the required local permission, rather than changing the artwork.
+The generator requires macOS's image services. In a restricted sandbox, `iconutil` can report "Invalid Iconset" even when all ten PNG sizes are correct; run the packaging command with the required local permission, rather than changing the artwork.
 
 ## Use
 

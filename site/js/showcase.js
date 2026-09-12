@@ -6,22 +6,22 @@
   const $ = (selector) => root.querySelector(selector);
   const all = (selector) => [...root.querySelectorAll(selector)];
   const WINDOWS = [
-    { id: 'research', src: '/img/logos/chrome.png', label: 'Chrome', title: 'Research notes', meta: 'Chrome', sub: 'Current window', fill: '#eaf6f2', body: 'Ideas worth keeping.', detail: 'Notes · References · Next steps' },
-    { id: 'brief', src: '/img/logos/chrome.png', label: 'Chrome', title: 'Release brief', meta: 'Chrome', sub: 'Previous window', fill: '#e7f4e8', body: 'A little room to focus.', detail: 'Launch plan · Ready for review' },
-    { id: 'slack', src: '/img/logos/slack.png', label: 'Slack', title: 'Northstar team', meta: 'Slack', sub: 'Current display', fill: '#f8e9ef', body: 'A clear next step.', detail: 'Team updates · Project Northstar' },
-    { id: 'safari', src: '/img/logos/safari-native.png', label: 'Safari', title: 'Reading list', meta: 'Safari', sub: 'Another Space', fill: '#ebf2fb', body: 'A few good reads.', detail: 'Saved for later · Reference library' },
-    { id: 'notes', src: '/img/logos/notes.png', label: 'Notes', title: 'Ideas for later', meta: 'Notes', sub: 'Current display', fill: '#f8f3df', body: 'Good ideas deserve a place to land.', detail: 'Thinking · Sketching · Exploring' },
-    { id: 'finder', src: '/img/logos/finder-native.png', label: 'Finder', title: 'Project files', meta: 'Finder', sub: 'Current display', fill: '#e5f4f3', body: 'Everything for the project.', detail: 'Brief · Research · Assets' },
-    { id: 'cursor', src: '/img/logos/cursor.png', label: 'Cursor', title: 'Workspace', meta: 'Cursor', sub: 'Current display', fill: '#f1eff2', body: 'Pick up where you left off.', detail: 'Source · Changes · Workspace' },
-    { id: 'snowflake', src: '/img/logos/snowflake.png', badge: 'chrome', label: 'Snowflake', title: 'Snowflake', meta: 'app.snowflake.com', sub: 'Browser tab', fill: '#e6f5fa', sel: '#bce5f1', glow: '#b1eaff', body: 'Your analytics workspace.', detail: 'Worksheets · Projects · Results' },
-    { id: 'music', src: '/img/logos/music.png', label: 'Music', title: 'Focus playlist', meta: 'Music', sub: 'Audio playing', fill: '#f7e9ee', body: 'A soundtrack for your flow.', detail: 'Focus playlist · Now playing' },
-    { id: 'terminal', src: '/img/logos/terminal.png', label: 'Terminal', title: 'Local project', meta: 'Apple Terminal', sub: 'Second display', fill: '#edf4ef', body: 'Ready for your next command.', detail: 'Project Northstar · Local session' },
-    { id: 'claude', src: '/img/logos/claude.png', label: 'Claude', title: 'A fresh idea', meta: 'Claude', sub: 'Current display', fill: '#f9ece5', body: 'A new perspective.', detail: 'Draft · Explore · Refine' },
-    { id: 'chatgpt', src: '/img/logos/chatgpt.png', label: 'ChatGPT', title: 'Creative thinking', meta: 'ChatGPT', sub: 'Current display', fill: '#f0f0ed', body: 'Room for a good question.', detail: 'New conversation · Ideas' },
-    { id: 'figma', src: '/img/logos/figma.png', label: 'Figma', title: 'Launch design', meta: 'Figma', sub: 'Another Space', fill: '#eeebf8', body: 'Make the next detail count.', detail: 'Design · Prototype · Review' },
-    { id: 'linear', src: '/img/logos/linear.png', label: 'Linear', title: 'Project roadmap', meta: 'Linear', sub: 'Current display', fill: '#eeebf9', body: 'The work ahead, in order.', detail: 'Plan · Build · Ship' },
-    { id: 'notion', src: '/img/logos/notion.png', label: 'Notion', title: 'Weekly planning', meta: 'Notion', sub: 'Current display', fill: '#f2f1ee', body: 'A little clarity for the week.', detail: 'Goals · Notes · Next steps' },
-    { id: 'brave', src: '/img/logos/brave.png', label: 'Brave', title: 'Reference board', meta: 'Brave', sub: 'Current display', fill: '#f9e9e7', body: 'The useful things you found.', detail: 'Reading · Inspiration · References' }
+    { id: 'research', src: '/img/logos/chrome.png', label: 'Chrome', title: 'Research notes', meta: 'Chrome', sub: 'Current window', fill: '#eaf6f2', body: 'Interview notes from Tuesday. Three quotes still untagged.', detail: 'Notes · References' },
+    { id: 'brief', src: '/img/logos/chrome.png', label: 'Chrome', title: 'Release brief', meta: 'Chrome', sub: 'Previous window', fill: '#e7f4e8', body: 'Ship Friday. Checklist is on page 2.', detail: 'Launch plan · Ready for review' },
+    { id: 'slack', src: '/img/logos/slack.png', label: 'Slack', title: 'Launch notes', meta: 'Slack', sub: 'Current display', fill: '#f8e9ef', body: '12 unread. Friday ship is in this thread.', detail: 'Team updates · #launch-notes' },
+    { id: 'safari', src: '/img/logos/safari-native.png', label: 'Safari', title: 'Reading list', meta: 'Safari', sub: 'Another Space', fill: '#ebf2fb', body: 'MDN. Window management. Fitts 1954.', detail: 'Saved for later' },
+    { id: 'notes', src: '/img/logos/notes.png', label: 'Notes', title: 'Ideas for later', meta: 'Notes', sub: 'Current display', fill: '#f8f3df', body: 'Questions for Thursday review.', detail: 'Design review' },
+    { id: 'finder', src: '/img/logos/finder-native.png', label: 'Finder', title: 'Project files', meta: 'Finder', sub: 'Current display', fill: '#e5f4f3', body: 'Release-brief.pdf, screenshots, export.', detail: 'Brief · Research · Assets' },
+    { id: 'cursor', src: '/img/logos/cursor.png', label: 'Cursor', title: 'Workspace', meta: 'Cursor', sub: 'Current display', fill: '#f1eff2', body: 'SwitcherController.swift, 3 files changed.', detail: 'Source · Changes' },
+    { id: 'snowflake', src: '/img/logos/snowflake.png', badge: 'chrome', label: 'Snowflake', title: 'Snowflake', meta: 'app.snowflake.com', sub: 'Browser tab', fill: '#e6f5fa', sel: '#bce5f1', glow: '#b1eaff', body: 'checkout_latency, last 24 hours.', detail: 'Worksheets · Results' },
+    { id: 'music', src: '/img/logos/music.png', label: 'Music', title: 'Focus playlist', meta: 'Music', sub: 'Audio playing', fill: '#f7e9ee', body: 'Now playing.', detail: 'Focus playlist' },
+    { id: 'terminal', src: '/img/logos/terminal.png', label: 'Terminal', title: 'Local project', meta: 'Apple Terminal', sub: 'Second display', fill: '#edf4ef', body: 'vortexflow % swift test', detail: 'Q3 launch · Local session' },
+    { id: 'claude', src: '/img/logos/claude.png', label: 'Claude', title: 'Draft install notes', meta: 'Claude', sub: 'Current display', fill: '#f9ece5', body: 'Gatekeeper: Open Anyway, once.', detail: 'Draft' },
+    { id: 'chatgpt', src: '/img/logos/chatgpt.png', label: 'ChatGPT', title: 'Explain Gatekeeper', meta: 'ChatGPT', sub: 'Current display', fill: '#f0f0ed', body: 'Why macOS blocks a signed-but-not-notarized app.', detail: 'New conversation' },
+    { id: 'figma', src: '/img/logos/figma.png', label: 'Figma', title: 'Onboarding v3', meta: 'Figma', sub: 'Another Space', fill: '#eeebf8', body: 'Frame 12, mobile checkout.', detail: 'Design · Review' },
+    { id: 'linear', src: '/img/logos/linear.png', label: 'Linear', title: 'VF-142 Detect Button', meta: 'Linear', sub: 'Current display', fill: '#eeebf9', body: 'Logitech MX Master, rear thumb.', detail: 'Open' },
+    { id: 'notion', src: '/img/logos/notion.png', label: 'Notion', title: 'Week of 8 Sep', meta: 'Notion', sub: 'Current display', fill: '#f2f1ee', body: 'Ship Friday. Review Thursday.', detail: 'Notes' },
+    { id: 'brave', src: '/img/logos/brave.png', label: 'Brave', title: 'CNET Dory review', meta: 'Brave', sub: 'Current display', fill: '#f9e9e7', body: 'Does not handle individual windows or tabs.', detail: 'Reading' }
   ];
   const PINS = [
     { id: 'grok', title: 'grok.com', shortLabel: 'grok.com', kind: 'Pinned link', src: '/img/logos/grok.png' },
@@ -74,8 +74,8 @@
     open: ['01 / One press', 'A mouse button or a shortcut. Everything opens at the pointer.'],
     windows: ['02 / Your windows', 'Everything open. One place to choose.'],
     search: ['03 / Find a tab', 'A few letters. The right tab.'],
-    web: ['04 / Search & ask', 'Keep going, even when it isn’t open.'],
-    pins: ['05 / Your favorites', 'Your everyday shortcuts, in the seam.']
+    web: ['04 / Search & ask', 'If nothing matches, search the web or ask an assistant.'],
+    pins: ['05 / Your favorites', 'Pinned links, apps, and shortcuts in the spiral.']
   };
 
   function setCaption(name, message) {
@@ -228,7 +228,7 @@
     play.textContent = takeover ? 'Play story' : 'Resume';
     stage.dataset.playing = 'false';
     if (reason === 'manual') {
-      $('#story-instruction').textContent = 'You’re in control: pick a card, use arrow keys and Enter, or type. The story resumes on its own after a while.';
+      $('#story-instruction').textContent = 'Pick a card, use arrow keys and Enter, or type. The demo resumes on its own after a while.';
       armIdleResume();
     } else clearTimeout(idleTimer);
   }
@@ -271,7 +271,7 @@
     hidePointer();
     pointer.style.left = '15%'; pointer.style.top = '80%';
     closedScene(loops % 2 ? 'keys' : 'mouse');
-    $('#story-instruction').textContent = 'Click the spiral to take control — then pick a card, use arrow keys and Enter, or type to find it.';
+    $('#story-instruction').textContent = 'Click the spiral, then pick a card, use arrow keys and Enter, or type to find it.';
   });
   at(1000, () => trigger.classList.add('is-pressed'));
   at(1450, () => openSpiral());
@@ -297,7 +297,7 @@
   at(OPEN + 24200, () => { pointerClick(); showReceipt(PINS[1], true); });
   at(OPEN + 26100, () => {
     hidePointer(); receipt.hidden = true;
-    setCaption('pins', 'A little less hunting. A lot more flow.');
+    setCaption('pins', 'Pins stay in the spiral even when the app is closed.');
   });
   frames.sort((a, b) => a.time - b.time);
   const duration = OPEN + 28600;
@@ -465,11 +465,11 @@
   let layoutSelected = LAYOUT_WINDOWS[1];
   let preferPreviews = true;
   const layoutDescriptions = {
-    spiral: 'Spiral · Icons around your pointer, with favorites tucked into the seam.',
-    circular: 'Circular · Familiar icons in an even ring. Window previews are not used.',
-    strip: 'Strip · A horizontal row of windows. Choose icons or window previews.',
-    grid: 'Grid · More windows at a glance. Choose icons or window previews.',
-    list: 'List · A compact list beside a larger view of the selected window.'
+    spiral: 'Spiral. Icons around your pointer. Pins sit between the cards.',
+    circular: 'Circular. Icons in an even ring. Window previews are not used.',
+    strip: 'Strip. A horizontal row of windows. Choose icons or window previews.',
+    grid: 'Grid. More windows visible at once. Choose icons or window previews.',
+    list: 'List. A compact list beside a larger view of the selected window.'
   };
   $('.layout-tabs').addEventListener('keydown', (event) => {
     const tabs = all('.layout-tabs [role="tab"]');

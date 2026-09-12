@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Download VortexFlow for macOS — free, open source</title>
+  <title>Download VortexFlow for macOS, free and open source</title>
   <meta name="description" content="Download the latest VortexFlow disk image for macOS 15 or later, or build it from source in one command. Free and open source under the MIT license. No account, no telemetry.">
   <link rel="canonical" href="https://vortexflow.io/download/">
   <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
@@ -11,17 +11,17 @@
   <link rel="apple-touch-icon" href="/img/apple-touch.png?v=3">
   <meta name="theme-color" content="#f6f4f1">
   <meta property="og:site_name" content="VortexFlow">
-  <meta property="og:title" content="Download VortexFlow for macOS — free, open source">
+  <meta property="og:title" content="Download VortexFlow for macOS, free and open source">
   <meta property="og:description" content="The latest disk image for macOS 15 or later, or build it from source in one command. MIT-licensed. No account, no telemetry.">
   <meta property="og:url" content="https://vortexflow.io/download/">
   <meta property="og:type" content="website">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta name="twitter:title" content="Download VortexFlow for macOS — free, open source">
+  <meta name="twitter:title" content="Download VortexFlow for macOS, free and open source">
   <meta name="twitter:description" content="The latest disk image for macOS 15 or later, or build it from source in one command. MIT-licensed. No account, no telemetry.">
-  <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=4">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=4">
   <meta name="color-scheme" content="light dark">
   <script>(function(){var t="light";try{var s=localStorage.getItem("vf-theme");t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
   <link rel="stylesheet" href="/css/site.css?v=20">
@@ -70,22 +70,22 @@
     <h2>Install</h2>
     <ol class="steps">
       <li>Open the disk image and drag <strong>VortexFlow</strong> to your Applications folder.</li>
-      <li>Open it. The first time, macOS will refuse — see <a href="#gatekeeper">Gatekeeper</a> below. You do this once.</li>
+      <li>Open it. The first time, macOS will refuse. See <a href="#gatekeeper">Gatekeeper</a> below. You do this once.</li>
       <li>Grant the permissions it asks for. Each one is optional and <a href="/permissions/">explained</a>; the app runs with any subset.</li>
       <li>Press middle-click, or the shortcut. The spiral appears around the pointer.</li>
     </ol>
 
-    <h2 id="gatekeeper">Gatekeeper: “the developer cannot be verified”</h2>
+    <h2 id="gatekeeper">Gatekeeper: "the developer cannot be verified"</h2>
     <p>VortexFlow is signed, but it is not notarized, because notarizing requires a paid Apple Developer account. macOS therefore refuses to open it the first time. That is expected, and the fix takes a moment:</p>
     <ol class="steps">
       <li>Open the app. macOS will refuse. Leave that dialog.</li>
       <li>Open <strong>System Settings → Privacy &amp; Security</strong>, scroll to <strong>Security</strong>, and click <strong>Open Anyway</strong> next to VortexFlow. Authenticate when asked.</li>
       <li>Open the app again. It launches, and stays launchable.</li>
     </ol>
-    <p>On macOS 15 and later, right-clicking the app and choosing Open no longer works as a shortcut for this; Apple removed that bypass. See <a href="https://support.apple.com/en-us/guide/mac-help/mh40616/mac" rel="noopener">Apple’s own documentation</a>. If you would rather not click Open Anyway on something you did not compile, the section below is for you.</p>
+    <p>On macOS 15 and later, right-clicking the app and choosing Open no longer works as a shortcut for this; Apple removed that bypass. See <a href="https://support.apple.com/en-us/guide/mac-help/mh40616/mac" rel="noopener">Apple's own documentation</a>. If you would rather not click Open Anyway on something you did not compile, the section below is for you.</p>
 
     <h2 id="source">Build from source</h2>
-    <p>The repository is a Swift package with no third-party dependencies. You need macOS 15 or later and the Xcode command-line tools (<code>xcode-select --install</code>). The build script compiles the package, assembles the <code>.app</code> bundle, signs it, and — with <code>--install</code> — replaces the copy in Applications.</p>
+    <p>The repository is a Swift package with no third-party dependencies. You need macOS 15 or later and the Xcode command-line tools (<code>xcode-select --install</code>). The build script compiles the package, assembles the <code>.app</code> bundle, signs it, and with <code>--install</code> replaces the copy in Applications.</p>
     <pre class="code"><span class="cm"># clone, build, install</span>
 git clone https://github.com/maheshauti96/VortexFlow.git
 cd VortexFlow

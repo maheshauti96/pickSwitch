@@ -1,9 +1,9 @@
 /*!
- * <vortex-spiral> — VortexFlow overlay, as a drop-in web component.
+ * <vortex-spiral>. VortexFlow overlay, as a drop-in web component.
  *
  * Geometry is RadialLayout.spiral from the app:
  *   8 seats / turn, 45° sweep, 0.05 rad gap, start at the top.
- *   Radius steps per seat — not per turn, and not a petal coil.
+ *   Radius steps per seat, not per turn, and not a petal coil.
  *   Annular sectors with quadratic corner fillets (WedgeShape).
  *   Upright content box; hub carries the window title.
  *
@@ -11,9 +11,9 @@
  *   <script src="/js/vortex-spiral.js" defer></script>
  *   <vortex-spiral></vortex-spiral>
  *
- * items  — recency order, item 0 nearest the hub
- * speed  — idle orbit °/s (default 2.4; 0 or `static` = off)
- * scene  — `tab-search` | `web-search` (typed query + action cards)
+ * items: recency order, item 0 nearest the hub
+ * speed: idle orbit °/s (default 2.4; 0 or `static` = off)
+ * scene: `tab-search` | `web-search` (typed query + action cards)
  */
 (function () {
   'use strict';
@@ -135,15 +135,15 @@
   const DEFAULT_ITEMS = [
     { domain: 'github.com', label: 'PR #2140', meta: 'github.com · 2 of 4', title: 'feat: session store · Pull Request #2140', sub: 'Another desktop · 2m', fill: '#d6eaf4', badge: 'chrome' },
     { src: '/img/logos/slack.png', label: 'Slack', meta: 'slack.com', title: '#eng-oncall · 6 new', sub: 'Desktop', fill: '#d4e4f8' },
-    { src: '/img/logos/cursor.png', label: 'Cursor', meta: 'Cursor', title: 'app.ts — agents', sub: 'Desktop', fill: '#ececee' },
-    { domain: 'figma.com', label: 'Figma', meta: 'figma.com', title: 'Q3 launch — design file', sub: 'Desktop', fill: '#d9e4f8' },
+    { src: '/img/logos/cursor.png', label: 'Cursor', meta: 'Cursor', title: 'app.ts, agents', sub: 'Desktop', fill: '#ececee' },
+    { domain: 'figma.com', label: 'Figma', meta: 'figma.com', title: 'Q3 launch, design file', sub: 'Desktop', fill: '#d9e4f8' },
     { icon: 'finder', label: 'Finder', meta: 'Finder', title: 'Downloads', sub: 'Desktop', fill: '#d4f3ee' },
     { src: '/img/logos/claude.png', label: 'Claude', meta: 'claude.ai', title: 'Claude', sub: 'Desktop', fill: '#f6d8cc' },
     { src: '/img/logos/chatgpt.png', label: 'ChatGPT', meta: 'chatgpt.com', title: 'ChatGPT', sub: 'Desktop', fill: '#ececea' },
     { src: '/img/logos/notes.png', label: 'Notes', meta: 'Notes', title: 'shipping checklist', sub: 'Desktop', fill: '#f6f0c8' },
     { src: '/img/logos/arc.svg', label: 'Arc', meta: 'developer.apple.com', title: 'Human Interface Guidelines', sub: 'Desktop', fill: '#e4e0f6' },
     { domain: 'notion.so', label: 'Notion', meta: 'notion.so', title: 'Weekly planning', sub: 'Desktop', fill: '#eeeee8' },
-    { domain: 'warp.dev', label: 'Warp', meta: 'Warp', title: 'zsh — deploy us-east-1', sub: 'Desktop', fill: '#c8e6f0' },
+    { domain: 'warp.dev', label: 'Warp', meta: 'Warp', title: 'zsh, deploy us-east-1', sub: 'Desktop', fill: '#c8e6f0' },
     { icon: 'preview', label: 'Preview', meta: 'Preview', title: 'Screenshot 2026-08-28', sub: 'Desktop', fill: '#d0eef2' },
     { domain: 'linear.app', label: 'Linear', meta: 'linear.app', title: 'ENG-1842 · search latency', sub: 'Desktop', fill: '#e4dcf6' },
     { src: '/img/logos/music.png', label: 'Music', meta: 'Music', title: 'Discover Weekly', sub: 'Desktop', fill: '#f5dce4' },
@@ -171,7 +171,7 @@
       noHint: true,
       spin: 20,
       items: [
-        { domain: 'youtube.com', label: 'YouTube', meta: 'youtube.com', title: 'Fireship — JavaScript in 100 Seconds', fill: '#f3c4d0', sel: '#f3c4d0', glow: '#f4a3b8', badge: 'chrome' },
+        { domain: 'youtube.com', label: 'YouTube', meta: 'youtube.com', title: 'Fireship, JavaScript in 100 Seconds', fill: '#f3c4d0', sel: '#f3c4d0', glow: '#f4a3b8', badge: 'chrome' },
         { icon: 'search', label: 'Search the web', meta: 'Search the web', title: 'youtube', fill: ACTION.fill, sel: '#c5e4f8' },
         { icon: 'open', label: 'Open first result', meta: 'Open first result', title: 'youtube', fill: ACTION.fill, sel: '#c5e4f8' },
         { src: '/img/logos/chatgpt.png', label: 'Prompt on ChatGPT', meta: 'Prompt on ChatGPT', title: 'youtube', fill: ACTION.fill },
@@ -201,7 +201,7 @@
       items: [
         { domain: 'github.com', label: 'PR #2140', meta: 'github.com · 2 of 4', title: 'feat: session store · Pull Request #2140', sub: 'Another desktop · 2m', fill: '#c5e8df', sel: '#c5e8df', glow: '#7ee8d0', badge: 'chrome' },
         { src: '/img/logos/slack.png', label: 'Slack', meta: 'slack.com', title: '#eng-oncall · 6 new', sub: 'Desktop', fill: '#d4e4f8' },
-        { src: '/img/logos/cursor.png', label: 'Cursor', meta: 'Cursor', title: 'app.ts — agents', sub: 'Desktop', fill: '#ececee' },
+        { src: '/img/logos/cursor.png', label: 'Cursor', meta: 'Cursor', title: 'app.ts, agents', sub: 'Desktop', fill: '#ececee' },
         { domain: 'figma.com', label: 'Figma', meta: 'figma.com', title: 'Q3 launch', sub: 'Desktop', fill: '#d9e4f8' },
         { icon: 'finder', label: 'Finder', meta: 'Finder', title: 'Downloads', sub: 'Desktop', fill: '#d4f3ee' },
         { icon: 'comet', label: 'Comet', meta: 'Comet', title: 'Comet', sub: 'Desktop', fill: '#e4eaf8' },
@@ -933,9 +933,9 @@
   </svg>
   <div class="ring"></div>
   <div class="hub">
-    <div class="k">—</div>
-    <div class="t">—</div>
-    <div class="s">—</div>
+    <div class="k"></div>
+    <div class="t"></div>
+    <div class="s"></div>
   </div>
   <div class="qpill">
     <svg viewBox="0 0 16 16" fill="none" stroke="#201e1d" stroke-width="1.55" stroke-linecap="round" aria-hidden="true"><circle cx="6.7" cy="6.7" r="4.35"/><path d="M10 10.1L14.15 14.2"/></svg>

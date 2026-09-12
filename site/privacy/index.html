@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacy policy — VortexFlow</title>
+  <title>Privacy policy · VortexFlow</title>
   <meta name="description" content="VortexFlow has no account, no analytics, and no telemetry. Window titles, screenshots, and search queries stay on your Mac. Open source, so you can check.">
   <link rel="canonical" href="https://vortexflow.io/privacy/">
   <link rel="icon" href="/img/favicon.svg?v=3" type="image/svg+xml">
@@ -11,17 +11,17 @@
   <link rel="apple-touch-icon" href="/img/apple-touch.png?v=3">
   <meta name="theme-color" content="#f6f4f1">
   <meta property="og:site_name" content="VortexFlow">
-  <meta property="og:title" content="Privacy policy — VortexFlow">
+  <meta property="og:title" content="Privacy policy · VortexFlow">
   <meta property="og:description" content="VortexFlow has no account, no analytics, and no telemetry. Window titles, screenshots, and search queries stay on your Mac. Open source, so you can check.">
   <meta property="og:url" content="https://vortexflow.io/privacy/">
   <meta property="og:type" content="website">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta name="twitter:title" content="Privacy policy — VortexFlow">
+  <meta name="twitter:title" content="Privacy policy · VortexFlow">
   <meta name="twitter:description" content="VortexFlow has no account, no analytics, and no telemetry. Window titles, screenshots, and search queries stay on your Mac. Open source, so you can check.">
-  <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta property="og:image" content="https://vortexflow.io/img/og-image.png?v=4">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=3">
+  <meta name="twitter:image" content="https://vortexflow.io/img/og-image.png?v=4">
   <meta name="color-scheme" content="light dark">
   <script>(function(){var t="light";try{var s=localStorage.getItem("vf-theme");t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
   <link rel="stylesheet" href="/css/site.css?v=20">
@@ -41,23 +41,23 @@
   </header>
   <main class="page">
     <p class="eyebrow">Privacy</p>
-    <h1>Nothing to collect it with.</h1>
-    <p class="updated">Last updated: 11 September 2026</p>
-    <p class="lead">VortexFlow has no account, no analytics, and no telemetry. There is no server of ours for the app to talk to. The contents of your windows, your screenshots, and what you type into the overlay stay on your Mac — and because the <a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">source is public</a>, every sentence on this page is something you can check rather than something you have to take on trust.</p>
+    <h1>No account, no telemetry, no server.</h1>
+    <p class="updated">Last updated: 12 September 2026</p>
+    <p class="lead">VortexFlow has no account, no analytics, and no telemetry. There is no server of ours for the app to talk to. The contents of your windows, your screenshots, and what you type into the overlay stay on your Mac, and because the <a href="https://github.com/maheshauti96/VortexFlow" rel="noopener">source is public</a>, every sentence on this page is something you can check rather than something you have to take on trust.</p>
 
     <h2>The short version</h2>
     <ul>
       <li>No account, no sign-in, nothing to register. The app has no notion of who you are.</li>
-      <li>No analytics, crash reporting, or usage data. Nothing is sent to us, because there is no “us” to send it to.</li>
+      <li>No analytics, crash reporting, or usage data. Nothing is sent to us, because there is no "us" to send it to.</li>
       <li>Window titles, search queries, and thumbnails stay on your Mac and are never written to disk.</li>
       <li>The one network request the app makes is for site icons, described below. Never for a private window.</li>
     </ul>
 
     <h2>What the app stores</h2>
-    <p>Your settings — which button opens the overlay, the shortcut, the layout you chose, the apps and links you pinned — in a single macOS preferences file at <code>~/Library/Preferences/io.vortexflow.Vortexflow.plist</code>. Nothing else is written anywhere: no caches, no logs on disk, no database. Diagnostic messages go to the macOS unified log, which stays on your machine and is yours to read in Console.</p>
+    <p>Your settings, which button opens the overlay, the shortcut, the layout you chose, and the apps and links you pinned, live in a single macOS preferences file at <code>~/Library/Preferences/io.vortexflow.Vortexflow.plist</code>. Nothing else is written anywhere: no caches, no logs on disk, no database. Diagnostic messages go to the macOS unified log, which stays on your machine and is yours to read in Console.</p>
 
     <h2>The favicon network call</h2>
-    <p>To show the icon of a site open in your browser, VortexFlow fetches that icon from that site’s own address. The request is unauthenticated, uses a throwaway session, sends no cookies and nothing identifying, and refuses redirects to any other host. <strong>It is never made for an incognito or private-browsing window.</strong> If you deny the app network access, cards still work; they just will not show site icons. The code for this is <code>BrowserFaviconService.swift</code>.</p>
+    <p>To show the icon of a site open in your browser, VortexFlow fetches that icon from that site's own address. The request is unauthenticated, uses a throwaway session, sends no cookies and nothing identifying, and refuses redirects to any other host. <strong>It is never made for an incognito or private-browsing window.</strong> If you deny the app network access, cards still work; they just will not show site icons. The code for this is <code>BrowserFaviconService.swift</code>.</p>
 
     <h2>Web and assistant search</h2>
     <p>If you type something the spiral cannot match and choose to search the web or send it to an assistant, the app opens that query in your default browser. It is your browser making the request, under your own accounts and settings; the app sends nothing itself and does not keep the query.</p>
@@ -65,10 +65,10 @@
     <h2>What the permissions can see</h2>
     <p>macOS will ask. Each permission is optional. The app runs with any subset. Details: <a href="/permissions/">Permissions</a>.</p>
     <ul>
-      <li><strong>Input Monitoring</strong> — which mouse button you pressed, so the overlay can open. Not a keylogger; it does not record or transmit what you type.</li>
-      <li><strong>Accessibility</strong> — the list of windows, and raising the exact one you pick. Without it, whole apps come forward instead of specific windows.</li>
-      <li><strong>Screen Recording</strong> — window thumbnails, captured on demand when the overlay is up. They are not saved and not sent as telemetry. Icon View needs none of this.</li>
-      <li><strong>Automation</strong> — asked later, the first time tab search or site icons need it. Used to read tab titles and URLs from browsers you use, on your machine.</li>
+      <li><strong>Input Monitoring.</strong> Which mouse button you pressed, so the overlay can open. Not a keylogger. It does not record or transmit what you type.</li>
+      <li><strong>Accessibility.</strong> The list of windows, and raising the exact one you pick. Without it, whole apps come forward instead of specific windows.</li>
+      <li><strong>Screen Recording.</strong> Window thumbnails, captured on demand when the overlay is up. They are not saved and not sent as telemetry. Icon View needs none of this.</li>
+      <li><strong>Automation.</strong> Asked later, the first time tab search or site icons need it. Used to read tab titles and URLs from browsers you use, on your machine.</li>
     </ul>
 
     <h2>What the app never touches</h2>
@@ -78,13 +78,13 @@
     </ul>
 
     <h2>This website</h2>
-    <p>vortexflow.io is a static site. It does not set marketing cookies. If the host provides privacy-preserving request analytics with no cookies, that applies to the <em>website only</em>. The download and GitHub buttons ask GitHub’s public API for the latest release version and star count; that request goes to GitHub under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener">GitHub’s privacy statement</a>, and the page works without it.</p>
+    <p>vortexflow.io is a static site. It does not set marketing cookies. If the host provides privacy-preserving request analytics with no cookies, that applies to the <em>website only</em>. The download and GitHub buttons ask GitHub's public API for the latest release version and star count; that request goes to GitHub under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener">GitHub's privacy statement</a>, and the page works without it.</p>
 
     <h2>Contact</h2>
     <p>Questions about this policy: <a href="mailto:privacy@vortexflow.io">privacy@vortexflow.io</a>, or <a href="https://github.com/maheshauti96/VortexFlow/issues" rel="noopener">an issue on GitHub</a> if you have found something that contradicts it.</p>
 
     <h2>Changes</h2>
-    <p>If this document changes, the date at the top changes with it — and so does the <a href="https://github.com/maheshauti96/VortexFlow/commits/main/site/privacy/index.html" rel="noopener">history of this page</a>, which is in the same repository.</p>
+    <p>If this document changes, the date at the top changes with it, and so does the <a href="https://github.com/maheshauti96/VortexFlow/commits/main/site/privacy/index.html" rel="noopener">history of this page</a>, which is in the same repository.</p>
   </main>
   <footer class="footer">
     <div class="footer-inner">

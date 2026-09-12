@@ -138,13 +138,16 @@ let og = png(width: 1200, height: 630) {
         .font: NSFont.systemFont(ofSize: 29, weight: .semibold), .foregroundColor: ink
     ]).draw(at: NSPoint(x: 134, y: 516))
     let sage = NSColor(srgbRed: 73/255, green: 119/255, blue: 103/255, alpha: 1)
-    for (copy, y, color) in [("Find the right", 359.0, ink), ("window.", 281.0, ink),
-                           ("Stay in your flow.", 191.0, sage)] {
+    for (copy, y, size, color) in [
+        ("Find the right", 359.0, 65.0, ink),
+        ("window.", 281.0, 65.0, ink),
+        ("Don't leave the pointer.", 198.0, 48.0, sage)
+    ] as [(String, CGFloat, CGFloat, NSColor)] {
         NSAttributedString(string: copy, attributes: [
-            .font: NSFont.systemFont(ofSize: 65, weight: .semibold), .foregroundColor: color
+            .font: NSFont.systemFont(ofSize: size, weight: .semibold), .foregroundColor: color
         ]).draw(at: NSPoint(x: 80, y: y))
     }
-    NSAttributedString(string: "Windows, tabs, and favorites. Within reach.", attributes: [
+    NSAttributedString(string: "Windows, tabs, and pinned favorites at the pointer.", attributes: [
         .font: NSFont.systemFont(ofSize: 22), .foregroundColor: ink.withAlphaComponent(0.72)
     ]).draw(at: NSPoint(x: 84, y: 116))
 }
