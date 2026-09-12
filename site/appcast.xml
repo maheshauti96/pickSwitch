@@ -1,9 +1,19 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-  <channel>
-    <title>VortexFlow</title>
-    <link>https://vortexflow.io/appcast.xml</link>
-    <description>VortexFlow updates</description>
-    <language>en</language>
-  </channel>
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>VortexFlow</title>
+        <item>
+            <title>1.0.1</title>
+            <pubDate>Sat, 12 Sep 2026 21:31:28 +0530</pubDate>
+            <link>https://vortexflow.io/</link>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[Check for Updates is in the menu bar. The app reads the first-party feed at vortexflow.io/appcast.xml.
+
+The disk image is still signed and not notarized. The first open still needs System Settings, Privacy and Security, Open Anyway.
+]]></description>
+            <enclosure url="https://github.com/maheshauti96/VortexFlow/releases/download/v1.0.1/Vortexflow-1.0.1.dmg" length="5462177" type="application/octet-stream" sparkle:edSignature="zTQPQuc6MYsLQci7cpWMYuacmfGDNEQsW6jQDteAJ9GIbDClDGzTItb1hwBBlG5+lxpk0iKVIki/F7g1xk3sBQ=="/>
+        </item>
+    </channel>
 </rss>
