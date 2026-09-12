@@ -116,7 +116,7 @@ you agree.
 
 ## Download
 
-**[Download VortexFlow 1.0.1 (.dmg)](https://github.com/maheshauti96/VortexFlow/releases/latest/download/Vortexflow-1.0.1.dmg)** —
+**[Download VortexFlow 1.0.1 (.dmg)](https://vortexflow.io/downloads/Vortexflow-1.0.1.dmg)** —
 5.2 MB, universal (Apple Silicon and Intel), macOS 15 or newer.
 
 All releases are on the [releases page](https://github.com/maheshauti96/VortexFlow/releases).

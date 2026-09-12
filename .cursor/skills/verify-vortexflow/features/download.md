@@ -4,7 +4,7 @@ A visitor can get the macOS disk image and read the exact Open Anyway steps. The
 
 ## Sub-features
 
-- `download-cta` offers `Download for macOS` pointing at GitHub Releases latest.
+- `download-cta` offers `Download for macOS` pointing at `/downloads/Vortexflow-1.0.1.dmg` on this site.
 - `install-steps` lists drag-to-Applications, first-launch refusal, permissions, then middle-click.
 - `gatekeeper` explains Privacy & Security → Open Anyway.
 
@@ -23,7 +23,7 @@ Preconditions:
 
 - **Open the page.** Run `control-vortexflow fetch /download/`. The HTML contains `<h1>Get VortexFlow</h1>` and `id="gatekeeper"`.
 - **Drive the visitor path.** Run `control-vortexflow download-page`. It writes `download.json`, `download-before.png`, and `download-gatekeeper.png` under `artifacts/$VERIFY_RUN_ID/`.
-- **Confirm CTA.** `before.downloadHref` contains `github.com/maheshauti96/VortexFlow/releases`. `before.gatekeeper` is `true`.
+- **Confirm CTA.** `before.downloadHref` contains `/downloads/Vortexflow-` and ends in `.dmg`. `before.gatekeeper` is `true`. GitHub Releases is no longer the primary file host.
 - **Confirm Gatekeeper.** `after.heading` contains `the developer cannot be verified`. `download-gatekeeper.png` shows that heading, not only the hero.
 - **Proof.** Keep the JSON and both screenshots. Fetching HTML without scrolling to `#gatekeeper` is incomplete.
 

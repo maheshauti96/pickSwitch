@@ -101,7 +101,7 @@ Proof standards:
 
 - Drive the visitor path (click the spiral, open `/download/`, scroll to Gatekeeper). Do not call overlay internals or `swift test` and call it a UI proof.
 - Capture the action and the resulting state: screenshot before and after, plus the JSON the recipe writes (`download.json`, `home-spiral.json`).
-- For download, the JSON must show `gatekeeper: true`, an `h1` of `Get VortexFlow`, and a `downloadHref` pointing at GitHub Releases. The Gatekeeper screenshot must include the heading `the developer cannot be verified`.
+- For download, the JSON must show `gatekeeper: true`, an `h1` of `Get VortexFlow`, and a `downloadHref` pointing at a `.dmg` on this site (`/downloads/`). The Gatekeeper screenshot must include the heading `the developer cannot be verified`.
 - For the home spiral, `ready.h1` must contain `Don't leave the pointer` and `typed.ok` must be true with `value` `snowfl`.
 - Side effects: the site server writes nothing to disk except its log under `runs/`. A download click in Chrome is not followed to GitHub in these recipes.
 - `swift test` and `--probe` are diagnostics, not feature proof.

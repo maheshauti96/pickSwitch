@@ -89,6 +89,17 @@ function bindReveals() {
 
 const REPO = "maheshauti96/VortexFlow";
 
+function compareDotVersions(a, b) {
+  const left = String(a).split(".").map((n) => parseInt(n, 10) || 0);
+  const right = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(left.length, right.length);
+  for (let i = 0; i < len; i += 1) {
+    const d = (left[i] || 0) - (right[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
 function bindDownload() {
   const links = document.querySelectorAll("[data-download]");
   const versions = document.querySelectorAll("[data-download-version]");
@@ -100,15 +111,19 @@ function bindDownload() {
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((release) => {
       const dmg = (release.assets || []).find((a) => /\.dmg$/i.test(a.name));
-      if (dmg) {
+      const tag = String(release.tag_name || release.name || "").replace(/^v/i, "");
+      const pageTagEl = document.querySelector("[data-release-tag]");
+      const pageTag = pageTagEl ? String(pageTagEl.textContent || "").replace(/^v/i, "") : "";
+      const githubIsNewer = tag && pageTag && compareDotVersions(tag, pageTag) > 0;
+      if (dmg && githubIsNewer) {
         links.forEach((a) => {
           a.href = dmg.browser_download_url;
           a.setAttribute("download", "");
         });
       }
-      const tag = String(release.tag_name || release.name || "").replace(/^v/i, "");
-      const size = dmg ? `${(dmg.size / 1048576).toFixed(1)} MB` : "";
-      if (tag) document.querySelectorAll("[data-release-tag]").forEach((el) => { el.textContent = `v${tag}`; });
+      const size = dmg && githubIsNewer ? `${(dmg.size / 1048576).toFixed(1)} MB` : "";
+      if (tag && githubIsNewer) document.querySelectorAll("[data-release-tag]").forEach((el) => { el.textContent = `v${tag}`; });
+      if (!githubIsNewer) return;
       versions.forEach((el) => {
         const parts = [];
         if (tag) parts.push(`Version ${tag}`);

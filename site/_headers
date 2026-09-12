@@ -12,3 +12,7 @@
 
 /appcast.xml
   Content-Type: application/xml; charset=utf-8
+
+/downloads/*
+  Content-Type: application/octet-stream
+  Content-Disposition: attachment

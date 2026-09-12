@@ -13,7 +13,7 @@
 
 The disk image is still signed and not notarized. The first open still needs System Settings, Privacy and Security, Open Anyway.
 ]]></description>
-            <enclosure url="https://github.com/maheshauti96/VortexFlow/releases/download/v1.0.1/Vortexflow-1.0.1.dmg" length="5462177" type="application/octet-stream" sparkle:edSignature="zTQPQuc6MYsLQci7cpWMYuacmfGDNEQsW6jQDteAJ9GIbDClDGzTItb1hwBBlG5+lxpk0iKVIki/F7g1xk3sBQ=="/>
+            <enclosure url="https://vortexflow.io/downloads/Vortexflow-1.0.1.dmg" length="5462177" type="application/octet-stream" sparkle:edSignature="zTQPQuc6MYsLQci7cpWMYuacmfGDNEQsW6jQDteAJ9GIbDClDGzTItb1hwBBlG5+lxpk0iKVIki/F7g1xk3sBQ=="/>
         </item>
     </channel>
 </rss>
