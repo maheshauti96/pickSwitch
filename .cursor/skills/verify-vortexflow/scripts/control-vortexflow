@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# Isolated driver for VortexFlow verification. Never touches /Applications/Vortexflow.app.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SKILL_DIR/../../.." && pwd)"
+RUN_ID="${VERIFY_RUN_ID:-default}"
+RUN_DIR="${VERIFY_RUN_DIR:-$SKILL_DIR/runs/$RUN_ID}"
+ART_DIR="${VERIFY_ARTIFACTS:-$SKILL_DIR/artifacts/$RUN_ID}"
+SITE_ROOT="$REPO_ROOT/site"
+DRIVE="$SCRIPT_DIR/drive-site.cjs"
+CHROME="${VERIFY_CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+NATIVE_APP="$REPO_ROOT/build/Vortexflow.app"
+NATIVE_BIN="$NATIVE_APP/Contents/MacOS/Vortexflow"
+PREVIEW_APP="$REPO_ROOT/build/VortexflowVisualPreview.app"
+
+mkdir -p "$RUN_DIR" "$ART_DIR"
+
+url() {
+  if [[ ! -f "$RUN_DIR/url" ]]; then
+    echo "no site server recorded in $RUN_DIR/url; run: $0 serve" >&2
+    exit 1
+  fi
+  cat "$RUN_DIR/url"
+}
+
+free_port() {
+  python3 - <<'PY'
+import socket
+s = socket.socket(); s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1]); s.close()
+PY
+}
+
+cmd_serve() {
+  local port="${1:-}"
+  if [[ -z "$port" ]]; then port="$(free_port)"; fi
+  if [[ -f "$RUN_DIR/site.pid" ]] && kill -0 "$(cat "$RUN_DIR/site.pid")" 2>/dev/null; then
+    echo "already serving $(cat "$RUN_DIR/url") pid $(cat "$RUN_DIR/site.pid")"
+    return 0
+  fi
+  python3 -m http.server "$port" --bind 127.0.0.1 --directory "$SITE_ROOT" \
+    >"$RUN_DIR/site.log" 2>&1 &
+  local pid=$!
+  echo "$pid" >"$RUN_DIR/site.pid"
+  echo "http://127.0.0.1:$port" >"$RUN_DIR/url"
+  echo "$port" >"$RUN_DIR/port"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS -o /dev/null --max-time 1 "http://127.0.0.1:$port/" 2>/dev/null; then
+      echo "http://127.0.0.1:$port pid $pid"
+      return 0
+    fi
+    sleep 0.2
+  done
+  echo "site server failed to answer; log: $RUN_DIR/site.log" >&2
+  exit 1
+}
+
+cmd_stop() {
+  if [[ -f "$RUN_DIR/site.pid" ]]; then
+    local pid
+    pid="$(cat "$RUN_DIR/site.pid")"
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$RUN_DIR/site.pid"
+  fi
+  echo "stopped site server for run $RUN_ID (artifacts kept in $ART_DIR)"
+}
+
+cmd_doctor() {
+  local ok=1
+  echo "repo $REPO_ROOT"
+  echo "run $RUN_ID"
+  echo "artifacts $ART_DIR"
+
+  if [[ -f "$RUN_DIR/url" ]]; then
+    local base
+    base="$(url)"
+    if curl -fsS -o /dev/null --max-time 3 "$base/"; then
+      local title
+      title="$(curl -fsS --max-time 3 "$base/" | python3 -c 'import sys,re; m=re.search(r"<title>(.*?)</title>", sys.stdin.read(), re.S); print((m.group(1) if m else "").strip())')"
+      echo "site $base title: $title"
+      if [[ "$title" != *VortexFlow* ]]; then
+        echo "FAIL: home title does not contain VortexFlow" >&2
+        ok=0
+      fi
+    else
+      echo "FAIL: site at $base did not answer" >&2
+      ok=0
+    fi
+  else
+    echo "FAIL: no serve recorded; run $0 serve first" >&2
+    ok=0
+  fi
+
+  if [[ -x "$CHROME" ]]; then
+    echo "chrome $CHROME"
+  else
+    echo "FAIL: Chrome missing at $CHROME" >&2
+    ok=0
+  fi
+
+  local live
+  live="$(pgrep -lf '/Applications/Vortexflow.app/Contents/MacOS/Vortexflow' || true)"
+  if [[ -n "$live" ]]; then
+    echo "WARN: user VortexFlow is running from /Applications. Do not launch another native copy. Site and visual-preview remain safe."
+  fi
+  if [[ -x "$NATIVE_BIN" ]]; then
+    echo "native build $NATIVE_BIN"
+  else
+    echo "NOTE: no local bundle at $NATIVE_APP; site recipes still run. Build with Scripts/build-app.sh --native-arch --debug"
+  fi
+
+  if [[ "$ok" -ne 1 ]]; then
+    exit 1
+  fi
+  echo "doctor ok"
+}
+
+cmd_fetch() {
+  local path="${1:-/}"
+  curl -fsS --max-time 5 "$(url)$path"
+}
+
+cmd_native_probe() {
+  if [[ ! -x "$NATIVE_BIN" ]]; then
+    echo "no native binary at $NATIVE_BIN" >&2
+    exit 1
+  fi
+  # --probe prints and exits. It does not show the overlay.
+  "$NATIVE_BIN" --probe
+}
+
+cmd_native_preview() {
+  if [[ ! -d "$PREVIEW_APP" ]]; then
+    echo "building visual preview (debug, separate bundle id)"
+    (cd "$REPO_ROOT" && Scripts/build-visual-preview.sh)
+  fi
+  open "$PREVIEW_APP"
+  echo "opened $PREVIEW_APP (bundle io.vortexflow.VisualPreview). Quit with Command-Q or: osascript -e 'tell application \"VortexFlow Visual Preview\" to quit'"
+}
+
+usage() {
+  cat <<EOF
+control-vortexflow — isolated VortexFlow verification
+
+  serve [port]          Start site/ on 127.0.0.1 (writes $RUN_DIR/url)
+  doctor                Check this run's server, Chrome, and native-app collision
+  fetch [path]          GET a path from the run's server (default /)
+  screenshot <path> <out.png>
+  download-page         Drive /download/ and write $ART_DIR/download-*
+  home-spiral           Drive the home spiral search and write $ART_DIR/home-*
+  native-probe          Run build/Vortexflow.app --probe (exits, no overlay)
+  native-preview        Open the isolated visual-preview bundle
+  stop                  Kill the site server this run started. Keeps artifacts.
+
+Env: VERIFY_RUN_ID, VERIFY_RUN_DIR, VERIFY_ARTIFACTS, VERIFY_CHROME
+EOF
+}
+
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  serve) cmd_serve "${1:-}" ;;
+  stop) cmd_stop ;;
+  doctor) cmd_doctor ;;
+  fetch) cmd_fetch "${1:-/}" ;;
+  screenshot)
+    node "$DRIVE" screenshot "$(url)${1:?path}" "${2:?out.png}"
+    ;;
+  download-page)
+    node "$DRIVE" download-page "$(url)/download/" "$ART_DIR"
+    ;;
+  home-spiral)
+    node "$DRIVE" home-spiral "$(url)/" "$ART_DIR"
+    ;;
+  native-probe) cmd_native_probe ;;
+  native-preview) cmd_native_preview ;;
+  -h|--help|"") usage ;;
+  *) usage >&2; exit 2 ;;
+esac

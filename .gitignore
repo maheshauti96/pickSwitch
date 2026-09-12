@@ -4,3 +4,6 @@ build/
 *.xcuserstate
 .DS_Store
 site/.shots/
+.cursor/skills/verify-vortexflow/runs/
+.cursor/skills/verify-vortexflow/artifacts/*
+!.cursor/skills/verify-vortexflow/artifacts/.gitkeep
